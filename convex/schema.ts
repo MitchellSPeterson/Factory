@@ -21,6 +21,7 @@ export default defineSchema({
     localPath: v.string(),
     githubRepo: v.string(),
     defaultRuntime: runtime,
+    recipeId: v.optional(v.id("recipes")),
   }).index("by_name", ["name"]),
 
   recipes: defineTable({
@@ -35,6 +36,9 @@ export default defineSchema({
     key: stageKey,
     order: v.number(),
     title: v.string(),
+    model: v.optional(v.string()),
+    effort: v.optional(v.string()),
+    halt: v.optional(v.boolean()),
   })
     .index("by_recipe", ["recipeId"])
     .index("by_recipe_and_key", ["recipeId", "key"]),
@@ -67,7 +71,8 @@ export default defineSchema({
     error: v.optional(v.string()),
   })
     .index("by_status", ["status"])
-    .index("by_project", ["projectId"]),
+    .index("by_project", ["projectId"])
+    .index("by_recipe", ["recipeId"]),
 
   runs: defineTable({
     jobId: v.id("jobs"),

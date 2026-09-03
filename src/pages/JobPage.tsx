@@ -33,7 +33,8 @@ export function JobPage() {
   if (view === undefined) return <p className="muted">Loading…</p>;
   if (view === null) return <p>Job not found.</p>;
 
-  const { job, project, runs, artifacts, messages, pendingAsk } = view;
+  const { job, project, recipeName, runs, artifacts, messages, pendingAsk } =
+    view;
   const spec = artifacts.filter((a) => a.kind === "spec").at(-1);
   const verdict = artifacts.filter((a) => a.kind === "plan_verdict").at(-1);
   const pr = artifacts.filter((a) => a.kind === "pr_url").at(-1);
@@ -64,6 +65,9 @@ export function JobPage() {
           <span className="mono muted">{job.stageKey}</span>
         </div>
       </div>
+      <p className="muted">
+        <Link to={`/recipes/${job.recipeId}`}>{recipeName}</Link>
+      </p>
       <p>{job.request}</p>
 
       {pendingAsk ? (

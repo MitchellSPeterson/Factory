@@ -5,15 +5,15 @@ A personal control plane for running Cursor agents across your product repos. Yo
 ## Language
 
 **Project**:
-A single git repository you develop, including a monorepo that contains Expo and web together.
+A single git repository you develop, including a monorepo that contains Expo and web together. A Project may name one Recipe used for new Jobs.
 _Avoid_: App, workspace, product
 
 **Recipe**:
-An ordered list of Stages used to take a Job from request to a pull request.
+An ordered list of Stages used to take a Job from request to a pull request. You can keep more than one Recipe and copy one to start another.
 _Avoid_: Pipeline, workflow, playbook, template
 
 **Stage**:
-A named phase of a Recipe. v1 keys are plan, implement, verify, and pr.
+A named phase of a Recipe. Each Stage has a key, title, Bindings, optional model and effort, and an optional halt that waits for a human before the next Stage. Keys `plan`, `implement`, `verify`, and `pr` keep their engine behavior; other keys run then continue.
 _Avoid_: Step, phase, task
 
 **Skill**:

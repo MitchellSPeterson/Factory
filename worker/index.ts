@@ -15,7 +15,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 type Launch = {
   runId: Id<"runs">;
   jobId: Id<"jobs">;
-  stageKey: "plan" | "implement" | "verify" | "pr";
+  stageKey: string;
   runtime: "local" | "cloud";
   grillAttached: boolean;
   request: string;

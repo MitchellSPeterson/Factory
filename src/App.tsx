@@ -5,6 +5,7 @@ import { NewJobPage } from "./pages/NewJobPage";
 import { ProjectPage } from "./pages/ProjectPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecipePage } from "./pages/RecipePage";
+import { RecipesPage } from "./pages/RecipesPage";
 import { SkillPage } from "./pages/SkillPage";
 import { SkillsPage } from "./pages/SkillsPage";
 
@@ -31,7 +32,7 @@ export function App() {
         <nav className="links">
           <NavLink to="/jobs">Jobs</NavLink>
           <NavLink to="/projects">Projects</NavLink>
-          <NavLink to="/recipe">Recipe</NavLink>
+          <NavLink to="/recipes">Recipes</NavLink>
           <NavLink to="/skills">Skills</NavLink>
         </nav>
       </header>
@@ -43,7 +44,9 @@ export function App() {
           <Route path="/jobs/:jobId" element={<JobPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectPage />} />
-          <Route path="/recipe" element={<RecipePage />} />
+          <Route path="/recipe" element={<Navigate to="/recipes" replace />} />
+          <Route path="/recipes" element={<RecipesPage />} />
+          <Route path="/recipes/:recipeId" element={<RecipePage />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/skills/:skillId" element={<SkillPage />} />
         </Routes>

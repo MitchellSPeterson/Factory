@@ -20,10 +20,16 @@ describe("job transitions", () => {
     expect(canTransition("needsDetail", "planning")).toBe(true);
   });
 
-  test("building waits for code review before PR", () => {
-    expect(canTransition("building", "pr")).toBe(false);
+  test("building can halt for code review or skip to PR", () => {
     expect(canTransition("building", "codeReview")).toBe(true);
+    expect(canTransition("building", "pr")).toBe(true);
     expect(canTransition("codeReview", "pr")).toBe(true);
+    expect(canTransition("codeReview", "building")).toBe(true);
+  });
+
+  test("a Recipe without plan can leave queued into building", () => {
+    expect(canTransition("queued", "building")).toBe(true);
+    expect(canTransition("planReview", "pr")).toBe(true);
   });
 
   test("queued is the first lane", () => {
