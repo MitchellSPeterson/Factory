@@ -32,6 +32,14 @@ _Avoid_: Rule, predicate, filter, expression
 One request against one Project, executed through one Recipe.
 _Avoid_: Ticket, task, issue, work item
 
+**View all**:
+The Jobs board with no Project restriction; every Job is visible regardless of Project.
+_Avoid_: All projects, everything, global view
+
+**Project scope**:
+The Jobs board limited to Jobs belonging to one chosen Project.
+_Avoid_: Filter, workspace, context switch
+
 **Lane**:
 The Job's place on the board. The seven lanes are Queued, Needs Grilling, Planning, Plan Review, Building, Code Review, and PR.
 _Avoid_: Column, status, swimlane

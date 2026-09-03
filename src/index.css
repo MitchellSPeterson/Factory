@@ -443,6 +443,76 @@ pre {
   padding: 12px;
 }
 
+.log {
+  max-height: 32rem;
+  overflow: auto;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.log.live::after {
+  content: "▍";
+  animation: log-caret 1s step-end infinite;
+}
+
+.log > :first-child {
+  margin-top: 0;
+}
+
+.log > :last-child {
+  margin-bottom: 0;
+}
+
+.log h1,
+.log h2,
+.log h3,
+.log h4,
+.log h5,
+.log h6 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0.85em 0 0.35em;
+}
+
+.log p,
+.log ul,
+.log ol,
+.log blockquote {
+  margin: 0.5em 0;
+}
+
+.log ul,
+.log ol {
+  padding-left: 1.4em;
+}
+
+.log blockquote {
+  padding-left: 0.8em;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.log pre {
+  background: #fff;
+  margin: 0.5em 0;
+}
+
+.log :not(pre) > code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: #eaeef2;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+@keyframes log-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
 form.stack {
   max-width: 480px;
 }

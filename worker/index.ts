@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { toModelSelection } from "../convex/lib/agentModel";
+import { createLiveLog } from "./liveLog";
 import { assemblePrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { factoryTools } from "./tools";
@@ -156,7 +157,21 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
     agentId: agent.agentId,
   });
 
-  const run = await agent.send(prompt);
+  const log = createLiveLog((text) =>
+    client.mutation(api.worker.appendMessage, {
+      runId: launch.runId,
+      text,
+    }),
+  );
+  let live = false;
+  const run = await agent.send(prompt, {
+    onDelta: ({ update }) => {
+      if (update.type === "text-delta" || update.type === "thinking-delta") {
+        live = true;
+        log.push(update.text);
+      }
+    },
+  });
   await client.mutation(api.worker.bindAgent, {
     runId: launch.runId,
     agentId: agent.agentId,
@@ -164,17 +179,19 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
   });
   try {
     for await (const event of run.stream()) {
+      if (live) continue;
       if (event.type === "assistant") {
         for (const block of event.message.content) {
           if (block.type === "text" && block.text.trim() !== "") {
-            await client.mutation(api.worker.appendMessage, {
-              runId: launch.runId,
-              text: block.text,
-            });
+            log.push(block.text);
           }
         }
       }
+      if (event.type === "thinking" && event.text.trim() !== "") {
+        log.push(event.text);
+      }
     }
+    await log.close();
     const result = await run.wait();
     if (result.status === "error") {
       await client.mutation(api.worker.failRun, {
@@ -183,6 +200,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
       });
     }
   } finally {
+    await log.close();
     await agent[Symbol.asyncDispose]();
   }
 }
