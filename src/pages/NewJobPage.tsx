@@ -6,12 +6,14 @@ import type { Id } from "../../convex/_generated/dataModel";
 
 export function NewJobPage() {
   const projects = useQuery(api.projects.list);
+  const recipes = useQuery(api.recipes.list);
   const create = useMutation(api.jobs.create);
   const navigate = useNavigate();
   const [projectId, setProjectId] = useState("");
   const [request, setRequest] = useState("");
   const [runtime, setRuntime] = useState<"local" | "cloud">("local");
   const [forceGrill, setForceGrill] = useState(false);
+  const [recipeId, setRecipeId] = useState("");
 
   const selected = projects?.find((p) => p._id === projectId);
 
@@ -23,6 +25,7 @@ export function NewJobPage() {
       request,
       runtime,
       forceGrill,
+      recipeId: recipeId === "" ? undefined : (recipeId as Id<"recipes">),
     });
     navigate(`/jobs/${jobId}`);
   }
@@ -41,7 +44,10 @@ export function NewJobPage() {
               const next = e.target.value;
               setProjectId(next);
               const p = projects?.find((x) => x._id === next);
-              if (p) setRuntime(p.defaultRuntime);
+              if (p) {
+                setRuntime(p.defaultRuntime);
+                setRecipeId(p.recipeId ?? "");
+              }
             }}
           >
             <option value="">Select…</option>
@@ -59,6 +65,20 @@ export function NewJobPage() {
             onChange={(e) => setRequest(e.target.value)}
             placeholder="What should the agents do?"
           />
+        </label>
+        <label>
+          Recipe
+          <select
+            value={recipeId}
+            onChange={(e) => setRecipeId(e.target.value)}
+          >
+            <option value="">Project default</option>
+            {recipes?.map((recipe) => (
+              <option key={recipe._id} value={recipe._id}>
+                {recipe.name}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           Runtime

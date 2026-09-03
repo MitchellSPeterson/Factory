@@ -291,7 +291,7 @@ h2 {
 
 .recipe-agent {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 12px;
   margin-bottom: 1rem;
 }
@@ -511,6 +511,95 @@ pre {
   50% {
     opacity: 0;
   }
+}
+
+.recipe-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.recipe-mini-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recipe-graph {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.recipe-graph-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recipe-node {
+  min-width: 168px;
+  max-width: 200px;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  cursor: grab;
+}
+
+button.recipe-node:hover {
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.recipe-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
+}
+
+.recipe-node strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.recipe-add {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+  line-height: 1;
+}
+
+button.recipe-add:hover,
+button.recipe-add-end:hover {
+  background: var(--canvas);
+  color: var(--accent);
+}
+
+.recipe-arrow {
+  color: var(--muted);
+  font-size: 16px;
+  padding: 0 2px;
 }
 
 form.stack {

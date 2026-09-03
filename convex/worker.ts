@@ -1,5 +1,4 @@
 import { mutation, query } from "./_generated/server";
-import { recipeEffort, recipeModel } from "./lib/agentModel";
 import {
   answeredGrillCount,
   gateOpen,
@@ -9,6 +8,7 @@ import {
   requireJob,
   requireProject,
   requireRun,
+  stagesOfRecipe,
 } from "./lib/docs";
 import {
   assertTransition,
@@ -16,6 +16,13 @@ import {
   largeAndThinSpec,
   parsePlanVerdict,
 } from "./lib/jobState";
+import {
+  isPlanStage,
+  isPrStage,
+  nextStage,
+  stageAgent,
+  stageHalt,
+} from "./lib/recipeGraph";
 import {
   answer,
   agentEffort,
@@ -107,10 +114,12 @@ export const claim = mutation({
       });
     }
     await ctx.db.patch(run._id, { status: "running", grillAttached });
-    if (laneOf(job.status) === "queued" && run.stageKey === "plan") {
-      assertTransition(job.status, "planning");
-      await ctx.db.patch(job._id, { status: "planning" });
+    if (laneOf(job.status) === "queued") {
+      const nextLane = isPlanStage(run.stageKey) ? "planning" : "building";
+      assertTransition(job.status, nextLane);
+      await ctx.db.patch(job._id, { status: nextLane });
     }
+    const agent = stageAgent(stage, recipe);
     return {
       runId: run._id,
       jobId: job._id,
@@ -120,8 +129,8 @@ export const claim = mutation({
       request: job.request,
       acceptedSpec: job.acceptedSpec,
       forceGrill: job.forceGrill,
-      model: recipeModel(recipe.model),
-      effort: recipeEffort(recipe.effort),
+      model: agent.model,
+      effort: agent.effort,
       project: {
         name: project.name,
         kind: project.kind,
@@ -186,7 +195,7 @@ export const openAsk = mutation({
     const existing = await pendingAskForRun(ctx, run._id);
     if (existing) throw new Error("A pending Ask already exists");
     const job = await requireJob(ctx, run.jobId);
-    if (run.stageKey === "plan") {
+    if (isPlanStage(run.stageKey)) {
       assertTransition(job.status, "needsDetail");
       await ctx.db.patch(job._id, { status: "needsDetail" });
     }
@@ -240,7 +249,7 @@ export const submitArtifact = mutation({
     });
     const verdict = await latestVerdict(ctx, job._id);
     const grillRequired =
-      run.stageKey === "plan" &&
+      isPlanStage(run.stageKey) &&
       largeAndThinSpec(job.forceGrill, verdict) &&
       (await answeredGrillCount(ctx, job._id)) === 0;
     return { grillRequired };
@@ -264,7 +273,11 @@ export const finishStage = mutation({
       return null;
     }
 
-    if (run.stageKey === "plan") {
+    const stages = await stagesOfRecipe(ctx, job.recipeId);
+    const stage = stages.find((s) => s.key === run.stageKey);
+    if (!stage) throw new Error("Stage not found on recipe");
+
+    if (isPlanStage(run.stageKey)) {
       const verdict = await latestVerdict(ctx, job._id);
       const spec = await latestSpec(ctx, job._id);
       if (!verdict) throw new Error("Plan needs a plan_verdict artifact");
@@ -277,31 +290,36 @@ export const finishStage = mutation({
       }
       assertTransition(job.status, "planReview");
       await ctx.db.patch(run._id, { status: "finished" });
-      await ctx.db.patch(job._id, { status: "planReview", stageKey: "plan" });
+      await ctx.db.patch(job._id, { status: "planReview", stageKey: run.stageKey });
       return null;
     }
 
     await ctx.db.patch(run._id, { status: "finished" });
-    if (run.stageKey === "implement") {
-      await ctx.db.patch(job._id, { stageKey: "verify" });
-      await ctx.db.insert("runs", {
-        jobId: job._id,
-        stageKey: "verify",
-        status: "queued",
-        runtime: job.runtime,
-        grillAttached: false,
-      });
-      return null;
-    }
-    if (run.stageKey === "verify") {
+    if (stageHalt(stage)) {
       assertTransition(job.status, "codeReview");
-      await ctx.db.patch(job._id, { status: "codeReview", stageKey: "verify" });
+      await ctx.db.patch(job._id, { status: "codeReview", stageKey: run.stageKey });
       return null;
     }
-    if (laneOf(job.status) !== "pr") {
-      assertTransition(job.status, "pr");
+
+    const next = nextStage(stages, run.stageKey);
+    if (!next) {
+      if (laneOf(job.status) !== "pr") assertTransition(job.status, "pr");
+      await ctx.db.patch(job._id, { status: "pr", stageKey: run.stageKey });
+      return null;
     }
-    await ctx.db.patch(job._id, { status: "pr", stageKey: "pr" });
+    if (isPrStage(next.key)) {
+      if (laneOf(job.status) !== "pr") assertTransition(job.status, "pr");
+      await ctx.db.patch(job._id, { status: "pr", stageKey: next.key });
+    } else {
+      await ctx.db.patch(job._id, { stageKey: next.key });
+    }
+    await ctx.db.insert("runs", {
+      jobId: job._id,
+      stageKey: next.key,
+      status: "queued",
+      runtime: job.runtime,
+      grillAttached: false,
+    });
     return null;
   },
 });

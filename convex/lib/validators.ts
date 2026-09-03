@@ -17,12 +17,7 @@ export const agentEffort = v.union(
   v.literal("xhigh"),
 );
 
-export const stageKey = v.union(
-  v.literal("plan"),
-  v.literal("implement"),
-  v.literal("verify"),
-  v.literal("pr"),
-);
+export const stageKey = v.string();
 
 export const gateName = v.literal("largeAndThinSpec");
 

@@ -7,8 +7,10 @@ import {
   latestVerdict,
   requireJob,
   requireProject,
+  stagesOfRecipe,
 } from "./lib/docs";
 import { assertTransition, laneOf, largeAndThinSpec } from "./lib/jobState";
+import { firstStage, isPrStage, nextStage } from "./lib/recipeGraph";
 import {
   answer,
   artifactKind,
@@ -87,7 +89,9 @@ const jobView = v.object({
     kind: projectKind,
     localPath: v.string(),
     githubRepo: v.string(),
+    recipeId: v.optional(v.id("recipes")),
   }),
+  recipeName: v.string(),
   runs: v.array(runDoc),
   asks: v.array(askDoc),
   artifacts: v.array(artifactDoc),
@@ -144,6 +148,7 @@ export const get = query({
     }
     messages.sort((a, b) => a.createdAt - b.createdAt);
     const pendingAsk = asks.find((a) => a.status === "pending") ?? null;
+    const recipe = await ctx.db.get(job.recipeId);
     return {
       job,
       project: {
@@ -152,7 +157,9 @@ export const get = query({
         kind: project.kind,
         localPath: project.localPath,
         githubRepo: project.githubRepo,
+        recipeId: project.recipeId,
       },
+      recipeName: recipe?.name ?? "missing",
       runs,
       asks,
       artifacts,
@@ -168,16 +175,26 @@ export const create = mutation({
     request: v.string(),
     runtime: runtime,
     forceGrill: v.boolean(),
+    recipeId: v.optional(v.id("recipes")),
   },
   returns: v.id("jobs"),
   handler: async (ctx, args) => {
     if (args.request.trim() === "") throw new Error("Request is required");
-    await requireProject(ctx, args.projectId);
-    const recipe = await ctx.db
-      .query("recipes")
-      .withIndex("by_slug", (q) => q.eq("slug", "feature"))
-      .unique();
-    if (!recipe) throw new Error("Feature recipe is not seeded");
+    const project = await requireProject(ctx, args.projectId);
+    const recipeId =
+      args.recipeId ??
+      project.recipeId ??
+      (
+        await ctx.db
+          .query("recipes")
+          .withIndex("by_slug", (q) => q.eq("slug", "feature"))
+          .unique()
+      )?._id;
+    if (!recipeId) throw new Error("Recipe is not seeded");
+    const recipe = await ctx.db.get(recipeId);
+    if (!recipe) throw new Error("Recipe not found");
+    const start = firstStage(await stagesOfRecipe(ctx, recipe._id));
+    if (!start) throw new Error("Recipe has no Stages");
     const jobId = await ctx.db.insert("jobs", {
       projectId: args.projectId,
       recipeId: recipe._id,
@@ -185,11 +202,11 @@ export const create = mutation({
       runtime: args.runtime,
       forceGrill: args.forceGrill,
       status: "queued",
-      stageKey: "plan",
+      stageKey: start.key,
     });
     await ctx.db.insert("runs", {
       jobId,
-      stageKey: "plan",
+      stageKey: start.key,
       status: "queued",
       runtime: args.runtime,
       grillAttached: args.forceGrill,
@@ -236,13 +253,16 @@ export const acceptSpec = mutation({
       const grilled = await answeredGrillCount(ctx, job._id);
       if (grilled === 0) throw new Error("Large thin spec still needs a grill Ask");
     }
-    assertTransition(job.status, "building");
+    const next = nextStage(await stagesOfRecipe(ctx, job.recipeId), job.stageKey);
+    if (!next) throw new Error("Recipe has no Stage after plan");
+    const status = isPrStage(next.key) ? "pr" : "building";
+    assertTransition(job.status, status);
     await ctx.db.patch(job._id, {
-      status: "building",
-      stageKey: "implement",
+      status,
+      stageKey: next.key,
       acceptedSpec: spec,
     });
-    await enqueueStage(ctx, job._id, "implement", job.runtime);
+    await enqueueStage(ctx, job._id, next.key, job.runtime);
     return null;
   },
 });
@@ -271,7 +291,7 @@ export const rejectSpec = mutation({
 async function enqueueStage(
   ctx: MutationCtx,
   jobId: Id<"jobs">,
-  key: "plan" | "implement" | "verify" | "pr",
+  key: string,
   runtimeValue: "local" | "cloud",
 ): Promise<Id<"runs">> {
   return await ctx.db.insert("runs", {
@@ -291,9 +311,16 @@ export const acceptCodeReview = mutation({
     if (laneOf(job.status) !== "codeReview") {
       throw new Error("Job is not in code review");
     }
-    assertTransition(job.status, "pr");
-    await ctx.db.patch(job._id, { status: "pr", stageKey: "pr" });
-    await enqueueStage(ctx, job._id, "pr", job.runtime);
+    const next = nextStage(await stagesOfRecipe(ctx, job.recipeId), job.stageKey);
+    if (!next) {
+      assertTransition(job.status, "pr");
+      await ctx.db.patch(job._id, { status: "pr" });
+      return null;
+    }
+    const status = isPrStage(next.key) ? "pr" : "building";
+    assertTransition(job.status, status);
+    await ctx.db.patch(job._id, { status, stageKey: next.key });
+    await enqueueStage(ctx, job._id, next.key, job.runtime);
     return null;
   },
 });

@@ -5,6 +5,7 @@ import {
   parsePlanVerdict,
   type PlanVerdict,
 } from "./jobState";
+import { sortStages } from "./recipeGraph";
 
 export async function requireProject(
   ctx: QueryCtx | MutationCtx,
@@ -79,6 +80,17 @@ export async function pendingAskForRun(
     .withIndex("by_run", (q) => q.eq("runId", runId))
     .collect();
   return asks.find((a) => a.status === "pending") ?? null;
+}
+
+export async function stagesOfRecipe(
+  ctx: QueryCtx | MutationCtx,
+  recipeId: Id<"recipes">,
+): Promise<Doc<"stages">[]> {
+  const stages = await ctx.db
+    .query("stages")
+    .withIndex("by_recipe", (q) => q.eq("recipeId", recipeId))
+    .collect();
+  return sortStages(stages);
 }
 
 export function gateOpen(

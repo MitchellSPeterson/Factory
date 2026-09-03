@@ -10,8 +10,8 @@ export function SkillsPage() {
         <h1>Skills</h1>
       </div>
       <p className="muted">
-        Factory-owned copies. Edit a body here. Stage bindings live on the
-        Feature recipe.
+        Factory-owned copies. Edit a body here. Stage bindings live on a
+        Recipe.
       </p>
       <div className="box list">
         {skills?.map((s) => (

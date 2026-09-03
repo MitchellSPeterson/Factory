@@ -4,10 +4,15 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
+function asRecipeId(value: string): Id<"recipes"> | undefined {
+  return value === "" ? undefined : (value as Id<"recipes">);
+}
+
 export function ProjectPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const id = projectId as Id<"projects">;
   const project = useQuery(api.projects.get, { projectId: id });
+  const recipes = useQuery(api.recipes.list);
   const update = useMutation(api.projects.update);
   const remove = useMutation(api.projects.remove);
   const navigate = useNavigate();
@@ -16,6 +21,7 @@ export function ProjectPage() {
   const [localPath, setLocalPath] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
   const [runtime, setRuntime] = useState<"local" | "cloud">("local");
+  const [recipeId, setRecipeId] = useState("");
 
   useEffect(() => {
     if (!project) return;
@@ -24,6 +30,7 @@ export function ProjectPage() {
     setLocalPath(project.localPath);
     setGithubRepo(project.githubRepo);
     setRuntime(project.defaultRuntime);
+    setRecipeId(project.recipeId ?? "");
   }, [project]);
 
   if (project === undefined) return <p className="muted">Loading…</p>;
@@ -38,6 +45,7 @@ export function ProjectPage() {
       localPath,
       githubRepo,
       defaultRuntime: runtime,
+      recipeId: asRecipeId(recipeId),
     });
   }
 
@@ -87,6 +95,20 @@ export function ProjectPage() {
           >
             <option value="local">local</option>
             <option value="cloud">cloud</option>
+          </select>
+        </label>
+        <label>
+          Recipe
+          <select
+            value={recipeId}
+            onChange={(e) => setRecipeId(e.target.value)}
+          >
+            <option value="">Feature (default)</option>
+            {recipes?.map((recipe) => (
+              <option key={recipe._id} value={recipe._id}>
+                {recipe.name}
+              </option>
+            ))}
           </select>
         </label>
         <div className="row">

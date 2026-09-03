@@ -10,6 +10,7 @@ const projectDoc = v.object({
   localPath: v.string(),
   githubRepo: v.string(),
   defaultRuntime: runtime,
+  recipeId: v.optional(v.id("recipes")),
 });
 
 export const list = query({
@@ -35,11 +36,16 @@ export const create = mutation({
     localPath: v.string(),
     githubRepo: v.string(),
     defaultRuntime: runtime,
+    recipeId: v.optional(v.id("recipes")),
   },
   returns: v.id("projects"),
   handler: async (ctx, args) => {
     if (args.name.trim() === "") throw new Error("Name is required");
     if (args.localPath.trim() === "") throw new Error("Local path is required");
+    if (args.recipeId) {
+      const recipe = await ctx.db.get(args.recipeId);
+      if (!recipe) throw new Error("Recipe not found");
+    }
     return await ctx.db.insert("projects", args);
   },
 });
@@ -52,11 +58,16 @@ export const update = mutation({
     localPath: v.string(),
     githubRepo: v.string(),
     defaultRuntime: runtime,
+    recipeId: v.optional(v.id("recipes")),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.projectId);
     if (!project) throw new Error("Project not found");
+    if (args.recipeId) {
+      const recipe = await ctx.db.get(args.recipeId);
+      if (!recipe) throw new Error("Recipe not found");
+    }
     const { projectId, ...fields } = args;
     await ctx.db.patch(projectId, fields);
     return null;

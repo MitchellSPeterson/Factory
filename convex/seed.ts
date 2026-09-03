@@ -14,10 +14,10 @@ const skillInput = v.object({
 });
 
 const FEATURE_STAGES = [
-  { key: "plan" as const, title: "Plan", order: 0 },
-  { key: "implement" as const, title: "Implement", order: 1 },
-  { key: "verify" as const, title: "Verify", order: 2 },
-  { key: "pr" as const, title: "PR", order: 3 },
+  { key: "plan" as const, title: "Plan", order: 0, halt: true },
+  { key: "implement" as const, title: "Implement", order: 1, halt: false },
+  { key: "verify" as const, title: "Verify", order: 2, halt: true },
+  { key: "pr" as const, title: "PR", order: 3, halt: false },
 ];
 
 const FEATURE_BINDINGS: {
@@ -80,11 +80,12 @@ export const ensure = mutation({
 
     const stageIds = new Map<string, Id<"stages">>();
     for (const stage of FEATURE_STAGES) {
-      const stageId = await ctx.db.insert("stages", {
+      const stageId =       await ctx.db.insert("stages", {
         recipeId,
         key: stage.key,
         order: stage.order,
         title: stage.title,
+        halt: stage.halt,
       });
       stageIds.set(stage.key, stageId);
     }

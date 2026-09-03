@@ -10,7 +10,7 @@ export type Lane =
 
 export type JobStatus = Lane;
 
-export type StageKey = "plan" | "implement" | "verify" | "pr";
+export type StageKey = string;
 
 export const LANES = [
   { id: "queued" as const, title: "Queued" },
@@ -23,11 +23,11 @@ export const LANES = [
 ];
 
 const ALLOWED: Record<Lane, readonly Lane[]> = {
-  queued: ["planning", "needsDetail", "failed"],
+  queued: ["planning", "needsDetail", "building", "failed"],
   needsDetail: ["planning", "failed"],
   planning: ["needsDetail", "planReview", "failed"],
-  planReview: ["building", "planning", "failed"],
-  building: ["codeReview", "failed"],
+  planReview: ["building", "planning", "pr", "failed"],
+  building: ["codeReview", "pr", "failed"],
   codeReview: ["pr", "building", "failed"],
   pr: ["failed"],
   failed: [],
