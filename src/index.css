@@ -561,8 +561,9 @@ pre {
   cursor: grab;
 }
 
-.recipe-node:hover {
+button.recipe-node:hover {
   background: var(--bg);
+  color: var(--ink);
   border-color: var(--accent);
 }
 
@@ -589,8 +590,8 @@ pre {
   line-height: 1;
 }
 
-.recipe-add:hover,
-.recipe-add-end:hover {
+button.recipe-add:hover,
+button.recipe-add-end:hover {
   background: var(--canvas);
   color: var(--accent);
 }
