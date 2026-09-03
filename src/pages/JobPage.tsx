@@ -1,10 +1,17 @@
 import { useMutation, useQuery } from "convex/react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
+
+// ponytail: odd fence count mid-stream would eat the rest of the log
+function renderableLog(text: string): string {
+  const fences = (text.match(/^```/gm) ?? []).length;
+  return fences % 2 === 1 ? `${text}\n\`\`\`` : text;
+}
 
 export function JobPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -16,6 +23,12 @@ export function JobPage() {
   const acceptCodeReview = useMutation(api.jobs.acceptCodeReview);
   const [rejectNote, setRejectNote] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const logRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [view?.messages]);
 
   if (view === undefined) return <p className="muted">Loading…</p>;
   if (view === null) return <p>Job not found.</p>;
@@ -137,9 +150,22 @@ export function JobPage() {
 
       <h2>Log</h2>
       {messages.length === 0 ? (
-        <p className="muted">No messages yet.</p>
+        <p className="muted">
+          {runs.some((r) => r.status === "running")
+            ? "Waiting for the model…"
+            : "No messages yet."}
+        </p>
       ) : (
-        <pre>{messages.map((m) => m.text).join("\n\n")}</pre>
+        <div
+          ref={logRef}
+          className={
+            runs.some((r) => r.status === "running") ? "log live" : "log"
+          }
+        >
+          <Markdown>
+            {renderableLog(messages.map((m) => m.text).join("\n\n"))}
+          </Markdown>
+        </div>
       )}
     </>
   );

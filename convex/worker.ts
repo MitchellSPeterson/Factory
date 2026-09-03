@@ -155,6 +155,15 @@ export const appendMessage = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const run = await requireRun(ctx, args.runId);
+    const last = await ctx.db
+      .query("runMessages")
+      .withIndex("by_run", (q) => q.eq("runId", run._id))
+      .order("desc")
+      .first();
+    if (last) {
+      await ctx.db.patch(last._id, { text: last.text + args.text });
+      return null;
+    }
     await ctx.db.insert("runMessages", {
       runId: run._id,
       jobId: run.jobId,
