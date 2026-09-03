@@ -8,6 +8,15 @@ export const projectKind = v.union(
 
 export const runtime = v.union(v.literal("local"), v.literal("cloud"));
 
+export const agentModel = v.string();
+
+export const agentEffort = v.union(
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high"),
+  v.literal("xhigh"),
+);
+
 export const stageKey = v.union(
   v.literal("plan"),
   v.literal("implement"),

@@ -1,5 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import {
+  DEFAULT_AGENT_EFFORT,
+  DEFAULT_AGENT_MODEL,
+} from "./lib/agentModel";
 import { v } from "convex/values";
 
 const skillInput = v.object({
@@ -54,6 +58,12 @@ export const ensure = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", "feature"))
       .unique();
     if (existingRecipe) {
+      if (existingRecipe.model === undefined || existingRecipe.effort === undefined) {
+        await ctx.db.patch(existingRecipe._id, {
+          model: existingRecipe.model ?? DEFAULT_AGENT_MODEL,
+          effort: existingRecipe.effort ?? DEFAULT_AGENT_EFFORT,
+        });
+      }
       return {
         recipeId: existingRecipe._id,
         createdSkills,
@@ -64,6 +74,8 @@ export const ensure = mutation({
     const recipeId = await ctx.db.insert("recipes", {
       name: "Feature",
       slug: "feature",
+      model: DEFAULT_AGENT_MODEL,
+      effort: DEFAULT_AGENT_EFFORT,
     });
 
     const stageIds = new Map<string, Id<"stages">>();

@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { recipeEffort, recipeModel } from "./lib/agentModel";
 import {
   answeredGrillCount,
   gateOpen,
@@ -17,6 +18,8 @@ import {
 } from "./lib/jobState";
 import {
   answer,
+  agentEffort,
+  agentModel,
   artifactKind,
   askKind,
   gateName,
@@ -43,6 +46,8 @@ const launchView = v.object({
   request: v.string(),
   acceptedSpec: v.optional(v.string()),
   forceGrill: v.boolean(),
+  model: agentModel,
+  effort: agentEffort,
   project: v.object({
     name: v.string(),
     kind: v.union(v.literal("expo"), v.literal("web"), v.literal("mixed")),
@@ -71,6 +76,8 @@ export const claim = mutation({
     const run = await ctx.db.get(args.runId);
     if (!run || run.status !== "queued") return null;
     const job = await requireJob(ctx, run.jobId);
+    const recipe = await ctx.db.get(job.recipeId);
+    if (!recipe) throw new Error("Recipe not found");
     const project = await requireProject(ctx, job.projectId);
     const verdict = await latestVerdict(ctx, job._id);
     const stage = await ctx.db
@@ -113,6 +120,8 @@ export const claim = mutation({
       request: job.request,
       acceptedSpec: job.acceptedSpec,
       forceGrill: job.forceGrill,
+      model: recipeModel(recipe.model),
+      effort: recipeEffort(recipe.effort),
       project: {
         name: project.name,
         kind: project.kind,

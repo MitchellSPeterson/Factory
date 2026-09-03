@@ -9,6 +9,7 @@
  */
 
 import type * as jobs from "../jobs.js";
+import type * as lib_agentModel from "../lib/agentModel.js";
 import type * as lib_docs from "../lib/docs.js";
 import type * as lib_jobState from "../lib/jobState.js";
 import type * as lib_validators from "../lib/validators.js";
@@ -26,6 +27,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
+  "lib/agentModel": typeof lib_agentModel;
   "lib/docs": typeof lib_docs;
   "lib/jobState": typeof lib_jobState;
   "lib/validators": typeof lib_validators;

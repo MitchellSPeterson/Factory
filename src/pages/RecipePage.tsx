@@ -2,10 +2,15 @@ import { useMutation, useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import {
+  AGENT_EFFORTS,
+  AGENT_MODELS,
+} from "../../convex/lib/agentModel";
 
 export function RecipePage() {
   const recipe = useQuery(api.recipes.getFeature);
   const skills = useQuery(api.skills.list);
+  const setAgent = useMutation(api.recipes.setAgent);
   const setGate = useMutation(api.recipes.setBindingGate);
   const addBinding = useMutation(api.recipes.addBinding);
   const removeBinding = useMutation(api.recipes.removeBinding);
@@ -28,6 +33,49 @@ export function RecipePage() {
         Bindings decide which skills a stage sees. The grilling binding uses the
         largeAndThinSpec gate.
       </p>
+      <section className="card recipe-agent">
+        <label>
+          Model
+          <select
+            value={recipe.model}
+            onChange={(e) =>
+              void setAgent({
+                recipeId: recipe._id,
+                model: e.target.value,
+              })
+            }
+          >
+            {AGENT_MODELS.includes(
+              recipe.model as (typeof AGENT_MODELS)[number],
+            ) ? null : (
+              <option value={recipe.model}>{recipe.model}</option>
+            )}
+            {AGENT_MODELS.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Effort
+          <select
+            value={recipe.effort}
+            onChange={(e) =>
+              void setAgent({
+                recipeId: recipe._id,
+                effort: e.target.value as (typeof AGENT_EFFORTS)[number],
+              })
+            }
+          >
+            {AGENT_EFFORTS.map((effort) => (
+              <option key={effort} value={effort}>
+                {effort}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
       {recipe.stages.map((stage) => (
         <section key={stage._id} className="card stack" style={{ marginBottom: "1rem" }}>
           <h2 style={{ margin: 0 }}>

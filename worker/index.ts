@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import { toModelSelection } from "../convex/lib/agentModel";
 import { assemblePrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { factoryTools } from "./tools";
@@ -19,6 +20,8 @@ type Launch = {
   request: string;
   acceptedSpec?: string;
   forceGrill: boolean;
+  model: string;
+  effort: string;
   project: {
     name: string;
     kind: "expo" | "web" | "mixed";
@@ -109,6 +112,8 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
     skills: launch.skills,
   });
 
+  const model = toModelSelection(launch.model, launch.effort);
+
   const mcpServers = {
     factory: {
       type: "stdio" as const,
@@ -125,7 +130,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
     launch.runtime === "cloud"
       ? await Agent.create({
           apiKey,
-          model: { id: "composer-2.5" },
+          model,
           cloud: {
             repos: [
               {
@@ -139,7 +144,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
         })
       : await Agent.create({
           apiKey,
-          model: { id: "composer-2.5" },
+          model,
           local: {
             cwd: launch.project.localPath,
             customTools: tools,

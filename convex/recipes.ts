@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
-import { gateName, stageKey } from "./lib/validators";
+import { recipeEffort, recipeModel } from "./lib/agentModel";
+import { agentEffort, agentModel, gateName, stageKey } from "./lib/validators";
 import { v } from "convex/values";
 
 const bindingView = v.object({
@@ -23,6 +24,8 @@ const recipeView = v.object({
   _id: v.id("recipes"),
   name: v.string(),
   slug: v.string(),
+  model: agentModel,
+  effort: agentEffort,
   stages: v.array(stageView),
 });
 
@@ -72,8 +75,34 @@ export const getFeature = query({
       _id: recipe._id,
       name: recipe.name,
       slug: recipe.slug,
+      model: recipeModel(recipe.model),
+      effort: recipeEffort(recipe.effort),
       stages: stageViews,
     };
+  },
+});
+
+export const setAgent = mutation({
+  args: {
+    recipeId: v.id("recipes"),
+    model: v.optional(agentModel),
+    effort: v.optional(agentEffort),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const recipe = await ctx.db.get(args.recipeId);
+    if (!recipe) throw new Error("Recipe not found");
+    const patch: { model?: string; effort?: typeof args.effort } = {};
+    if (args.model !== undefined) {
+      if (args.model.trim() === "") throw new Error("Model is required");
+      patch.model = args.model.trim();
+    }
+    if (args.effort !== undefined) patch.effort = args.effort;
+    if (patch.model === undefined && patch.effort === undefined) {
+      throw new Error("Nothing to update");
+    }
+    await ctx.db.patch(args.recipeId, patch);
+    return null;
   },
 });
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { toModelSelection } from "../convex/lib/agentModel";
 import {
   assertTransition,
   canTransition,
@@ -73,5 +74,42 @@ describe("largeAndThinSpec", () => {
     expect(
       parsePlanVerdict(JSON.stringify({ size: "large", specQuality: "thin" })),
     ).toEqual({ size: "large", specQuality: "thin" });
+  });
+});
+
+describe("toModelSelection", () => {
+  test("medium keeps today's composer default", () => {
+    expect(toModelSelection("composer-2.5", "medium")).toEqual({
+      id: "composer-2.5",
+    });
+  });
+
+  test("low maps composer to fast", () => {
+    expect(toModelSelection("composer-2.5", "low")).toEqual({
+      id: "composer-2.5",
+      params: [{ id: "fast", value: "true" }],
+    });
+  });
+
+  test("auto-smart uses optimize_for", () => {
+    expect(toModelSelection("auto-smart", "low")).toEqual({
+      id: "auto-smart",
+      params: [{ id: "optimize_for", value: "speed" }],
+    });
+    expect(toModelSelection("auto-smart", "medium")).toEqual({
+      id: "auto-smart",
+      params: [{ id: "optimize_for", value: "balanced" }],
+    });
+    expect(toModelSelection("auto-smart", "high")).toEqual({
+      id: "auto-smart",
+      params: [{ id: "optimize_for", value: "quality" }],
+    });
+  });
+
+  test("high effort is reasoning_effort", () => {
+    expect(toModelSelection("grok-4.6", "high")).toEqual({
+      id: "grok-4.6",
+      params: [{ id: "reasoning_effort", value: "high" }],
+    });
   });
 });

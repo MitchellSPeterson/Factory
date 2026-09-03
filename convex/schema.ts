@@ -26,6 +26,8 @@ export default defineSchema({
   recipes: defineTable({
     name: v.string(),
     slug: v.string(),
+    model: v.optional(v.string()),
+    effort: v.optional(v.string()),
   }).index("by_slug", ["slug"]),
 
   stages: defineTable({
