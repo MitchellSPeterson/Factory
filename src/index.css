@@ -289,6 +289,27 @@ h2 {
   gap: 12px;
 }
 
+.binding {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14rem auto;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.binding-skill {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.row > select {
+  width: auto;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 .box {
   background: var(--bg);
   border: 1px solid var(--line);
@@ -296,8 +317,11 @@ h2 {
   overflow: hidden;
 }
 
-.card {
+a.card {
   display: block;
+}
+
+.card {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--radius);

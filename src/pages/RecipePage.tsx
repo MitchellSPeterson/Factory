@@ -35,10 +35,12 @@ export function RecipePage() {
             <span className="mono muted">{stage.key}</span>
           </h2>
           {stage.bindings.map((b) => (
-            <div className="row" key={b._id}>
-              <Link to={`/skills/${b.skillId}`}>{b.title}</Link>
-              <span className="mono muted">{b.slug}</span>
-              <label style={{ width: "14rem" }}>
+            <div className="binding" key={b._id}>
+              <span className="binding-skill">
+                <Link to={`/skills/${b.skillId}`}>{b.title}</Link>
+                <span className="mono muted">{b.slug}</span>
+              </span>
+              <label>
                 Gate
                 <select
                   value={b.gate ?? ""}
