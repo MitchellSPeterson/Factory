@@ -18,6 +18,7 @@ const bindingView = v.object({
 
 const stageView = v.object({
   _id: v.id("stages"),
+  agentProfileId: v.optional(v.id("agents")),
   key: stageKey,
   order: v.number(),
   title: v.string(),
@@ -91,6 +92,7 @@ async function toRecipeView(
   for (const stage of stages) {
     stageViews.push({
       _id: stage._id,
+      agentProfileId: stage.agentProfileId,
       key: stage.key,
       order: stage.order,
       title: stage.title,
@@ -150,6 +152,7 @@ async function copyStages(
   for (const stage of stages) {
     const stageId = await ctx.db.insert("stages", {
       recipeId: toRecipeId,
+      agentProfileId: stage.agentProfileId,
       key: stage.key,
       order: stage.order,
       title: stage.title,
@@ -381,6 +384,7 @@ export const addStage = mutation({
 export const updateStage = mutation({
   args: {
     stageId: v.id("stages"),
+    agentProfileId: v.optional(v.union(v.id("agents"), v.null())),
     title: v.optional(v.string()),
     key: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -393,6 +397,7 @@ export const updateStage = mutation({
     const stage = await ctx.db.get(args.stageId);
     if (!stage) throw new Error("Stage not found");
     const patch: {
+      agentProfileId?: Id<"agents">;
       title?: string;
       key?: string;
       model?: string;
@@ -400,6 +405,10 @@ export const updateStage = mutation({
       halt?: boolean;
       lane?: "planning" | "building" | "pr" | undefined;
     } = {};
+    if (args.agentProfileId !== undefined) {
+      if (args.agentProfileId && !await ctx.db.get(args.agentProfileId)) throw new Error("Agent not found");
+      patch.agentProfileId = args.agentProfileId ?? undefined;
+    }
     if (args.title !== undefined) {
       const title = args.title.trim();
       if (title === "") throw new Error("Title is required");

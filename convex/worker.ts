@@ -1,3 +1,4 @@
+import { requireProjectServer } from "./lib/servers";
 import { mutation, query } from "./_generated/server";
 import {
   answeredGrillCount,
@@ -57,6 +58,8 @@ const launchView = v.object({
   model: agentModel,
   effort: agentEffort,
   project: v.object({
+    id: v.id("projects"),
+    serverId: v.optional(v.id("servers")),
     name: v.string(),
     kind: v.union(v.literal("expo"), v.literal("web"), v.literal("mixed")),
     localPath: v.string(),
@@ -78,7 +81,7 @@ export const listQueued = query({
 });
 
 export const claim = mutation({
-  args: { runId: v.id("runs") },
+  args: { runId: v.id("runs"), accessKey: v.optional(v.string()) },
   returns: v.union(launchView, v.null()),
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
@@ -87,6 +90,11 @@ export const claim = mutation({
     const recipe = await ctx.db.get(job.recipeId);
     if (!recipe) throw new Error("Workflow not found");
     const project = await requireProject(ctx, job.projectId);
+    if (project.serverId) {
+      if (!args.accessKey) return null;
+      try { await requireProjectServer(ctx, project, args.accessKey); } catch { return null; }
+      if (project.cloneStatus !== "ready") return null;
+    }
     const verdict = await latestVerdict(ctx, job._id);
     const stage = await ctx.db
       .query("stages")
@@ -100,13 +108,17 @@ export const claim = mutation({
       .withIndex("by_stage", (q) => q.eq("stageId", stage._id))
       .collect();
     bindings.sort((a, b) => a.order - b.order);
+    const profile = stage.agentProfileId ? await ctx.db.get(stage.agentProfileId) : null;
+    if (stage.agentProfileId && !profile) throw new Error("Assigned Agent not found");
     const skills = [];
+    const included = new Set<string>();
     let grillAttached = run.grillAttached;
     for (const binding of bindings) {
       if (!gateOpen(job.forceGrill, verdict, binding.gate)) continue;
       const skill = await ctx.db.get(binding.skillId);
       if (!skill) continue;
       if (skill.slug === "grilling") grillAttached = true;
+      included.add(skill._id);
       skills.push({
         slug: skill.slug,
         title: skill.title,
@@ -114,13 +126,24 @@ export const claim = mutation({
         gate: binding.gate,
       });
     }
+    if (profile) {
+      skills.unshift({ slug: "agent-guidance", title: profile.name, body: [profile.description, profile.guidance].filter(Boolean).join("\n\n"), gate: undefined });
+      for (const skillId of profile.skillIds) {
+        if (included.has(skillId)) continue;
+        const skill = await ctx.db.get(skillId);
+        if (!skill) throw new Error("Assigned Agent Skill not found");
+        included.add(skillId);
+        if (skill.slug === "grilling") grillAttached = true;
+        skills.push({ slug: skill.slug, title: skill.title, body: skill.body, gate: undefined });
+      }
+    }
     await ctx.db.patch(run._id, { status: "running", grillAttached });
     if (laneOf(job.status) === "queued") {
       const nextLane = runningLane(stage);
       assertTransition(job.status, nextLane);
       await ctx.db.patch(job._id, { status: nextLane });
     }
-    const agent = stageAgent(stage, recipe);
+    const agent = stageAgent(stage, profile ?? recipe);
     return {
       runId: run._id,
       jobId: job._id,
@@ -133,6 +156,8 @@ export const claim = mutation({
       model: agent.model,
       effort: agent.effort,
       project: {
+        id: project._id,
+        serverId: project.serverId,
         name: project.name,
         kind: project.kind,
         localPath: project.localPath,

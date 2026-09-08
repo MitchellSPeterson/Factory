@@ -1,9 +1,10 @@
+import type { SDKCustomTool } from "@cursor/sdk";
 import fs from "node:fs/promises";
 import path from "node:path";
 
 export type AgentTool = {
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: SDKCustomTool["inputSchema"];
   execute: (input: Record<string, unknown>) => Promise<string>;
 };
 

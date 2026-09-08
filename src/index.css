@@ -937,3 +937,50 @@ form.stack {
   .stage-history-header .stage-chevron { display: none; }
   .stage-run-head { align-items: flex-start; flex-direction: column; }
 }
+
+/* GitHub activity follows Factory's dark sidebar and restrained surfaces. */
+.github-account, .github-toolbar, .github-pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; }
+.github-account { border-bottom: 1px solid var(--line); }
+.github-tabs { display: flex; gap: 8px; padding: 10px 0 20px; }
+.github-tabs .active { background: var(--accent-soft); color: var(--ink); border-color: var(--accent); }
+.github-list { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.github-item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start; gap: 14px; padding: 20px; border-bottom: 1px solid var(--line); }
+.github-item:hover { background: var(--subtle-hover); }
+.github-item p { margin: 6px 0; font-size: 12px; }
+.github-title { font-size: 15px; font-weight: 550; overflow-wrap: anywhere; }
+.github-marker { color: var(--success); font-size: 20px; line-height: 1.2; }
+.github-marker.failed { color: var(--danger); }
+.github-badge { display: inline-block; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--chip); color: var(--muted); padding: 2px 8px; font-size: 12px; }
+.github-labels { display: flex; gap: 6px; flex-wrap: wrap; }
+.github-pagination { padding: 14px 20px; }
+.github-empty { text-align: center; padding: 48px 20px; }
+.github-app-setup { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 18px; }
+.github-app-setup summary { cursor: pointer; margin-bottom: 16px; }
+.github-device { padding: 20px; border: 1px solid var(--accent); border-radius: var(--radius); }
+.github-device strong { display: block; font-family: var(--mono); font-size: 28px; letter-spacing: 3px; margin-bottom: 16px; }
+.github-draft { position: fixed; inset: 24px 24px 24px auto; z-index: 30; width: min(620px, calc(100vw - 48px)); overflow: auto; background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--radius); padding: 28px; box-shadow: 0 20px 80px #0008; }
+.github-repo-field { gap: 10px; }
+@media (max-width: 640px) { .github-item { grid-template-columns: 18px minmax(0, 1fr); padding: 16px; } .github-item > :last-child { grid-column: 2; justify-self: start; } .github-account, .github-toolbar { align-items: flex-start; flex-direction: column; gap: 8px; } .github-tabs { flex-wrap: wrap; } }
+.environment-manager { margin-top: 28px; border-top: 1px solid var(--line); padding-top: 16px; }
+.environment-manager textarea { min-height: 88px; font-family: var(--mono); }
+.environment-manager .project-form { margin-top: 20px; }
+.settings-option span { overflow-wrap: anywhere; }
+
+/* Reusable Agent profiles */
+.agents-search { max-width: 420px; margin: 12px 0 24px; }
+.agents-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
+.agent-card { display: flex; flex-direction: column; gap: 12px; }
+.agent-card h2, .agent-card p { margin: 0; }
+.agent-description { flex: 1; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-avatar { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px; color: var(--accent); background: var(--accent-soft); font-weight: 650; }
+.agents-empty { padding: 48px; text-align: center; }
+.agents-empty .agent-avatar { margin: auto; }
+.agent-dialog { margin: 0 0 0 auto; padding: 0; width: min(640px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; border: 0; color: var(--ink); background: var(--bg); }
+.agent-dialog::backdrop { background: #0009; }
+.agent-editor { width: min(640px, 100%); height: 100%; overflow-y: auto; margin: 0; border-radius: 0; padding: 28px; background: var(--bg); }
+.agent-settings { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.agent-skills { border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.agent-skill-list { max-height: 240px; overflow-y: auto; }
+.agent-skill-option { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.agent-skill-option input { width: auto; }
+.agent-skill-option small { display: block; }

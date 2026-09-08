@@ -1,3 +1,4 @@
+import { useServer } from "../servers/connection";
 import { useMutation, useQuery } from "convex/react";
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -7,26 +8,31 @@ import { useProjectScope } from "../projectScope";
 
 export function NewJobForm({
   initialProjectId,
+  initialDraft,
   onComplete,
   lockProject = false,
 }: {
   initialProjectId?: string;
+  initialDraft?: { request: string; githubIssueUrl: string; milestone: string; tags: string };
   onComplete?: (jobId: Id<"jobs">) => void;
   lockProject?: boolean;
 }) {
+  const { accessKey, server } = useServer();
   const projects = useQuery(api.projects.list);
   const recipes = useQuery(api.recipes.list);
   const create = useMutation(api.jobs.create);
   const navigate = useNavigate();
   const { projectId: scopedProjectId } = useProjectScope();
   const [projectId, setProjectId] = useState(initialProjectId ?? scopedProjectId);
-  const [request, setRequest] = useState("");
+  const [request, setRequest] = useState(initialDraft?.request ?? "");
   const [runtime, setRuntime] = useState<"local" | "cloud">("local");
   const [forceGrill, setForceGrill] = useState(false);
   const [recipeId, setRecipeId] = useState("");
-  const [githubIssueUrl, setGithubIssueUrl] = useState("");
-  const [milestone, setMilestone] = useState("");
-  const [tags, setTags] = useState("");
+  const [githubIssueUrl, setGithubIssueUrl] = useState(initialDraft?.githubIssueUrl ?? "");
+  const [milestone, setMilestone] = useState(initialDraft?.milestone ?? "");
+  const [tags, setTags] = useState(initialDraft?.tags ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const selected = projects?.find((p) => p._id === projectId);
   const selectedWorkflow = recipes?.find((recipe) => recipe._id === recipeId);
@@ -43,9 +49,12 @@ export function NewJobForm({
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (projectId === "") return;
+    if (projectId === "" || submitting) return;
+    setSubmitting(true); setError("");
+    try {
     const jobId = await create({
       projectId: projectId as Id<"projects">,
+      accessKey: accessKey || undefined,
       request,
       runtime,
       forceGrill,
@@ -56,6 +65,7 @@ export function NewJobForm({
     });
     if (onComplete) onComplete(jobId);
     else navigate(`/jobs/${jobId}`);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not create Job."); } finally { setSubmitting(false); }
   }
 
   return (
@@ -162,7 +172,10 @@ export function NewJobForm({
             {selected.kind} · {selected.localPath}
           </p>
         ) : null}
-        <button type="submit" disabled={!selected}>Start job</button>
+        {selected?.serverId && selected.cloneStatus !== "ready" && <p className="muted">Wait for cloning to finish before starting a Job.</p>}
+        {selected?.serverId && server?.id !== selected.serverId && <p className="muted">Pair this Project’s worker in Settings before starting a Job.</p>}
+        {error && <p className="error" role="alert">{error}</p>}
+        <button type="submit" disabled={!selected || submitting || !request.trim() || (!!selected.serverId && (selected.cloneStatus !== "ready" || server?.id !== selected.serverId))}>{submitting ? "Starting…" : "Start job"}</button>
       </form>
   );
 }

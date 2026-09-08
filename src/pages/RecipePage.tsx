@@ -13,6 +13,7 @@ export function RecipePage() {
   const id = recipeId as Id<"recipes">;
   const recipe = useQuery(api.recipes.get, { recipeId: id });
   const skills = useQuery(api.skills.list);
+  const agents = useQuery(api.agents.list);
   const setAgent = useMutation(api.recipes.setAgent);
   const updateRecipe = useMutation(api.recipes.update);
   const removeRecipe = useMutation(api.recipes.remove);
@@ -174,6 +175,7 @@ export function RecipePage() {
       />
       {selected ? (
         <StageEditor
+          agents={agents ?? []}
           recipe={recipe}
           stage={selected}
           skills={skills ?? []}
@@ -286,6 +288,7 @@ function RecipeGraph({
 }
 
 function StageEditor({
+  agents,
   recipe,
   stage,
   skills,
@@ -296,8 +299,10 @@ function StageEditor({
   onGate,
   onRemoveSkill,
 }: {
+  agents: Array<{ _id: Id<"agents">; name: string; model: string; effort: string; skillIds: Id<"skills">[] }>;
   recipe: { model: string; effort: string; stages: Array<{ _id: string }> };
   stage: {
+    agentProfileId?: Id<"agents">;
     _id: Id<"stages">;
     key: string;
     title: string;
@@ -316,6 +321,7 @@ function StageEditor({
   };
   skills: Array<{ _id: Id<"skills">; title: string; slug: string }>;
   onUpdate: (patch: {
+    agentProfileId?: Id<"agents"> | null;
     title?: string;
     key?: string;
     model?: string;
@@ -351,6 +357,7 @@ function StageEditor({
     if (key.trim() !== "" && key !== stage.key) onUpdate({ key });
   }
 
+  const assigned = agents.find(a => a._id === stage.agentProfileId);
   const defaultLane =
     stage.key === "plan" ? "planning" : stage.key === "pr" ? "pr" : "building";
 
@@ -360,6 +367,8 @@ function StageEditor({
         {stage.order + 1}. {stage.title}{" "}
         <span className="mono muted">{stage.key}</span>
       </h2>
+      <label>Assigned Agent<select value={stage.agentProfileId ?? ""} onChange={e => onUpdate({ agentProfileId: e.target.value ? e.target.value as Id<"agents"> : null })}><option value="">No Agent · Workflow defaults</option>{agents.map(a => <option key={a._id} value={a._id}>{a.name}</option>)}</select></label>
+      <p className="muted">{assigned ? `${assigned.name} provides ${assigned.skillIds.length} Skills, ${assigned.model}, and ${assigned.effort} effort. Stage settings below can override model and effort.` : "Select an Agent or use Workflow defaults."} <Link to="/agents">Manage Agents</Link></p>
       <div className="recipe-agent">
         <label>
           Title
@@ -387,7 +396,7 @@ function StageEditor({
             value={stage.model ?? ""}
             onChange={(e) => onUpdate({ model: e.target.value })}
           >
-            <option value="">Workflow default ({recipe.model})</option>
+            <option value="">{assigned ? "Agent" : "Workflow"} default ({assigned?.model ?? recipe.model})</option>
             {AGENT_MODELS.map((model) => (
               <option key={model} value={model}>
                 {model}
@@ -401,7 +410,7 @@ function StageEditor({
             value={stage.effort ?? ""}
             onChange={(e) => onUpdate({ effort: e.target.value })}
           >
-            <option value="">Workflow default ({recipe.effort})</option>
+            <option value="">{assigned ? "Agent" : "Workflow"} default ({assigned?.effort ?? recipe.effort})</option>
             {AGENT_EFFORTS.map((effort) => (
               <option key={effort} value={effort}>
                 {effort}

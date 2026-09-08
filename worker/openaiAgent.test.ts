@@ -49,7 +49,9 @@ describe("runOpenAIAgent", () => {
       calls += 1;
       const body = JSON.parse(String(init?.body ?? "{}")) as {
         messages: ChatMessage[];
+        reasoning_effort: string;
       };
+      expect(body.reasoning_effort).toBe("high");
       if (calls === 1) {
         return new Response(
           JSON.stringify({
@@ -107,6 +109,7 @@ describe("runOpenAIAgent", () => {
     const status = await runOpenAIAgent({
       baseUrl: "http://example.invalid/v1",
       model: "test-model",
+      effort: "high",
       prompt: "do the job",
       tools,
       fetchFn,

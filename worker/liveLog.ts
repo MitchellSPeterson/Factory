@@ -10,7 +10,7 @@ export function createLiveLog(write: (text: string) => Promise<unknown>) {
     if (buf === "") return;
     const text = buf;
     buf = "";
-    chain = chain.then(() => write(text));
+    chain = chain.then(async () => { await write(text); });
   };
 
   return {

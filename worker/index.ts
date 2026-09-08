@@ -11,6 +11,7 @@ import { createLiveLog } from "./liveLog";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
+import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { factoryTools } from "./tools";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -42,6 +43,8 @@ type Launch = {
   model: string;
   effort: string;
   project: {
+    id: Id<"projects">;
+    serverId?: Id<"servers">;
     name: string;
     kind: "expo" | "web" | "mixed";
     localPath: string;
@@ -84,7 +87,7 @@ async function mockRun(client: ConvexHttpClient, launch: Launch) {
 
   if (launch.stageKey === "plan") {
     const tools = factoryTools(client, launch.runId);
-    await tools.ask_human.execute({
+    await tools.ask_human!.execute({
       kind: "grill",
       questions: [
         {
@@ -167,6 +170,7 @@ async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
       baseUrl,
       apiKey: process.env.OPENAI_API_KEY,
       model,
+      effort: launch.effort,
       prompt,
       tools,
       onText: (text) => log.push(text),
@@ -176,7 +180,7 @@ async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
   }
 }
 
-async function runCursor(client: ConvexHttpClient, launch: Launch) {
+async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: Record<string, string> = {}) {
   const apiKey = requireEnv("CURSOR_API_KEY");
   const tools = factoryTools(client, launch.runId);
   const prompt = assemblePrompt({
@@ -208,10 +212,11 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
           apiKey,
           model,
           cloud: {
+            envVars: projectEnv,
             repos: [
               {
                 url: `https://github.com/${launch.project.githubRepo}`,
-                startingRef: "main",
+
               },
             ],
             autoCreatePR: launch.stageKey === "pr",
@@ -280,43 +285,55 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
   }
 }
 
-async function tick(client: ConvexHttpClient) {
-  const queued = await client.query(api.worker.listQueued, {});
+// Each Run gets its own process so one Project's environment cannot leak into
+// another Run, and settings updates do not mutate an active Run.
+async function execute(client: ConvexHttpClient, launch: Launch, projectEnv: Record<string, string>) {
   const provider = process.env.FACTORY_PROVIDER ?? "cursor";
+  if (process.env.FACTORY_MOCK === "1") await mockRun(client, launch);
+  else if (provider === "openai") await runOpenAI(client, launch);
+  else if (!process.env.CURSOR_API_KEY) throw new Error("Set CURSOR_API_KEY in Settings → Worker environment before starting a Run.");
+  else await runCursor(client, launch, projectEnv);
+}
+async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
+  const queued = await client.query(api.worker.listQueued, {});
   for (const runId of queued) {
-    const launch = await client.mutation(api.worker.claim, { runId });
+    const launch = await client.mutation(api.worker.claim, { runId, accessKey: identity.accessKey });
     if (!launch) continue;
     try {
-      if (process.env.FACTORY_MOCK === "1") {
-        await mockRun(client, launch);
-      } else if (provider === "openai") {
-        await runOpenAI(client, launch);
-      } else if (!process.env.CURSOR_API_KEY) {
-        await mockRun(client, launch);
-      } else {
-        await runCursor(client, launch);
-      }
-    } catch (err) {
-      await client.mutation(api.worker.failRun, {
-        runId: launch.runId,
-        error: err instanceof Error ? err.message : String(err),
+      const values = await environmentFor(client, identity, launch.project.serverId ? launch.project.id : undefined);
+      const proc = Bun.spawn([process.execPath, path.join(root, "worker/index.ts"), "--execute"], {
+        stdin: "pipe", stdout: "ignore", stderr: "ignore",
+        env: { ...process.env, ...values.server, ...values.project },
       });
+      proc.stdin.write(JSON.stringify({ launch, projectEnv: values.project, convexUrl: identity.convexUrl }));
+      proc.stdin.end();
+      if (await proc.exited !== 0) throw new Error("Run failed. Check the worker environment, provider credentials, and Project configuration.");
+    } catch {
+      await client.mutation(api.worker.failRun, { runId: launch.runId, error: "Run failed. Check worker environment settings and provider credentials." });
     }
   }
 }
-
 async function main() {
-  const client = new ConvexHttpClient(convexUrl());
-  await seed(client);
-  console.log("factory worker seeded, polling");
-  for (;;) {
-    try {
-      await tick(client);
-    } catch (err) {
-      console.error(err);
-    }
-    await Bun.sleep(1500);
+  if (process.argv.includes("--execute")) {
+    const payload = JSON.parse(await Bun.stdin.text()) as { launch: Launch; projectEnv: Record<string, string>; convexUrl: string };
+    const client = new ConvexHttpClient(payload.convexUrl);
+    try { await execute(client, payload.launch, payload.projectEnv); } catch { process.exitCode = 1; }
+    return;
   }
+  const urlIndex = process.argv.indexOf("--url");
+  const url = urlIndex >= 0 ? process.argv[urlIndex + 1] : process.env.CONVEX_URL ?? process.env.VITE_CONVEX_URL;
+  const identity = await loadIdentity(root, url);
+  if (process.argv.includes("--pair")) { console.log(identity.accessKey); return; }
+  const client = new ConvexHttpClient(identity.convexUrl);
+  await client.mutation(api.servers.register, { accessKey: identity.accessKey, name: identity.name, publicKey: identity.publicKey, projectsRoot: identity.projectsRoot });
+  await seed(client);
+  console.log("Factory worker ready. Pair in Settings using the key from: bun run worker:pair");
+  // Imports and heartbeats continue while a long-running agent is active.
+  const heartbeat = setInterval(() => { void client.mutation(api.servers.heartbeat, { accessKey: identity.accessKey }).catch(() => {}); }, 15_000);
+  async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  void imports();
+  try { for (;;) { try { await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  finally { clearInterval(heartbeat); }
 }
 
-void main();
+void main().catch(() => { console.error("Worker startup failed. Check the deployment connection and worker identity, then restart."); process.exitCode = 1; });

@@ -11,6 +11,7 @@ const skillInput = v.object({
   title: v.string(),
   body: v.string(),
   sourceHint: v.string(),
+  sourceKind: v.optional(v.literal("factory")),
 });
 
 const FEATURE_STAGES = [

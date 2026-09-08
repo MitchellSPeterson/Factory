@@ -1,14 +1,20 @@
+import { EnvironmentManager } from "../servers/WorkerSettings";
+import { useServer } from "../servers/connection";
+import { RetryClone } from "../servers/AddGitHubProject";
 import { useMutation, useQuery } from "convex/react";
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
+import { RepositoryField } from "../github/RepositoryField";
+
 function asRecipeId(value: string): Id<"recipes"> | undefined {
   return value === "" ? undefined : (value as Id<"recipes">);
 }
 
 export function ProjectPage() {
+  const { server, accessKey } = useServer();
   const { projectId } = useParams<{ projectId: string }>();
   const id = projectId as Id<"projects">;
   const project = useQuery(api.projects.get, { projectId: id });
@@ -40,6 +46,7 @@ export function ProjectPage() {
     e.preventDefault();
     await update({
       projectId: id,
+      accessKey: accessKey || undefined,
       name,
       kind,
       localPath,
@@ -57,6 +64,7 @@ export function ProjectPage() {
       <div className="pagehead">
         <h1>{project.name}</h1>
       </div>
+      {project.serverId && <section className="settings-section"><h2>Repository · {project.cloneStatus}</h2><p className="muted">{project.localPath || "Waiting for the worker to clone this repository."}</p>{project.cloneError && <p className="error">{project.cloneError}</p>}{project.cloneStatus === "failed" && <RetryClone projectId={id} />}</section>}
       <form className="stack" onSubmit={(e) => void onSubmit(e)}>
         <label>
           Name
@@ -76,17 +84,12 @@ export function ProjectPage() {
         <label>
           Local path
           <input
+            disabled={!!project.serverId}
             value={localPath}
             onChange={(e) => setLocalPath(e.target.value)}
           />
         </label>
-        <label>
-          GitHub repo
-          <input
-            value={githubRepo}
-            onChange={(e) => setGithubRepo(e.target.value)}
-          />
-        </label>
+        {project.serverId ? <p>GitHub repository: {githubRepo}</p> : <RepositoryField value={githubRepo} onChange={setGithubRepo} />}
         <label>
           Default runtime
           <select
@@ -117,13 +120,14 @@ export function ProjectPage() {
             type="button"
             className="ghost"
             onClick={() => {
-              void remove({ projectId: id }).then(() => navigate("/projects"));
+              void remove({ projectId: id, accessKey: accessKey || undefined }).then(() => navigate("/projects"));
             }}
           >
             Remove
           </button>
         </div>
       </form>
+      {project.serverId && <section className="settings-section">{server?.id === project.serverId ? <EnvironmentManager key={id} scope={id} /> : <p className="muted">Pair this Project’s worker in Settings to manage its environment.</p>}</section>}
     </>
   );
 }

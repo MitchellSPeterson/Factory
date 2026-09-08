@@ -1,3 +1,4 @@
+import { requireProjectServer } from "./lib/servers";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -181,6 +182,7 @@ export const get = query({
 export const create = mutation({
   args: {
     projectId: v.id("projects"),
+    accessKey: v.optional(v.string()),
     request: v.string(),
     runtime: runtime,
     forceGrill: v.boolean(),
@@ -194,6 +196,8 @@ export const create = mutation({
     if (args.request.trim() === "") throw new Error("Request is required");
     if ((args.tags?.length ?? 0) > 20) throw new Error("A Job can have at most 20 tags");
     const project = await requireProject(ctx, args.projectId);
+    await requireProjectServer(ctx, project, args.accessKey);
+    if (project.serverId && project.cloneStatus !== "ready") throw new Error("Wait for the Project to finish cloning before starting a Job.");
     const recipeId =
       args.recipeId ??
       project.recipeId ??

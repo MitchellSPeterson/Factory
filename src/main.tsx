@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { BrowserRouter } from "react-router-dom";
+import { ServerProvider } from "./servers/connection";
+import { GitHubProvider } from "./github/connection";
 import { App } from "./App";
 import "./index.css";
 
@@ -11,7 +13,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ConvexProvider client={convex}>
       <BrowserRouter>
-        <App />
+        <ServerProvider><GitHubProvider><App /></GitHubProvider></ServerProvider>
       </BrowserRouter>
     </ConvexProvider>
   </StrictMode>,

@@ -12,6 +12,9 @@ _Avoid_: App, workspace, product
 An ordered list of Stages used to take a Job from request to a pull request. You can keep more than one Workflow and copy one to start another. Examples include New Feature and Bug Fix.
 _Avoid_: Recipe, pipeline, playbook, template
 
+**Agent**:
+A reusable specialist with a name, description, model, effort, working guidance, and selected Skills. An Agent can be assigned to multiple Stages across Workflows. Stage model and effort override Agent settings; without an Agent, Workflow defaults apply. Agent Skills are included on every Run alongside Stage Bindings. Edits apply when a future Run is claimed.
+
 **Stage**:
 A named phase of a Workflow. Each Stage has a key, title, Bindings, optional model and effort, an optional Lane for the board while the Stage runs, and an optional halt that waits for a human before the next Stage. Keys `plan`, `implement`, `verify`, and `pr` keep their engine behavior; other keys run then continue.
 _Avoid_: Step, phase, task

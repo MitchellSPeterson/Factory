@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import {
+  agentEffort,
   artifactKind,
   askKind,
   askStatus,
@@ -16,14 +17,32 @@ import {
 import { v } from "convex/values";
 
 export default defineSchema({
+  agents: defineTable({
+    name: v.string(), description: v.string(), model: v.string(), effort: agentEffort,
+    guidance: v.string(), skillIds: v.array(v.id("skills")),
+  }).index("by_name", ["name"]),
+  servers: defineTable({
+    accessKey: v.string(), name: v.string(), publicKey: v.string(), projectsRoot: v.string(), lastSeen: v.number(),
+  }).index("by_accessKey", ["accessKey"]),
+  environment: defineTable({
+    serverId: v.id("servers"), scope: v.string(), name: v.string(), sealed: v.string(), updatedAt: v.number(),
+  }).index("by_serverId_and_scope_and_name", ["serverId", "scope", "name"]),
+  projectImports: defineTable({
+    projectId: v.id("projects"), serverId: v.id("servers"), repo: v.string(), sealedToken: v.optional(v.string()),
+    status: v.union(v.literal("queued"), v.literal("cloning"), v.literal("ready"), v.literal("failed")),
+    leaseUntil: v.number(), attempt: v.number(),
+  }).index("by_serverId_and_status", ["serverId", "status"]).index("by_projectId", ["projectId"]),
   projects: defineTable({
     name: v.string(),
+    serverId: v.optional(v.id("servers")),
+    cloneStatus: v.optional(v.union(v.literal("queued"), v.literal("cloning"), v.literal("ready"), v.literal("failed"))),
+    cloneError: v.optional(v.string()),
     kind: projectKind,
     localPath: v.string(),
     githubRepo: v.string(),
     defaultRuntime: runtime,
     recipeId: v.optional(v.id("recipes")),
-  }).index("by_name", ["name"]),
+  }).index("by_name", ["name"]).index("by_serverId_and_githubRepo", ["serverId", "githubRepo"]),
 
   recipes: defineTable({
     name: v.string(),
@@ -35,6 +54,7 @@ export default defineSchema({
 
   stages: defineTable({
     recipeId: v.id("recipes"),
+    agentProfileId: v.optional(v.id("agents")),
     key: stageKey,
     order: v.number(),
     title: v.string(),
@@ -44,7 +64,8 @@ export default defineSchema({
     lane: v.optional(stageLane),
   })
     .index("by_recipe", ["recipeId"])
-    .index("by_recipe_and_key", ["recipeId", "key"]),
+    .index("by_recipe_and_key", ["recipeId", "key"])
+    .index("by_agentProfileId", ["agentProfileId"]),
 
   skills: defineTable({
     slug: v.string(),

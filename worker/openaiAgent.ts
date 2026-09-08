@@ -16,6 +16,7 @@ export type OpenAIAgentOptions = {
   baseUrl: string;
   apiKey?: string;
   model: string;
+  effort?: string;
   prompt: string;
   tools: Record<string, AgentTool>;
   onText?: (text: string) => void;
@@ -57,6 +58,7 @@ export async function chatCompletion(input: {
   baseUrl: string;
   apiKey?: string;
   model: string;
+  effort?: string;
   messages: ChatMessage[];
   tools: Record<string, AgentTool>;
   fetchFn?: typeof fetch;
@@ -72,6 +74,7 @@ export async function chatCompletion(input: {
 
   const body = {
     model: input.model,
+    ...(input.effort ? { reasoning_effort: input.effort } : {}),
     messages: input.messages,
     tools: toolsToOpenAI(input.tools),
     tool_choice: "auto" as const,
@@ -211,6 +214,7 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
         baseUrl: opts.baseUrl,
         apiKey: opts.apiKey,
         model: opts.model,
+        effort: opts.effort,
         messages,
         tools: opts.tools,
         fetchFn,
@@ -224,6 +228,7 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
         baseUrl: opts.baseUrl,
         apiKey: opts.apiKey,
         model: opts.model,
+        effort: opts.effort,
         messages,
         tools: opts.tools,
         fetchFn,

@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noUnusedLocals": false, "noUnusedParameters": false },
+  "include": ["worker/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["worker/**/*.test.ts"]
+}

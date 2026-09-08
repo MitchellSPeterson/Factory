@@ -1,3 +1,5 @@
+import { AddGitHubProject } from "../servers/AddGitHubProject";
+import { RepositoryField } from "../github/RepositoryField";
 import { useMutation, useQuery } from "convex/react";
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
@@ -53,6 +55,7 @@ export function ProjectsPage() {
         ))}
       </div>
       <h2>Register a repo</h2>
+      <AddGitHubProject />
       <form className="stack" onSubmit={(e) => void onSubmit(e)}>
         <label>
           Name
@@ -76,13 +79,7 @@ export function ProjectsPage() {
             onChange={(e) => setLocalPath(e.target.value)}
           />
         </label>
-        <label>
-          GitHub repo (owner/name)
-          <input
-            value={githubRepo}
-            onChange={(e) => setGithubRepo(e.target.value)}
-          />
-        </label>
+        <RepositoryField value={githubRepo} onChange={setGithubRepo} />
         <label>
           Default runtime
           <select

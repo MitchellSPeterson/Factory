@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
+import { GitHubPage } from "./pages/GitHubPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ProjectScopeContext, ThemeContext, type ProjectScope } from "./projectScope";
@@ -15,6 +16,7 @@ import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecipePage } from "./pages/RecipePage";
 import { RecipesPage } from "./pages/RecipesPage";
 import { SkillPage } from "./pages/SkillPage";
+import { AgentsPage } from "./pages/AgentsPage";
 import { SkillsPage } from "./pages/SkillsPage";
 
 function IconJobs() {
@@ -73,12 +75,13 @@ const NAV: { section: string; items: { to: string; label: string; icon: ReactNod
   [
     {
       section: "Work",
-      items: [{ to: "/dashboard", label: "Dashboard", icon: <IconDashboard /> }, { to: "/jobs", label: "Jobs", icon: <IconJobs /> }],
+      items: [{ to: "/dashboard", label: "Dashboard", icon: <IconDashboard /> }, { to: "/jobs", label: "Jobs", icon: <IconJobs /> }, { to: "/github", label: "GitHub", icon: <IconWorkflows /> }],
     },
     {
       section: "Build",
       items: [
         { to: "/workflows", label: "Workflows", icon: <IconWorkflows /> },
+        { to: "/agents", label: "Agents", icon: <IconJobs /> },
         { to: "/skills", label: "Skills", icon: <IconSkills /> },
       ],
     },
@@ -87,11 +90,12 @@ const NAV: { section: string; items: { to: string; label: string; icon: ReactNod
 export function App() {
   const projects = useQuery(api.projects.list);
   const navigate = useNavigate();
+  const location = useLocation();
   const [projectId, setProjectIdState] = useState<ProjectScope>(() => (localStorage.getItem("factory-project-scope") ?? "") as ProjectScope);
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("factory-theme") as "dark" | "light") ?? "dark");
   const [newJobOpen, setNewJobOpen] = useState(false);
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem("factory-theme", theme); }, [theme]);
-  const setProjectId = (id: ProjectScope) => { setProjectIdState(id); localStorage.setItem("factory-project-scope", id); navigate("/dashboard"); };
+  const setProjectId = (id: ProjectScope) => { setProjectIdState(id); localStorage.setItem("factory-project-scope", id); if (location.pathname !== "/github") navigate("/dashboard"); };
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}><ProjectScopeContext.Provider value={{ projectId, setProjectId }}><div className="shell">
       <aside className="sidebar">
@@ -129,8 +133,10 @@ export function App() {
           <Route path="/recipes/:recipeId" element={<RecipeRedirect />} />
           <Route path="/workflows" element={<RecipesPage />} />
           <Route path="/workflows/:recipeId" element={<RecipePage />} />
+          <Route path="/agents" element={<AgentsPage />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/skills/:skillId" element={<SkillPage />} />
+          <Route path="/github" element={<GitHubPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
