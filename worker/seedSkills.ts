@@ -32,6 +32,7 @@ export async function loadSkillFiles(root = process.cwd()) {
       title: TITLES[slug] ?? slug,
       body,
       sourceHint: HINTS[slug] ?? "factory",
+      sourceKind: "factory" as const,
     });
   }
   return skills;

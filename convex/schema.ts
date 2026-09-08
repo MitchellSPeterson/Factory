@@ -50,6 +50,13 @@ export default defineSchema({
     title: v.string(),
     body: v.string(),
     sourceHint: v.string(),
+    description: v.optional(v.string()),
+    sourceKind: v.optional(
+      v.union(v.literal("factory"), v.literal("github"), v.literal("local"), v.literal("pasted")),
+    ),
+    sourceUrl: v.optional(v.string()),
+    sourceRevision: v.optional(v.string()),
+    importedAt: v.optional(v.number()),
   }).index("by_slug", ["slug"]),
 
   bindings: defineTable({

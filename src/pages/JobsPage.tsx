@@ -4,12 +4,14 @@ import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
+import { useProjectScope } from "../projectScope";
 
 export function JobsPage() {
   const jobs = useQuery(api.jobs.list);
   const recipes = useQuery(api.recipes.list);
   const migrate = useMutation(api.jobs.migrateLanes);
   const [workflowId, setWorkflowId] = useState("");
+  const { projectId } = useProjectScope();
 
   useEffect(() => {
     void migrate().catch(() => {});
@@ -17,7 +19,7 @@ export function JobsPage() {
 
   const visible =
     jobs?.filter(
-      (row) => workflowId === "" || row.job.recipeId === workflowId,
+      (row) => (projectId === "" || row.job.projectId === projectId) && (workflowId === "" || row.job.recipeId === workflowId),
     ) ?? [];
   const failed =
     visible.filter((row) => laneOf(row.job.status) === "failed") ?? [];
@@ -30,7 +32,7 @@ export function JobsPage() {
           <p className="muted">
             {jobs === undefined
               ? "View all Jobs across Projects."
-              : `${jobs.length} jobs · View all across Projects`}
+              : `${visible.length} jobs · ${projectId === "" ? "View all across Projects" : "Project scope"}`}
           </p>
         </div>
         <Link to="/jobs/new">

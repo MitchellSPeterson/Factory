@@ -33,9 +33,10 @@ export function SkillPage() {
         <Link to="/skills">Skills</Link> / {skill.slug}
       </p>
       <div className="pagehead">
-        <h1>{skill.title}</h1>
+        <div><h1>{skill.title}</h1><p className="muted mono">{skill.slug}</p></div>
+        <span className={`source-badge ${skill.sourceKind ?? "factory"}`}>{skill.sourceKind ?? "factory"}</span>
       </div>
-      <p className="muted">Seeded from {skill.sourceHint}. Edits stay here.</p>
+      <div className="skill-provenance"><span>Source</span>{skill.sourceUrl ? <a href={skill.sourceUrl} target="_blank" rel="noreferrer">{skill.sourceHint}</a> : <strong>{skill.sourceHint}</strong>}<span>Factory keeps this copy stable for Jobs.</span></div>
       <form className="stack" onSubmit={(e) => void onSubmit(e)}>
         <label>
           Title
