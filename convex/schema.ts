@@ -1,11 +1,14 @@
 import { defineSchema, defineTable } from "convex/server";
 import {
   agentEffort,
+  agentProvider,
   artifactKind,
   askKind,
   askStatus,
   gateName,
+  jobCommand,
   jobStatus,
+  messageDelivery,
   projectKind,
   question,
   answer,
@@ -18,6 +21,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
   agents: defineTable({
+    provider: v.optional(agentProvider),
     name: v.string(), description: v.string(), model: v.string(), effort: agentEffort,
     guidance: v.string(), skillIds: v.array(v.id("skills")),
   }).index("by_name", ["name"]),
@@ -108,6 +112,15 @@ export default defineSchema({
     .index("by_project", ["projectId"])
     .index("by_recipe", ["recipeId"]),
 
+  jobCommands: defineTable({
+    jobId: v.id("jobs"),
+    commandId: v.string(),
+    command: jobCommand,
+    delivery: v.optional(messageDelivery),
+  })
+    .index("by_job", ["jobId"])
+    .index("by_job_and_commandId", ["jobId", "commandId"]),
+
   runs: defineTable({
     jobId: v.id("jobs"),
     stageKey: stageKey,
@@ -117,6 +130,7 @@ export default defineSchema({
     agentId: v.optional(v.string()),
     cursorRunId: v.optional(v.string()),
     error: v.optional(v.string()),
+    endedByCommandId: v.optional(v.id("jobCommands")),
   })
     .index("by_job", ["jobId"])
     .index("by_status", ["status"]),

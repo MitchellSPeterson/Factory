@@ -64,9 +64,27 @@ export function canTransition(from: string, to: string): boolean {
   return ALLOWED[laneOf(from)].includes(laneOf(to));
 }
 
+/**
+ * Manual Job finish is a human terminal override, not a Workflow edge. It may
+ * move any Lane, including `failed`, to `pr`. Workflow code keeps ALLOWED.
+ */
+export function canHumanFinish(from: string): boolean {
+  return laneOf(from) !== "pr";
+}
+
 export function assertTransition(from: string, to: string): void {
   if (!canTransition(from, to)) {
     throw new Error(`Illegal job transition ${from} → ${to}`);
+  }
+}
+
+/**
+ * Finish Job is a human override, so it leaves any Lane except pr, including
+ * failed. Workflow code must keep using assertTransition.
+ */
+export function assertHumanFinish(from: string): void {
+  if (laneOf(from) === "pr") {
+    throw new Error(`Illegal job transition ${from} → pr`);
   }
 }
 

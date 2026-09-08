@@ -20,6 +20,8 @@ export type OpenAIAgentOptions = {
   prompt: string;
   tools: Record<string, AgentTool>;
   onText?: (text: string) => void;
+  /** Drain human Stage chat between model turns. */
+  pullNotes?: () => Promise<readonly string[]>;
   fetchFn?: typeof fetch;
   maxSteps?: number;
   /** Prefer SSE; falls back to non-stream on failure. Default true. */
@@ -207,6 +209,15 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
   let finished = false;
 
   for (let step = 0; step < maxSteps; step++) {
+    if (opts.pullNotes) {
+      const notes = await opts.pullNotes();
+      if (notes.length > 0) {
+        messages.push({
+          role: "user",
+          content: notes.map((note) => `Human note:\n${note}`).join("\n\n"),
+        });
+      }
+    }
     const preferStream = opts.stream !== false;
     let result: Awaited<ReturnType<typeof chatCompletion>>;
     try {

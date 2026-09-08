@@ -1,5 +1,5 @@
-import { requireProjectServer } from "./lib/servers";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   answeredGrillCount,
   gateOpen,
@@ -11,6 +11,12 @@ import {
   requireRun,
   stagesOfRecipe,
 } from "./lib/docs";
+import {
+  applyJobWrites,
+  settleRun,
+  toAggregate,
+  type WorkerResult,
+} from "./lib/jobControl";
 import {
   assertTransition,
   laneOf,
@@ -28,9 +34,11 @@ import {
 import {
   answer,
   agentEffort,
+  agentProvider,
   agentModel,
   artifactKind,
   askKind,
+  askStatus,
   gateName,
   question,
   runStatus,
@@ -38,6 +46,7 @@ import {
   stageKey,
 } from "./lib/validators";
 import { v } from "convex/values";
+import { requireProjectServer } from "./lib/servers";
 
 const skillBinding = v.object({
   slug: v.string(),
@@ -47,6 +56,7 @@ const skillBinding = v.object({
 });
 
 const launchView = v.object({
+  provider: v.optional(agentProvider),
   runId: v.id("runs"),
   jobId: v.id("jobs"),
   stageKey: stageKey,
@@ -153,6 +163,7 @@ export const claim = mutation({
       request: job.request,
       acceptedSpec: job.acceptedSpec,
       forceGrill: job.forceGrill,
+      provider: profile?.provider,
       model: agent.model,
       effort: agent.effort,
       project: {
@@ -241,7 +252,7 @@ export const getAsk = query({
   returns: v.union(
     v.object({
       _id: v.id("asks"),
-      status: v.union(v.literal("pending"), v.literal("answered")),
+      status: askStatus,
       answers: v.optional(v.array(answer)),
     }),
     v.null(),
@@ -282,6 +293,27 @@ export const submitArtifact = mutation({
   },
 });
 
+/** Late completions must not fail a live Job or advance a settled one. */
+async function settle(
+  ctx: MutationCtx,
+  job: Doc<"jobs">,
+  runId: Id<"runs">,
+  result: WorkerResult,
+): Promise<boolean> {
+  const runs = await ctx.db
+    .query("runs")
+    .withIndex("by_job", (q) => q.eq("jobId", job._id))
+    .collect();
+  const asks = await ctx.db
+    .query("asks")
+    .withIndex("by_job", (q) => q.eq("jobId", job._id))
+    .collect();
+  const plan = settleRun(toAggregate(job, runs, asks), runId, result);
+  if (plan.kind === "advance") return true;
+  if (plan.kind === "apply") await applyJobWrites(ctx, job, plan.writes);
+  return false;
+}
+
 export const finishStage = mutation({
   args: {
     runId: v.id("runs"),
@@ -292,12 +324,15 @@ export const finishStage = mutation({
   handler: async (ctx, args) => {
     const run = await requireRun(ctx, args.runId);
     const job = await requireJob(ctx, run.jobId);
-    if (args.status === "failed") {
-      assertTransition(job.status, "failed");
-      await ctx.db.patch(run._id, { status: "failed", error: args.error });
-      await ctx.db.patch(job._id, { status: "failed", error: args.error });
-      return null;
-    }
+    const advance = await settle(
+      ctx,
+      job,
+      run._id,
+      args.status === "finished"
+        ? { kind: "finished" }
+        : { kind: "failed", error: args.error ?? "Run failed" },
+    );
+    if (!advance) return null;
 
     const stages = await stagesOfRecipe(ctx, job.recipeId);
     const stage = stages.find((s) => s.key === run.stageKey);
@@ -356,21 +391,61 @@ export const failRun = mutation({
   handler: async (ctx, args) => {
     const run = await requireRun(ctx, args.runId);
     const job = await requireJob(ctx, run.jobId);
-    await ctx.db.patch(run._id, { status: "failed", error: args.error });
-    if (laneOf(job.status) !== "failed" && laneOf(job.status) !== "pr") {
-      assertTransition(job.status, "failed");
-      await ctx.db.patch(job._id, { status: "failed", error: args.error });
-    }
+    await settle(ctx, job, run._id, { kind: "failed", error: args.error });
     return null;
   },
 });
+
+export const takeAgentInput = mutation({
+  args: { runId: v.id("runs"), limit: v.number() },
+  returns: v.array(v.object({ commandId: v.id("jobCommands"), text: v.string() })),
+  handler: async (ctx, args) => {
+    const run = await requireRun(ctx, args.runId);
+    if (run.status !== "running") return [];
+    const taken = await takeStageMessages(
+      ctx,
+      run.jobId,
+      run.stageKey,
+      run._id,
+      args.limit,
+    );
+    return taken.map((row) => ({ commandId: row._id, text: row.text }));
+  },
+});
+
+/** At most once: a taken message is never handed to a second Run. */
+async function takeStageMessages(
+  ctx: MutationCtx,
+  jobId: Id<"jobs">,
+  stage: string,
+  runId: Id<"runs">,
+  limit: number,
+): Promise<Array<{ _id: Id<"jobCommands">; text: string }>> {
+  const rows = await ctx.db
+    .query("jobCommands")
+    .withIndex("by_job", (q) => q.eq("jobId", jobId))
+    .collect();
+  const taken: Array<{ _id: Id<"jobCommands">; text: string }> = [];
+  const cap = Math.min(Math.max(Math.trunc(limit), 1), 20);
+  for (const row of rows) {
+    if (taken.length >= cap) break;
+    if (row.command.kind !== "sendMessage") continue;
+    if (row.command.stageKey !== stage) continue;
+    if (row.delivery?.kind !== "queued") continue;
+    await ctx.db.patch(row._id, {
+      delivery: { kind: "taken", runId, takenAt: Date.now() },
+    });
+    taken.push({ _id: row._id, text: row.command.text });
+  }
+  return taken;
+}
 
 export const pendingAsk = query({
   args: { runId: v.id("runs") },
   returns: v.union(
     v.object({
       _id: v.id("asks"),
-      status: v.union(v.literal("pending"), v.literal("answered")),
+      status: askStatus,
       answers: v.optional(v.array(answer)),
     }),
     v.null(),

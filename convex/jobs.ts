@@ -10,6 +10,14 @@ import {
   requireProject,
   stagesOfRecipe,
 } from "./lib/docs";
+import {
+  applyJobCommand,
+  applyJobWrites,
+  MAX_MESSAGE_LENGTH,
+  deriveControlView,
+  toAggregate,
+  type JobCommand,
+} from "./lib/jobControl";
 import { assertTransition, laneOf, largeAndThinSpec } from "./lib/jobState";
 import { firstStage, isPrStage, nextStage } from "./lib/recipeGraph";
 import {
@@ -17,7 +25,12 @@ import {
   artifactKind,
   askKind,
   askStatus,
+  chatDelivery,
+  jobActivity,
+  jobCommand,
+  jobCommandKind,
   jobStatus,
+  messageDelivery,
   projectKind,
   question,
   runStatus,
@@ -54,6 +67,29 @@ const runDoc = v.object({
   agentId: v.optional(v.string()),
   cursorRunId: v.optional(v.string()),
   error: v.optional(v.string()),
+  endedByCommandId: v.optional(v.id("jobCommands")),
+});
+
+const commandDoc = v.object({
+  _id: v.id("jobCommands"),
+  _creationTime: v.number(),
+  jobId: v.id("jobs"),
+  commandId: v.string(),
+  command: jobCommand,
+  delivery: v.optional(messageDelivery),
+});
+
+const controlView = v.object({
+  activity: jobActivity,
+  availableCommands: v.array(jobCommandKind),
+  stages: v.array(
+    v.object({
+      stageKey: stageKey,
+      latestRunId: v.union(v.id("runs"), v.null()),
+      availableCommands: v.array(jobCommandKind),
+      chatDelivery: chatDelivery,
+    }),
+  ),
 });
 
 const askDoc = v.object({
@@ -100,6 +136,8 @@ const jobView = v.object({
   asks: v.array(askDoc),
   artifacts: v.array(artifactDoc),
   messages: v.array(messageDoc),
+  commands: v.array(commandDoc),
+  control: controlView,
   pendingAsk: v.union(askDoc, v.null()),
 });
 
@@ -157,8 +195,22 @@ export const get = query({
       messages.push(...rows);
     }
     messages.sort((a, b) => a.createdAt - b.createdAt);
-    const pendingAsk = asks.find((a) => a.status === "pending") ?? null;
+    const commands = await ctx.db
+      .query("jobCommands")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const pendingAsk =
+      asks.find(
+        (a) =>
+          a.status === "pending" &&
+          runs.find((run) => run._id === a.runId)?.status === "awaitingAsk",
+      ) ?? null;
     const recipe = await ctx.db.get(job.recipeId);
+    const stages = [];
+    for (const stage of await stagesOfRecipe(ctx, job.recipeId)) {
+      const profile = stage.agentProfileId ? await ctx.db.get(stage.agentProfileId) : null;
+      stages.push({ key: stage.key, provider: profile?.provider });
+    }
     return {
       job,
       project: {
@@ -174,6 +226,8 @@ export const get = query({
       asks,
       artifacts,
       messages,
+      commands,
+      control: deriveControlView(toAggregate(job, runs, asks), stages),
       pendingAsk,
     };
   },
@@ -235,6 +289,127 @@ export const create = mutation({
   },
 });
 
+const commandReceipt = v.object({
+  kind: v.union(v.literal("applied"), v.literal("unchanged")),
+  reason: v.optional(
+    v.union(
+      v.literal("duplicate"),
+      v.literal("alreadyTerminal"),
+      v.literal("alreadyStopped"),
+      v.literal("notStopped"),
+      v.literal("superseded"),
+    ),
+  ),
+  commandId: v.id("jobCommands"),
+});
+
+function requireMessageText(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed === "") throw new Error("A message is required");
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    throw new Error(`A message can be at most ${MAX_MESSAGE_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
+async function dispatch(
+  ctx: MutationCtx,
+  jobId: Id<"jobs">,
+  commandId: string,
+  input: JobCommand,
+) {
+  const job = await requireJob(ctx, jobId);
+  const existing = await ctx.db
+    .query("jobCommands")
+    .withIndex("by_job_and_commandId", (q) =>
+      q.eq("jobId", job._id).eq("commandId", commandId),
+    )
+    .unique();
+  if (existing) {
+    return { kind: "unchanged" as const, reason: "duplicate" as const, commandId: existing._id };
+  }
+  const command =
+    input.kind === "sendMessage"
+      ? { ...input, text: requireMessageText(input.text) }
+      : input;
+  const runs = await ctx.db
+    .query("runs")
+    .withIndex("by_job", (q) => q.eq("jobId", job._id))
+    .collect();
+  const asks = await ctx.db
+    .query("asks")
+    .withIndex("by_job", (q) => q.eq("jobId", job._id))
+    .collect();
+  const row = await ctx.db.insert("jobCommands", {
+    jobId: job._id,
+    commandId,
+    command,
+  });
+  const plan = applyJobCommand(toAggregate(job, runs, asks), command, row);
+  await applyJobWrites(ctx, job, plan.writes, row);
+  return plan.receipt.kind === "applied"
+    ? { kind: "applied" as const, commandId: row }
+    : { kind: "unchanged" as const, reason: plan.receipt.reason, commandId: row };
+}
+
+export const dispatchCommand = mutation({
+  args: {
+    jobId: v.id("jobs"),
+    commandId: v.string(),
+    command: jobCommand,
+  },
+  returns: commandReceipt,
+  handler: async (ctx, args) => {
+    return await dispatch(ctx, args.jobId, args.commandId, args.command);
+  },
+});
+
+export const stop = mutation({
+  args: { jobId: v.id("jobs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await dispatch(ctx, args.jobId, crypto.randomUUID(), { kind: "stopJob" });
+    return null;
+  },
+});
+
+export const remove = mutation({
+  args: { jobId: v.id("jobs") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const job = await requireJob(ctx, args.jobId);
+    const runs = await ctx.db
+      .query("runs")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const asks = await ctx.db
+      .query("asks")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    const artifacts = await ctx.db
+      .query("artifacts")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    for (const run of runs) {
+      const messages = await ctx.db
+        .query("runMessages")
+        .withIndex("by_run", (q) => q.eq("runId", run._id))
+        .collect();
+      for (const message of messages) await ctx.db.delete(message._id);
+    }
+    const commands = await ctx.db
+      .query("jobCommands")
+      .withIndex("by_job", (q) => q.eq("jobId", job._id))
+      .collect();
+    for (const ask of asks) await ctx.db.delete(ask._id);
+    for (const artifact of artifacts) await ctx.db.delete(artifact._id);
+    for (const command of commands) await ctx.db.delete(command._id);
+    for (const run of runs) await ctx.db.delete(run._id);
+    await ctx.db.delete(job._id);
+    return null;
+  },
+});
+
 export const answerAsk = mutation({
   args: {
     askId: v.id("asks"),
@@ -248,6 +423,9 @@ export const answerAsk = mutation({
     const job = await requireJob(ctx, ask.jobId);
     const run = await ctx.db.get(ask.runId);
     if (!run) throw new Error("Run not found");
+    if (run.status !== "awaitingAsk") {
+      throw new Error("This Ask is no longer waiting for an answer");
+    }
     await ctx.db.patch(args.askId, { answers: args.answers, status: "answered" });
     if (laneOf(job.status) === "needsDetail") {
       assertTransition(job.status, "planning");

@@ -5,9 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
-import { toModelSelection } from "../convex/lib/agentModel";
+import { resolveProvider, type AgentProvider, type AGENT_EFFORTS, toModelSelection } from "../convex/lib/agentModel";
 import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
+import { runCodexAgent } from "./codexAgent";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
@@ -41,7 +42,8 @@ type Launch = {
   acceptedSpec?: string;
   forceGrill: boolean;
   model: string;
-  effort: string;
+  effort: (typeof AGENT_EFFORTS)[number];
+  provider?: AgentProvider;
   project: {
     id: Id<"projects">;
     serverId?: Id<"servers">;
@@ -174,6 +176,13 @@ async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
       prompt,
       tools,
       onText: (text) => log.push(text),
+      pullNotes: async () => {
+        const rows = await client.mutation(api.worker.takeAgentInput, {
+          runId: launch.runId,
+          limit: 10,
+        });
+        return rows.map((row) => row.text);
+      },
     });
   } finally {
     await log.close();
@@ -285,11 +294,30 @@ async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: R
   }
 }
 
+async function runCodex(client: ConvexHttpClient, launch: Launch) {
+  const log = createLiveLog(text => client.mutation(api.worker.appendMessage, { runId: launch.runId, text }));
+  try {
+    await runCodexAgent({
+      ...launch,
+      root,
+      workingDirectory: launch.project.localPath,
+      convexUrl: client.url,
+      prompt: assemblePrompt({ stageKey: launch.stageKey, request: launch.request, projectName: launch.project.name, projectKind: launch.project.kind, acceptedSpec: launch.acceptedSpec, skills: launch.skills }),
+      onThreadId: agentId => client.mutation(api.worker.bindAgent, { runId: launch.runId, agentId }),
+      onText: text => log.push(text),
+      getStatus: () => client.query(api.worker.getRunStatus, { runId: launch.runId }),
+    });
+  } finally {
+    await log.close();
+  }
+}
+
 // Each Run gets its own process so one Project's environment cannot leak into
 // another Run, and settings updates do not mutate an active Run.
 async function execute(client: ConvexHttpClient, launch: Launch, projectEnv: Record<string, string>) {
-  const provider = process.env.FACTORY_PROVIDER ?? "cursor";
+  const provider = resolveProvider(launch.provider, process.env.FACTORY_PROVIDER);
   if (process.env.FACTORY_MOCK === "1") await mockRun(client, launch);
+  else if (provider === "codex") await runCodex(client, launch);
   else if (provider === "openai") await runOpenAI(client, launch);
   else if (!process.env.CURSOR_API_KEY) throw new Error("Set CURSOR_API_KEY in Settings → Worker environment before starting a Run.");
   else await runCursor(client, launch, projectEnv);
@@ -307,7 +335,21 @@ async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
       });
       proc.stdin.write(JSON.stringify({ launch, projectEnv: values.project, convexUrl: identity.convexUrl }));
       proc.stdin.end();
-      if (await proc.exited !== 0) throw new Error("Run failed. Check the worker environment, provider credentials, and Project configuration.");
+      let exitCode: number | undefined;
+      const exited = proc.exited.then((code) => {
+        exitCode = code;
+        return code;
+      });
+      while (exitCode === undefined) {
+        await Promise.race([exited, Bun.sleep(500)]);
+        if (exitCode !== undefined) break;
+        const status = await client.query(api.worker.getRunStatus, { runId: launch.runId });
+        if (status === null || status === "failed") {
+          proc.kill("SIGTERM");
+          break;
+        }
+      }
+      if (await exited !== 0) throw new Error("Run failed. Check the worker environment, provider credentials, and Project configuration.");
     } catch {
       await client.mutation(api.worker.failRun, { runId: launch.runId, error: "Run failed. Check worker environment settings and provider credentials." });
     }

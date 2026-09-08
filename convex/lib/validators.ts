@@ -8,6 +8,8 @@ export const projectKind = v.union(
 
 export const runtime = v.union(v.literal("local"), v.literal("cloud"));
 
+export const agentProvider = v.union(v.literal("cursor"), v.literal("codex"), v.literal("openai"));
+
 export const agentModel = v.string();
 
 export const agentEffort = v.union(
@@ -15,6 +17,8 @@ export const agentEffort = v.union(
   v.literal("medium"),
   v.literal("high"),
   v.literal("xhigh"),
+  v.literal("max"),
+  v.literal("ultra"),
 );
 
 export const stageKey = v.string();
@@ -59,7 +63,70 @@ export const artifactKind = v.union(
   v.literal("pr_url"),
 );
 
-export const askStatus = v.union(v.literal("pending"), v.literal("answered"));
+export const askStatus = v.union(
+  v.literal("pending"),
+  v.literal("answered"),
+  v.literal("cancelled"),
+);
+
+export const jobCommand = v.union(
+  v.object({ kind: v.literal("stopJob") }),
+  v.object({ kind: v.literal("finishJob") }),
+  v.object({
+    kind: v.literal("stopStage"),
+    stageKey: stageKey,
+    expectedRunId: v.id("runs"),
+  }),
+  v.object({
+    kind: v.literal("retryStage"),
+    stageKey: stageKey,
+    expectedStoppedRunId: v.id("runs"),
+  }),
+  v.object({
+    kind: v.literal("sendMessage"),
+    stageKey: stageKey,
+    text: v.string(),
+  }),
+);
+
+export const jobCommandKind = v.union(
+  v.literal("stopJob"),
+  v.literal("finishJob"),
+  v.literal("stopStage"),
+  v.literal("retryStage"),
+  v.literal("sendMessage"),
+);
+
+export const messageDelivery = v.union(
+  v.object({ kind: v.literal("queued") }),
+  v.object({
+    kind: v.literal("taken"),
+    runId: v.id("runs"),
+    takenAt: v.number(),
+  }),
+  v.object({ kind: v.literal("transcriptOnly"), reason: v.string() }),
+);
+
+export const chatDelivery = v.union(
+  v.literal("pollBetweenTurns"),
+  v.literal("nextRun"),
+  v.literal("transcriptOnly"),
+);
+
+export const jobActivity = v.union(
+  v.literal("working"),
+  v.literal("waitingOnHuman"),
+  v.literal("parked"),
+  v.literal("done"),
+  v.literal("failed"),
+);
+
+export const unchangedReason = v.union(
+  v.literal("duplicate"),
+  v.literal("alreadyTerminal"),
+  v.literal("alreadyStopped"),
+  v.literal("superseded"),
+);
 
 export const askKind = v.union(
   v.literal("grill"),
