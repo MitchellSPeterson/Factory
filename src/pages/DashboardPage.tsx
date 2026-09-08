@@ -4,7 +4,7 @@ import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
 import { useProjectScope } from "../projectScope";
 
-export function DashboardPage() {
+export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
   const jobs = useQuery(api.jobs.list);
   const projects = useQuery(api.projects.list);
   const { projectId } = useProjectScope();
@@ -35,7 +35,7 @@ export function DashboardPage() {
               : "A live summary across every Project."}
           </p>
         </div>
-        <Link to="/jobs/new"><button type="button">New job</button></Link>
+        <button type="button" onClick={onNewJob}>New job</button>
       </div>
 
       <section className="metric-grid" aria-label="Project summary">

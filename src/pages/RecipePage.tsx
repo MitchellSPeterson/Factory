@@ -26,11 +26,13 @@ export function RecipePage() {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState<Id<"stages"> | "">("");
   const [name, setName] = useState("");
+  const [requestTemplate, setRequestTemplate] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!recipe) return;
     setName(recipe.name);
+    setRequestTemplate(recipe.requestTemplate ?? "");
     if (selectedId === "" && recipe.stages[0]) {
       setSelectedId(recipe.stages[0]._id);
       return;
@@ -145,6 +147,20 @@ export function RecipePage() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="workflow-template">
+          Request template
+          <textarea
+            value={requestTemplate}
+            onChange={(e) => setRequestTemplate(e.target.value)}
+            onBlur={() => {
+              if (requestTemplate !== (recipe.requestTemplate ?? "")) {
+                void run(() => updateRecipe({ recipeId: id, requestTemplate }));
+              }
+            }}
+            placeholder="Describe the context, outcome, and acceptance criteria this Workflow expects."
+          />
+          <span className="muted">Shown first when someone selects this Workflow for a new Job.</span>
         </label>
       </section>
       <RecipeGraph

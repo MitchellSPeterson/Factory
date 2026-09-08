@@ -37,6 +37,9 @@ const jobDoc = v.object({
   stageKey: stageKey,
   acceptedSpec: v.optional(v.string()),
   error: v.optional(v.string()),
+  githubIssueUrl: v.optional(v.string()),
+  milestone: v.optional(v.string()),
+  tags: v.optional(v.array(v.string())),
 });
 
 const runDoc = v.object({
@@ -182,10 +185,14 @@ export const create = mutation({
     runtime: runtime,
     forceGrill: v.boolean(),
     recipeId: v.optional(v.id("recipes")),
+    githubIssueUrl: v.optional(v.string()),
+    milestone: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
   },
   returns: v.id("jobs"),
   handler: async (ctx, args) => {
     if (args.request.trim() === "") throw new Error("Request is required");
+    if ((args.tags?.length ?? 0) > 20) throw new Error("A Job can have at most 20 tags");
     const project = await requireProject(ctx, args.projectId);
     const recipeId =
       args.recipeId ??
@@ -209,6 +216,9 @@ export const create = mutation({
       forceGrill: args.forceGrill,
       status: "queued",
       stageKey: start.key,
+      githubIssueUrl: args.githubIssueUrl?.trim() || undefined,
+      milestone: args.milestone?.trim() || undefined,
+      tags: args.tags?.map((tag) => tag.trim()).filter(Boolean),
     });
     await ctx.db.insert("runs", {
       jobId,

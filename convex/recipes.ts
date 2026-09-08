@@ -34,6 +34,7 @@ const recipeView = v.object({
   slug: v.string(),
   model: agentModel,
   effort: agentEffort,
+  requestTemplate: v.optional(v.string()),
   stages: v.array(stageView),
 });
 
@@ -43,6 +44,7 @@ const recipeListItem = v.object({
   slug: v.string(),
   model: agentModel,
   effort: agentEffort,
+  requestTemplate: v.optional(v.string()),
   stages: v.array(
     v.object({
       _id: v.id("stages"),
@@ -105,6 +107,7 @@ async function toRecipeView(
     slug: recipe.slug,
     model: recipeModel(recipe.model),
     effort: recipeEffort(recipe.effort),
+    requestTemplate: recipe.requestTemplate,
     stages: stageViews,
   };
 }
@@ -196,6 +199,7 @@ export const list = query({
         slug: recipe.slug,
         model: recipeModel(recipe.model),
         effort: recipeEffort(recipe.effort),
+        requestTemplate: recipe.requestTemplate,
         stages: stages.map((s) => ({
           _id: s._id,
           key: s.key,
@@ -249,6 +253,7 @@ export const create = mutation({
       slug,
       model: source ? recipeModel(source.model) : undefined,
       effort: source ? recipeEffort(source.effort) : undefined,
+      requestTemplate: source?.requestTemplate,
     });
     if (source) await copyStages(ctx, source._id, recipeId);
     return recipeId;
@@ -260,11 +265,12 @@ export const update = mutation({
     recipeId: v.id("recipes"),
     name: v.optional(v.string()),
     slug: v.optional(v.string()),
+    requestTemplate: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const recipe = await requireRecipe(ctx, args.recipeId);
-    const patch: { name?: string; slug?: string } = {};
+    const patch: { name?: string; slug?: string; requestTemplate?: string | undefined } = {};
     if (args.name !== undefined) {
       const name = args.name.trim();
       if (name === "") throw new Error("Name is required");
@@ -273,7 +279,11 @@ export const update = mutation({
     if (args.slug !== undefined) {
       patch.slug = await uniqueSlug(ctx, args.slug, recipe._id);
     }
-    if (patch.name === undefined && patch.slug === undefined) {
+    if (args.requestTemplate !== undefined) {
+      const template = args.requestTemplate.trim();
+      patch.requestTemplate = template === "" ? undefined : template;
+    }
+    if (patch.name === undefined && patch.slug === undefined && args.requestTemplate === undefined) {
       throw new Error("Nothing to update");
     }
     await ctx.db.patch(args.recipeId, patch);

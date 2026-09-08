@@ -9,6 +9,7 @@ import { ProjectScopeContext, ThemeContext, type ProjectScope } from "./projectS
 import { JobPage } from "./pages/JobPage";
 import { JobsPage } from "./pages/JobsPage";
 import { NewJobPage } from "./pages/NewJobPage";
+import { NewJobModal } from "./NewJobModal";
 import { ProjectPage } from "./pages/ProjectPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { RecipePage } from "./pages/RecipePage";
@@ -88,6 +89,7 @@ export function App() {
   const navigate = useNavigate();
   const [projectId, setProjectIdState] = useState<ProjectScope>(() => (localStorage.getItem("factory-project-scope") ?? "") as ProjectScope);
   const [theme, setTheme] = useState<"dark" | "light">(() => (localStorage.getItem("factory-theme") as "dark" | "light") ?? "dark");
+  const [newJobOpen, setNewJobOpen] = useState(false);
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem("factory-theme", theme); }, [theme]);
   const setProjectId = (id: ProjectScope) => { setProjectIdState(id); localStorage.setItem("factory-project-scope", id); navigate("/dashboard"); };
   return (
@@ -116,8 +118,8 @@ export function App() {
       <main>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/dashboard" element={<DashboardPage onNewJob={() => setNewJobOpen(true)} />} />
+          <Route path="/jobs" element={<JobsPage onNewJob={() => setNewJobOpen(true)} />} />
           <Route path="/jobs/new" element={<NewJobPage />} />
           <Route path="/jobs/:jobId" element={<JobPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
@@ -132,6 +134,7 @@ export function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
+      {newJobOpen ? <NewJobModal projectId={projectId} onClose={() => setNewJobOpen(false)} onComplete={(jobId) => { setNewJobOpen(false); navigate(`/jobs/${jobId}`); }} /> : null}
     </div></ProjectScopeContext.Provider></ThemeContext.Provider>
   );
 }

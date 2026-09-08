@@ -30,6 +30,7 @@ export default defineSchema({
     slug: v.string(),
     model: v.optional(v.string()),
     effort: v.optional(v.string()),
+    requestTemplate: v.optional(v.string()),
   }).index("by_slug", ["slug"]),
 
   stages: defineTable({
@@ -78,6 +79,9 @@ export default defineSchema({
     stageKey: stageKey,
     acceptedSpec: v.optional(v.string()),
     error: v.optional(v.string()),
+    githubIssueUrl: v.optional(v.string()),
+    milestone: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
   })
     .index("by_status", ["status"])
     .index("by_project", ["projectId"])
