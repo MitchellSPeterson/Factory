@@ -135,7 +135,7 @@ async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
       ? launch.model
       : process.env.OPENAI_MODEL?.trim() || "";
   if (model === "") {
-    throw new Error("model is empty; set Recipe/Stage model or OPENAI_MODEL");
+    throw new Error("model is empty; set Workflow/Stage model or OPENAI_MODEL");
   }
 
   await client.mutation(api.worker.bindAgent, {

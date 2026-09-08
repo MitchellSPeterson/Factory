@@ -44,7 +44,7 @@ export function RecipePage() {
   }, [recipe, selectedId]);
 
   if (recipe === undefined) return <p className="muted">Loading…</p>;
-  if (recipe === null) return <p>Recipe not found.</p>;
+  if (recipe === null) return <p>Workflow not found.</p>;
 
   const selected = recipe.stages.find((s) => s._id === selectedId) ?? null;
 
@@ -69,18 +69,18 @@ export function RecipePage() {
   return (
     <>
       <p className="crumb">
-        <Link to="/recipes">Recipes</Link> / {recipe.slug}
+        <Link to="/workflows">Workflows</Link> / {recipe.slug}
       </p>
       <div className="pagehead">
-        <h1>{recipe.name} recipe</h1>
+        <h1>{recipe.name} workflow</h1>
         <button
           type="button"
           className="ghost"
           onClick={() =>
             void run(async () => {
-              if (!window.confirm("Delete this Recipe?")) return;
+              if (!window.confirm("Delete this Workflow?")) return;
               await removeRecipe({ recipeId: id });
-              navigate("/recipes");
+              navigate("/workflows");
             })
           }
         >
@@ -177,7 +177,7 @@ export function RecipePage() {
           onRemoveSkill={(bindingId) => removeBinding({ bindingId })}
         />
       ) : (
-        <p className="muted">Add a Stage to start editing this Recipe.</p>
+        <p className="muted">Add a Stage to start editing this Workflow.</p>
       )}
     </>
   );
@@ -289,6 +289,7 @@ function StageEditor({
     model?: string;
     effort?: string;
     halt: boolean;
+    lane?: "planning" | "building" | "pr";
     bindings: Array<{
       _id: Id<"bindings">;
       skillId: Id<"skills">;
@@ -304,6 +305,7 @@ function StageEditor({
     model?: string;
     effort?: string;
     halt?: boolean;
+    lane?: "planning" | "building" | "pr" | "";
   }) => void;
   onMove: (toOrder: number) => void;
   onRemove: () => void;
@@ -332,6 +334,9 @@ function StageEditor({
     e.preventDefault();
     if (key.trim() !== "" && key !== stage.key) onUpdate({ key });
   }
+
+  const defaultLane =
+    stage.key === "plan" ? "planning" : stage.key === "pr" ? "pr" : "building";
 
   return (
     <section className="card stack">
@@ -366,7 +371,7 @@ function StageEditor({
             value={stage.model ?? ""}
             onChange={(e) => onUpdate({ model: e.target.value })}
           >
-            <option value="">Recipe default ({recipe.model})</option>
+            <option value="">Workflow default ({recipe.model})</option>
             {AGENT_MODELS.map((model) => (
               <option key={model} value={model}>
                 {model}
@@ -380,12 +385,28 @@ function StageEditor({
             value={stage.effort ?? ""}
             onChange={(e) => onUpdate({ effort: e.target.value })}
           >
-            <option value="">Recipe default ({recipe.effort})</option>
+            <option value="">Workflow default ({recipe.effort})</option>
             {AGENT_EFFORTS.map((effort) => (
               <option key={effort} value={effort}>
                 {effort}
               </option>
             ))}
+          </select>
+        </label>
+        <label>
+          Board lane
+          <select
+            value={stage.lane ?? ""}
+            onChange={(e) =>
+              onUpdate({
+                lane: e.target.value as "planning" | "building" | "pr" | "",
+              })
+            }
+          >
+            <option value="">Auto ({defaultLane})</option>
+            <option value="planning">Planning</option>
+            <option value="building">Building</option>
+            <option value="pr">PR</option>
           </select>
         </label>
       </div>

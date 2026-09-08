@@ -7,12 +7,15 @@ export function SkillsPage() {
   return (
     <>
       <div className="pagehead">
-        <h1>Skills</h1>
+        <div>
+          <h1>Skills</h1>
+          <p className="muted">
+            {skills === undefined
+              ? "Factory-owned copies. Stage bindings live on a Workflow."
+              : `${skills.length} skills · Factory-owned copies. Stage bindings live on a Workflow`}
+          </p>
+        </div>
       </div>
-      <p className="muted">
-        Factory-owned copies. Edit a body here. Stage bindings live on a
-        Recipe.
-      </p>
       <div className="box list">
         {skills?.map((s) => (
           <Link className="card" key={s._id} to={`/skills/${s._id}`}>

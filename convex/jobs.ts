@@ -105,6 +105,7 @@ export const list = query({
     v.object({
       job: jobDoc,
       projectName: v.string(),
+      recipeName: v.string(),
     }),
   ),
   handler: async (ctx) => {
@@ -112,7 +113,12 @@ export const list = query({
     const rows = [];
     for (const job of jobs) {
       const project = await ctx.db.get(job.projectId);
-      rows.push({ job, projectName: project?.name ?? "missing" });
+      const recipe = await ctx.db.get(job.recipeId);
+      rows.push({
+        job,
+        projectName: project?.name ?? "missing",
+        recipeName: recipe?.name ?? "missing",
+      });
     }
     return rows;
   },
@@ -190,11 +196,11 @@ export const create = mutation({
           .withIndex("by_slug", (q) => q.eq("slug", "feature"))
           .unique()
       )?._id;
-    if (!recipeId) throw new Error("Recipe is not seeded");
+    if (!recipeId) throw new Error("Workflow is not seeded");
     const recipe = await ctx.db.get(recipeId);
-    if (!recipe) throw new Error("Recipe not found");
+    if (!recipe) throw new Error("Workflow not found");
     const start = firstStage(await stagesOfRecipe(ctx, recipe._id));
-    if (!start) throw new Error("Recipe has no Stages");
+    if (!start) throw new Error("Workflow has no Stages");
     const jobId = await ctx.db.insert("jobs", {
       projectId: args.projectId,
       recipeId: recipe._id,
@@ -254,7 +260,7 @@ export const acceptSpec = mutation({
       if (grilled === 0) throw new Error("Large thin spec still needs a grill Ask");
     }
     const next = nextStage(await stagesOfRecipe(ctx, job.recipeId), job.stageKey);
-    if (!next) throw new Error("Recipe has no Stage after plan");
+    if (!next) throw new Error("Workflow has no Stage after plan");
     const status = isPrStage(next.key) ? "pr" : "building";
     assertTransition(job.status, status);
     await ctx.db.patch(job._id, {

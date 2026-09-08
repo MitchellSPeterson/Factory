@@ -44,7 +44,7 @@ export const create = mutation({
     if (args.localPath.trim() === "") throw new Error("Local path is required");
     if (args.recipeId) {
       const recipe = await ctx.db.get(args.recipeId);
-      if (!recipe) throw new Error("Recipe not found");
+      if (!recipe) throw new Error("Workflow not found");
     }
     return await ctx.db.insert("projects", args);
   },
@@ -66,7 +66,7 @@ export const update = mutation({
     if (!project) throw new Error("Project not found");
     if (args.recipeId) {
       const recipe = await ctx.db.get(args.recipeId);
-      if (!recipe) throw new Error("Recipe not found");
+      if (!recipe) throw new Error("Workflow not found");
     }
     const { projectId, ...fields } = args;
     await ctx.db.patch(projectId, fields);

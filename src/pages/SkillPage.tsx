@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import { FormEvent, useEffect, useState } from "react";
+import Markdown from "react-markdown";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -48,6 +49,12 @@ export function SkillPage() {
             style={{ minHeight: "22rem" }}
           />
         </label>
+        <div className="stack">
+          <span>Preview</span>
+          <div className="markdown">
+            <Markdown>{body}</Markdown>
+          </div>
+        </div>
         <button type="submit">Save skill</button>
       </form>
     </>

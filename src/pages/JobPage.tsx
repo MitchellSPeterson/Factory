@@ -66,7 +66,7 @@ export function JobPage() {
         </div>
       </div>
       <p className="muted">
-        <Link to={`/recipes/${job.recipeId}`}>{recipeName}</Link>
+        <Link to={`/workflows/${job.recipeId}`}>{recipeName}</Link>
       </p>
       <p>{job.request}</p>
 
@@ -97,7 +97,9 @@ export function JobPage() {
           {verdict ? (
             <p className="mono muted">{verdict.body}</p>
           ) : null}
-          <pre>{spec.body}</pre>
+          <div className="markdown">
+            <Markdown>{spec.body}</Markdown>
+          </div>
           <div className="row">
             <button type="button" onClick={() => void acceptSpec({ jobId: id })}>
               Accept spec
@@ -163,7 +165,9 @@ export function JobPage() {
         <div
           ref={logRef}
           className={
-            runs.some((r) => r.status === "running") ? "log live" : "log"
+            runs.some((r) => r.status === "running")
+              ? "log markdown live"
+              : "log markdown"
           }
         >
           <Markdown>

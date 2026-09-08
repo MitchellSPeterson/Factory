@@ -56,7 +56,7 @@ describe("recipe graph", () => {
     expect(() => parseStageKey("2fast")).toThrow();
   });
 
-  test("stage agent falls back to the Recipe", () => {
+  test("stage agent falls back to the Workflow", () => {
     expect(
       stageAgent({ model: "grok-4.6" }, { model: "composer-2.5", effort: "low" }),
     ).toEqual({ model: "grok-4.6", effort: "low" });

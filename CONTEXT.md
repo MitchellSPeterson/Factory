@@ -1,19 +1,19 @@
-# Factory
+# VASA
 
-A personal control plane for running Cursor agents across your product repos. You sit here. Agents do the work.
+Agentic Software Factory. A personal control plane for running Cursor agents across your product repos. You sit here. Agents do the work.
 
 ## Language
 
 **Project**:
-A single git repository you develop, including a monorepo that contains Expo and web together. A Project may name one Recipe used for new Jobs.
+A single git repository you develop, including a monorepo that contains Expo and web together. A Project may name one Workflow used for new Jobs.
 _Avoid_: App, workspace, product
 
-**Recipe**:
-An ordered list of Stages used to take a Job from request to a pull request. You can keep more than one Recipe and copy one to start another.
-_Avoid_: Pipeline, workflow, playbook, template
+**Workflow**:
+An ordered list of Stages used to take a Job from request to a pull request. You can keep more than one Workflow and copy one to start another. Examples include New Feature and Bug Fix.
+_Avoid_: Recipe, pipeline, playbook, template
 
 **Stage**:
-A named phase of a Recipe. Each Stage has a key, title, Bindings, optional model and effort, and an optional halt that waits for a human before the next Stage. Keys `plan`, `implement`, `verify`, and `pr` keep their engine behavior; other keys run then continue.
+A named phase of a Workflow. Each Stage has a key, title, Bindings, optional model and effort, an optional Lane for the board while the Stage runs, and an optional halt that waits for a human before the next Stage. Keys `plan`, `implement`, `verify`, and `pr` keep their engine behavior; other keys run then continue.
 _Avoid_: Step, phase, task
 
 **Skill**:
@@ -29,7 +29,7 @@ A named condition that decides whether a Binding is included. v1 has one name: l
 _Avoid_: Rule, predicate, filter, expression
 
 **Job**:
-One request against one Project, executed through one Recipe.
+One request against one Project, executed through one Workflow.
 _Avoid_: Ticket, task, issue, work item
 
 **View all**:
@@ -41,7 +41,7 @@ The Jobs board limited to Jobs belonging to one chosen Project.
 _Avoid_: Filter, workspace, context switch
 
 **Lane**:
-The Job's place on the board. The seven lanes are Queued, Needs Grilling, Planning, Plan Review, Building, Code Review, and PR.
+The Job's place on the board. Lanes are Factory-wide and fixed. The seven lanes are Queued, Needs Grilling, Planning, Plan Review, Building, Code Review, and PR. A Stage may name which Lane a Job occupies while that Stage runs; otherwise engine heuristics apply. Filtering the board by Workflow hides cards; it does not change columns.
 _Avoid_: Column, status, swimlane
 
 **Run**:

@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { recipeEffort, recipeModel } from "./lib/agentModel";
 import { stagesOfRecipe } from "./lib/docs";
 import { parseStageKey, placeStage, uniqueKey } from "./lib/recipeGraph";
-import { agentEffort, agentModel, gateName, stageKey } from "./lib/validators";
+import { agentEffort, agentModel, gateName, stageKey, stageLane } from "./lib/validators";
 import { v } from "convex/values";
 
 const bindingView = v.object({
@@ -24,6 +24,7 @@ const stageView = v.object({
   model: v.optional(v.string()),
   effort: v.optional(v.string()),
   halt: v.boolean(),
+  lane: v.optional(stageLane),
   bindings: v.array(bindingView),
 });
 
@@ -94,6 +95,7 @@ async function toRecipeView(
       model: stage.model,
       effort: stage.effort,
       halt: haltOf(stage),
+      lane: stage.lane,
       bindings: await bindingsOfStage(ctx, stage._id),
     });
   }
@@ -112,7 +114,7 @@ async function requireRecipe(
   recipeId: Id<"recipes">,
 ) {
   const recipe = await ctx.db.get(recipeId);
-  if (!recipe) throw new Error("Recipe not found");
+  if (!recipe) throw new Error("Workflow not found");
   return recipe;
 }
 
@@ -151,6 +153,7 @@ async function copyStages(
       model: stage.model,
       effort: stage.effort,
       halt: haltOf(stage),
+      lane: stage.lane,
     });
     const bindings = await ctx.db
       .query("bindings")
@@ -287,10 +290,10 @@ export const remove = mutation({
       .query("jobs")
       .withIndex("by_recipe", (q) => q.eq("recipeId", args.recipeId))
       .first();
-    if (jobs) throw new Error("Recipe is still used by a Job");
+    if (jobs) throw new Error("Workflow is still used by a Job");
     const projects = await ctx.db.query("projects").collect();
     if (projects.some((p) => p.recipeId === args.recipeId)) {
-      throw new Error("Recipe is still used by a Project");
+      throw new Error("Workflow is still used by a Project");
     }
     const stages = await stagesOfRecipe(ctx, args.recipeId);
     for (const stage of stages) {
@@ -373,6 +376,7 @@ export const updateStage = mutation({
     model: v.optional(v.string()),
     effort: v.optional(v.string()),
     halt: v.optional(v.boolean()),
+    lane: v.optional(v.union(stageLane, v.literal(""))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -384,6 +388,7 @@ export const updateStage = mutation({
       model?: string;
       effort?: string;
       halt?: boolean;
+      lane?: "planning" | "building" | "pr" | undefined;
     } = {};
     if (args.title !== undefined) {
       const title = args.title.trim();
@@ -399,7 +404,7 @@ export const updateStage = mutation({
         }
         const stages = await stagesOfRecipe(ctx, stage.recipeId);
         if (stages.some((s) => s.key === key && s._id !== stage._id)) {
-          throw new Error("Stage key already exists on this Recipe");
+          throw new Error("Stage key already exists on this Workflow");
         }
         patch.key = key;
       }
@@ -412,6 +417,9 @@ export const updateStage = mutation({
       else patch.effort = args.effort;
     }
     if (args.halt !== undefined) patch.halt = args.halt;
+    if (args.lane !== undefined) {
+      patch.lane = args.lane === "" ? undefined : args.lane;
+    }
     if (Object.keys(patch).length === 0) throw new Error("Nothing to update");
     await ctx.db.patch(args.stageId, patch);
     return null;
@@ -425,7 +433,7 @@ export const removeStage = mutation({
     const stage = await ctx.db.get(args.stageId);
     if (!stage) throw new Error("Stage not found");
     const stages = await stagesOfRecipe(ctx, stage.recipeId);
-    if (stages.length <= 1) throw new Error("Recipe needs at least one Stage");
+    if (stages.length <= 1) throw new Error("Workflow needs at least one Stage");
     const busy = await jobsOnStage(ctx, stage.recipeId, stage.key);
     if (busy.length > 0) throw new Error("A Job is still on this Stage");
     const bindings = await ctx.db

@@ -24,7 +24,7 @@ export function RecipesPage() {
             : (fromRecipeId as Id<"recipes">),
       });
       setName("");
-      navigate(`/recipes/${recipeId}`);
+      navigate(`/workflows/${recipeId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -33,15 +33,22 @@ export function RecipesPage() {
   return (
     <>
       <div className="pagehead">
-        <h1>Recipes</h1>
+        <div>
+          <h1>Workflows</h1>
+          <p className="muted">
+            {recipes === undefined
+              ? "The ordered Stages a Job walks."
+              : `${recipes.length} workflows · The ordered Stages a Job walks`}
+          </p>
+        </div>
       </div>
-      <p className="muted">
-        A Recipe is the ordered Stages a Job walks. Copy one to start another,
-        then assign it on a Project.
-      </p>
       <div className="box list">
         {recipes?.map((recipe) => (
-          <Link className="card" key={recipe._id} to={`/recipes/${recipe._id}`}>
+          <Link
+            className="card"
+            key={recipe._id}
+            to={`/workflows/${recipe._id}`}
+          >
             <strong>{recipe.name}</strong>
             <div className="muted mono">{recipe.slug}</div>
             <div className="recipe-mini">
@@ -58,14 +65,14 @@ export function RecipesPage() {
           </Link>
         ))}
       </div>
-      <h2>New recipe</h2>
+      <h2>New workflow</h2>
       <form className="stack" onSubmit={(e) => void onSubmit(e)}>
         <label>
           Name
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Hotfix"
+            placeholder="Bug Fix"
           />
         </label>
         <label>
@@ -83,7 +90,7 @@ export function RecipesPage() {
           </select>
         </label>
         {error ? <p className="muted">{error}</p> : null}
-        <button type="submit">Create recipe</button>
+        <button type="submit">Create workflow</button>
       </form>
     </>
   );

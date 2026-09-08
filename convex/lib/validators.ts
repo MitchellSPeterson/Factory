@@ -19,6 +19,13 @@ export const agentEffort = v.union(
 
 export const stageKey = v.string();
 
+/** Optional board Lane while a Stage runs. Halt / Ask lanes stay engine-driven. */
+export const stageLane = v.union(
+  v.literal("planning"),
+  v.literal("building"),
+  v.literal("pr"),
+);
+
 export const gateName = v.literal("largeAndThinSpec");
 
 export const jobStatus = v.union(

@@ -11,6 +11,7 @@ import {
   runStatus,
   runtime,
   stageKey,
+  stageLane,
 } from "./lib/validators";
 import { v } from "convex/values";
 
@@ -39,6 +40,7 @@ export default defineSchema({
     model: v.optional(v.string()),
     effort: v.optional(v.string()),
     halt: v.optional(v.boolean()),
+    lane: v.optional(stageLane),
   })
     .index("by_recipe", ["recipeId"])
     .index("by_recipe_and_key", ["recipeId", "key"]),

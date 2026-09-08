@@ -47,6 +47,19 @@ export function laneOf(status: string): Lane {
   return LEGACY[status] ?? "queued";
 }
 
+/** Lane while a Stage runs. Explicit Stage.lane wins; else key heuristics. */
+export function runningLane(stage: {
+  key: string;
+  lane?: string;
+}): Lane {
+  if (stage.lane === "planning" || stage.lane === "building" || stage.lane === "pr") {
+    return stage.lane;
+  }
+  if (stage.key === "plan") return "planning";
+  if (stage.key === "pr") return "pr";
+  return "building";
+}
+
 export function canTransition(from: string, to: string): boolean {
   return ALLOWED[laneOf(from)].includes(laneOf(to));
 }

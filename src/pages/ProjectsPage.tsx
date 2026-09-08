@@ -33,7 +33,14 @@ export function ProjectsPage() {
   return (
     <>
       <div className="pagehead">
-        <h1>Projects</h1>
+        <div>
+          <h1>Projects</h1>
+          <p className="muted">
+            {projects === undefined
+              ? "Repos Factory can run Jobs against."
+              : `${projects.length} projects · Repos Factory can run Jobs against`}
+          </p>
+        </div>
       </div>
       <div className="box list">
         {projects?.map((p) => (
@@ -87,7 +94,7 @@ export function ProjectsPage() {
           </select>
         </label>
         <label>
-          Recipe
+          Workflow
           <select
             value={recipeId}
             onChange={(e) => setRecipeId(e.target.value)}

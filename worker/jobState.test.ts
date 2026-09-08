@@ -6,6 +6,7 @@ import {
   laneOf,
   largeAndThinSpec,
   parsePlanVerdict,
+  runningLane,
 } from "../convex/lib/jobState";
 
 describe("job transitions", () => {
@@ -27,7 +28,7 @@ describe("job transitions", () => {
     expect(canTransition("codeReview", "building")).toBe(true);
   });
 
-  test("a Recipe without plan can leave queued into building", () => {
+  test("a Workflow without plan can leave queued into building", () => {
     expect(canTransition("queued", "building")).toBe(true);
     expect(canTransition("planReview", "pr")).toBe(true);
   });
@@ -50,6 +51,21 @@ describe("job transitions", () => {
     expect(laneOf("verifying")).toBe("building");
     expect(laneOf("openingPr")).toBe("pr");
     expect(laneOf("done")).toBe("pr");
+  });
+});
+
+describe("runningLane", () => {
+  test("key heuristics when lane is unset", () => {
+    expect(runningLane({ key: "plan" })).toBe("planning");
+    expect(runningLane({ key: "implement" })).toBe("building");
+    expect(runningLane({ key: "pr" })).toBe("pr");
+  });
+
+  test("explicit Stage.lane wins", () => {
+    expect(runningLane({ key: "plan", lane: "building" })).toBe("building");
+    expect(runningLane({ key: "reproduce", lane: "planning" })).toBe(
+      "planning",
+    );
   });
 });
 

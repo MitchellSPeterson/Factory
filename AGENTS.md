@@ -1,11 +1,11 @@
 ## Learned User Preferences
 
-- Factory UI should follow a GitHub-like design language.
+- Factory UI should follow dark Notara-like sidebar chrome.
 - Implement on the current branch. Do not create a feature branch unless asked.
 
 ## Learned Workspace Facts
 
-- CONTEXT.md is the domain glossary. Use its terms (View all, Project scope, Needs Grilling, Recipe, Job, Run, Ask) and do not invent synonyms.
+- CONTEXT.md is the domain glossary. Use its terms (View all, Project scope, Needs Grilling, Workflow, Job, Run, Ask, Lane) and do not invent synonyms.
 
 <!-- convex-ai-start -->
 

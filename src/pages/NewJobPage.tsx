@@ -67,7 +67,7 @@ export function NewJobPage() {
           />
         </label>
         <label>
-          Recipe
+          Workflow
           <select
             value={recipeId}
             onChange={(e) => setRecipeId(e.target.value)}

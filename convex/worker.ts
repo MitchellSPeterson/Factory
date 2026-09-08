@@ -15,6 +15,7 @@ import {
   laneOf,
   largeAndThinSpec,
   parsePlanVerdict,
+  runningLane,
 } from "./lib/jobState";
 import {
   isPlanStage,
@@ -84,7 +85,7 @@ export const claim = mutation({
     if (!run || run.status !== "queued") return null;
     const job = await requireJob(ctx, run.jobId);
     const recipe = await ctx.db.get(job.recipeId);
-    if (!recipe) throw new Error("Recipe not found");
+    if (!recipe) throw new Error("Workflow not found");
     const project = await requireProject(ctx, job.projectId);
     const verdict = await latestVerdict(ctx, job._id);
     const stage = await ctx.db
@@ -93,7 +94,7 @@ export const claim = mutation({
         q.eq("recipeId", job.recipeId).eq("key", run.stageKey),
       )
       .unique();
-    if (!stage) throw new Error("Stage not found on recipe");
+    if (!stage) throw new Error("Stage not found on workflow");
     const bindings = await ctx.db
       .query("bindings")
       .withIndex("by_stage", (q) => q.eq("stageId", stage._id))
@@ -115,7 +116,7 @@ export const claim = mutation({
     }
     await ctx.db.patch(run._id, { status: "running", grillAttached });
     if (laneOf(job.status) === "queued") {
-      const nextLane = isPlanStage(run.stageKey) ? "planning" : "building";
+      const nextLane = runningLane(stage);
       assertTransition(job.status, nextLane);
       await ctx.db.patch(job._id, { status: nextLane });
     }
@@ -275,7 +276,7 @@ export const finishStage = mutation({
 
     const stages = await stagesOfRecipe(ctx, job.recipeId);
     const stage = stages.find((s) => s.key === run.stageKey);
-    if (!stage) throw new Error("Stage not found on recipe");
+    if (!stage) throw new Error("Stage not found on workflow");
 
     if (isPlanStage(run.stageKey)) {
       const verdict = await latestVerdict(ctx, job._id);
