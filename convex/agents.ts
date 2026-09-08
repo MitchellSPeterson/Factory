@@ -1,9 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { agentEffort } from "./lib/validators";
+import { agentEffort, agentProvider } from "./lib/validators";
 import schema from "./schema";
 
-const fields = { name: v.string(), description: v.string(), model: v.string(), effort: agentEffort, guidance: v.string(), skillIds: v.array(v.id("skills")) };
+const fields = { provider: v.optional(agentProvider), name: v.string(), description: v.string(), model: v.string(), effort: agentEffort, guidance: v.string(), skillIds: v.array(v.id("skills")) };
 export const list = query({
   args: {}, returns: v.array(schema.tables.agents.validator.extend({ _id: v.id("agents"), _creationTime: v.number() })),
   handler: async (ctx) => await ctx.db.query("agents").withIndex("by_name").take(250),
@@ -18,7 +18,7 @@ export const save = mutation({
     const skillIds = [...new Set(data.skillIds)];
     if (skillIds.length > 50) throw new Error("Choose up to 50 Skills per Agent");
     for (const id of skillIds) if (!await ctx.db.get(id)) throw new Error("Skill not found");
-    const value = { ...data, name, model, skillIds };
+    const value = { ...data, provider: data.provider, name, model, skillIds };
     if (agentId) {
       if (!await ctx.db.get(agentId)) throw new Error("Agent not found");
       await ctx.db.patch(agentId, value);

@@ -11,11 +11,12 @@
     "worker": "bun worker/index.ts",
     "worker:pair": "bun worker/index.ts --pair",
     "build": "tsc -b && vite build",
-    "check": "bun test worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
+    "check": "bun test worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/mcpStdio.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "verify": "bun scripts/verify-factory.ts"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.0",
+    "@openai/codex-sdk": "^0.153.4",
     "convex": "^1.25.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

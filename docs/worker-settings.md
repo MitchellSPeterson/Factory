@@ -32,8 +32,9 @@ Managed Projects are tied to one worker. Other workers cannot claim their Runs. 
 
 **Settings → Worker → Worker environment** supports:
 
-- `FACTORY_PROVIDER`: `cursor` or `openai`.
+- `FACTORY_PROVIDER`: `cursor`, `codex`, or `openai`; used when the Agent has no explicit provider.
 - `CURSOR_API_KEY`.
+- `CODEX_API_KEY`, optional `CODEX_BASE_URL`, and optional `CODEX_PATH` (custom Codex executable).
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL`.
 
 Set other application variables under **Project → Project environment** for managed Projects. Values may be multiline. Names are case-sensitive uppercase environment names. Worker/bootstrap and shell-startup variables are reserved.
@@ -47,3 +48,11 @@ Environment variables are available to code and agents executing the Run. Factor
 ## Tests
 
 `bun run check` includes backend authorization/scope/import lifecycle tests, real local Git clone tests, encryption roundtrips, destination/tampering rejection, frontend/backend/worker type checks, and the existing worker suite. `bun run build` verifies the frontend build.
+
+## Codex Agents
+
+In **Agents → New Agent** (or **Edit Agent**), choose **Provider → Codex**, then a model and effort. Assign that Agent to a Stage in a Workflow. Stage model and effort override the Agent; the Agent provider takes precedence over `FACTORY_PROVIDER`. Duplicating an Agent preserves its provider. Suggested model IDs are examples, not an account availability list; custom IDs are accepted and the Codex service validates model/effort access.
+
+Use a **local** Job: the Codex SDK runs against the Project checkout on its worker machine. Cloud Jobs are currently supported only by Cursor. The worker includes `@openai/codex-sdk` and its CLI runtime after `bun install`. Authenticate Codex on the worker machine, or save `CODEX_API_KEY` in Worker environment (`OPENAI_API_KEY` is a fallback). No Cursor key is required for a Codex Agent. `CODEX_BASE_URL` is independent of the OpenAI-compatible runner’s `OPENAI_BASE_URL`.
+
+Codex receives the selected Skills and Stage Bindings, streams messages and file-change summaries into the Run, and connects to Factory through its MCP tools. Asks wait for answers in Factory (up to seven days per tool call). Artifacts and `finish_stage` use the same backend validation as other providers. A normal model response alone does not complete the Stage. Codex uses workspace-write permissions, network access, and no interactive terminal approval prompts; commands outside those permissions fail. Restart workers without watch mode after upgrading.

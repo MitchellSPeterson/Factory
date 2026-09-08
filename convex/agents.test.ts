@@ -47,3 +47,19 @@ test("Run launch resolves Agent settings, merges Skills once, and respects Stage
   await t.mutation(api.agents.save, { ...profile, agentId: ids.agentId, skillIds: [ids.skillId, ids.skillId] });
   expect((await t.query(api.agents.list, {}))[0].skillIds).toHaveLength(1);
 });
+
+test("Codex provider is saved, claimed with Stage overrides, and can revert to Worker default", async () => {
+  const t = convexTest(schema, modules);
+  const agentId = await t.mutation(api.agents.save, { ...profile, provider: "codex", model: "gpt-5.6-terra", effort: "max" });
+  expect((await t.query(api.agents.list, {}))[0]).toMatchObject({ provider: "codex", effort: "max" });
+  const runId = await t.run(async ctx => {
+    const projectId = await ctx.db.insert("projects", { name: "Codex", kind: "web", localPath: "/tmp/codex", githubRepo: "a/b", defaultRuntime: "local" });
+    const recipeId = await ctx.db.insert("recipes", { name: "Codex", slug: "codex", model: "fallback" });
+    await ctx.db.insert("stages", { recipeId, agentProfileId: agentId, title: "Review", key: "review", order: 0, model: "gpt-6-astra", effort: "low" });
+    const jobId = await ctx.db.insert("jobs", { projectId, recipeId, request: "Review", runtime: "local", forceGrill: false, status: "queued", stageKey: "review" });
+    return await ctx.db.insert("runs", { jobId, stageKey: "review", status: "queued", runtime: "local", grillAttached: false });
+  });
+  expect(await t.mutation(api.worker.claim, { runId })).toMatchObject({ provider: "codex", model: "gpt-6-astra", effort: "low" });
+  await t.mutation(api.agents.save, { ...profile, agentId });
+  expect((await t.query(api.agents.list, {}))[0].provider).toBeUndefined();
+});

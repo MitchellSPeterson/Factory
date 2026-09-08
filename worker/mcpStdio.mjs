@@ -1,3 +1,4 @@
+import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 
 const CONVEX_URL = process.env.CONVEX_URL;
@@ -123,13 +124,18 @@ async function callTool(name, args) {
 
 function write(msg) {
   const json = JSON.stringify(msg);
+  if (process.env.FACTORY_MCP_TRANSPORT === "jsonl") { stdout.write(json + "\n"); return; }
   const buf = Buffer.from(json, "utf8");
   stdout.write(`Content-Length: ${buf.length}\r\n\r\n`);
   stdout.write(buf);
 }
 
 let buffer = Buffer.alloc(0);
-stdin.on("data", (chunk) => {
+if (process.env.FACTORY_MCP_TRANSPORT === "jsonl") {
+  createInterface({ input: stdin }).on("line", line => {
+    try { void handle(JSON.parse(line)); } catch { write({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Invalid JSON" } }); }
+  });
+} else stdin.on("data", (chunk) => {
   buffer = Buffer.concat([buffer, chunk]);
   for (;;) {
     const headerEnd = buffer.indexOf("\r\n\r\n");
@@ -157,7 +163,7 @@ async function handle(msg) {
         jsonrpc: "2.0",
         id,
         result: {
-          protocolVersion: "2024-11-05",
+          protocolVersion: msg.params?.protocolVersion ?? "2024-11-05",
           capabilities: { tools: {} },
           serverInfo: { name: "factory", version: "0.0.1" },
         },

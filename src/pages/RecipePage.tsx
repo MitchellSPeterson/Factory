@@ -299,7 +299,7 @@ function StageEditor({
   onGate,
   onRemoveSkill,
 }: {
-  agents: Array<{ _id: Id<"agents">; name: string; model: string; effort: string; skillIds: Id<"skills">[] }>;
+  agents: Array<{ _id: Id<"agents">; name: string; provider?: string; model: string; effort: string; skillIds: Id<"skills">[] }>;
   recipe: { model: string; effort: string; stages: Array<{ _id: string }> };
   stage: {
     agentProfileId?: Id<"agents">;
@@ -368,7 +368,7 @@ function StageEditor({
         <span className="mono muted">{stage.key}</span>
       </h2>
       <label>Assigned Agent<select value={stage.agentProfileId ?? ""} onChange={e => onUpdate({ agentProfileId: e.target.value ? e.target.value as Id<"agents"> : null })}><option value="">No Agent · Workflow defaults</option>{agents.map(a => <option key={a._id} value={a._id}>{a.name}</option>)}</select></label>
-      <p className="muted">{assigned ? `${assigned.name} provides ${assigned.skillIds.length} Skills, ${assigned.model}, and ${assigned.effort} effort. Stage settings below can override model and effort.` : "Select an Agent or use Workflow defaults."} <Link to="/agents">Manage Agents</Link></p>
+      <p className="muted">{assigned ? `${assigned.name}${assigned.provider ? ` (${assigned.provider})` : ""} provides ${assigned.skillIds.length} Skills, ${assigned.model}, and ${assigned.effort} effort. Stage settings below can override model and effort.` : "Select an Agent or use Workflow defaults."} <Link to="/agents">Manage Agents</Link></p>
       <div className="recipe-agent">
         <label>
           Title

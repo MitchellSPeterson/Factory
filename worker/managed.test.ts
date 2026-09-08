@@ -68,7 +68,8 @@ test("failed clones clean only their temporary directory and reject symlink dest
   await expect(cloneRepository(projects, "../escape", "owner/repo", "secret")).rejects.toThrow("identifier");
 });
 test("Project values cannot replace worker bootstrapping or shell startup configuration", () => {
-  for (const name of ["BASH_ENV", "NODE_OPTIONS", "GIT_ASKPASS", "HOME", "CONVEX_URL", "FACTORY_PROVIDER"]) expect(() => validateVariableName(name, false)).toThrow();
+  for (const name of ["BASH_ENV", "NODE_OPTIONS", "GIT_ASKPASS", "HOME", "CONVEX_URL", "FACTORY_PROVIDER", "CODEX_HOME", "CODEX_PATH", "CODEX_API_KEY"]) expect(() => validateVariableName(name, false)).toThrow();
   expect(() => validateVariableName("DATABASE_URL", false)).not.toThrow();
   expect(() => validateVariableName("OPENAI_API_KEY", true)).not.toThrow();
+  expect(() => validateVariableName("CODEX_API_KEY", true)).not.toThrow();
 });

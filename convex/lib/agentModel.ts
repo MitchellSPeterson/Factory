@@ -11,7 +11,7 @@ export const AGENT_MODELS = [
   "gpt-5.6-sol-medium",
 ] as const;
 
-export const AGENT_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
+export const AGENT_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 
 export function recipeModel(model?: string) {
   return model && model.trim() !== "" ? model : DEFAULT_AGENT_MODEL;
@@ -26,7 +26,7 @@ export function recipeEffort(effort?: string) {
 export function toModelSelection(model: string, effort: string) {
   if (model === "auto-smart") {
     const value =
-      effort === "low" ? "speed" : effort === "high" || effort === "xhigh"
+      effort === "low" ? "speed" : ["high", "xhigh", "max", "ultra"].includes(effort)
         ? "quality"
         : "balanced";
     return { id: model, params: [{ id: "optimize_for", value }] };
@@ -34,4 +34,18 @@ export function toModelSelection(model: string, effort: string) {
   if (effort === "medium") return { id: model };
   if (effort === "low") return { id: model, params: [{ id: "fast", value: "true" }] };
   return { id: model, params: [{ id: "reasoning_effort", value: effort }] };
+}
+
+export const CODEX_MODELS = ["gpt-5.6-terra", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"] as const;
+export const AGENT_PROVIDERS = ["cursor", "codex", "openai"] as const;
+export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
+export function providerLabel(provider?: AgentProvider) {
+  return provider === "codex" ? "Codex" : provider === "cursor" ? "Cursor" : provider === "openai" ? "OpenAI-compatible API" : "Worker default";
+}
+
+/** Older Agents and unassigned Stages retain the worker's configured provider. */
+export function resolveProvider(provider?: AgentProvider, workerDefault?: string): AgentProvider {
+  const resolved = provider ?? workerDefault ?? "cursor";
+  if (!AGENT_PROVIDERS.includes(resolved as AgentProvider)) throw new Error("Unknown Factory provider");
+  return resolved as AgentProvider;
 }

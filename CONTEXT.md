@@ -13,7 +13,7 @@ An ordered list of Stages used to take a Job from request to a pull request. You
 _Avoid_: Recipe, pipeline, playbook, template
 
 **Agent**:
-A reusable specialist with a name, description, model, effort, working guidance, and selected Skills. An Agent can be assigned to multiple Stages across Workflows. Stage model and effort override Agent settings; without an Agent, Workflow defaults apply. Agent Skills are included on every Run alongside Stage Bindings. Edits apply when a future Run is claimed.
+A reusable specialist with a name, description, provider, model, effort, working guidance, and selected Skills. An Agent can be assigned to multiple Stages across Workflows. An Agent can use Cursor, Codex, or an OpenAI-compatible API; Agents without a provider use the Worker default. Codex Runs use the Project’s local worker. Stage model and effort override Agent settings; without an Agent, Workflow defaults apply. Agent Skills are included on every Run alongside Stage Bindings. Edits apply when a future Run is claimed.
 
 **Stage**:
 A named phase of a Workflow. Each Stage has a key, title, Bindings, optional model and effort, an optional Lane for the board while the Stage runs, and an optional halt that waits for a human before the next Stage. Keys `plan`, `implement`, `verify`, and `pr` keep their engine behavior; other keys run then continue.

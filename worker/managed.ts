@@ -80,6 +80,6 @@ export async function environmentFor(client: ConvexHttpClient, identity: WorkerI
     if (value.includes("\0")) throw new Error("An environment variable contains an invalid NUL character.");
     (row.scope === "server" ? server : project)[row.name] = value;
   }
-  if (server.FACTORY_PROVIDER && !["openai", "cursor"].includes(server.FACTORY_PROVIDER)) throw new Error("FACTORY_PROVIDER must be openai or cursor.");
+  if (server.FACTORY_PROVIDER && !["openai", "cursor", "codex"].includes(server.FACTORY_PROVIDER)) throw new Error("FACTORY_PROVIDER must be openai, cursor, or codex.");
   return { server, project };
 }
