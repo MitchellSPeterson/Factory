@@ -1,16 +1,34 @@
 import { Agent } from "@cursor/sdk";
 import { ConvexHttpClient } from "convex/browser";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { toModelSelection } from "../convex/lib/agentModel";
+import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
+import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { factoryTools } from "./tools";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// ponytail: Bun loads .env not .env.local; mirror verify-factory
+function loadEnvLocal() {
+  try {
+    const text = readFileSync(path.join(root, ".env.local"), "utf8");
+    for (const line of text.split("\n")) {
+      const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+      if (!match?.[1] || process.env[match[1]] !== undefined) continue;
+      process.env[match[1]] = match[2] ?? "";
+    }
+  } catch {
+    // no .env.local
+  }
+}
+loadEnvLocal();
 
 type Launch = {
   runId: Id<"runs">;
@@ -36,6 +54,12 @@ function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+function convexUrl(): string {
+  const url = process.env.CONVEX_URL ?? process.env.VITE_CONVEX_URL;
+  if (!url) throw new Error("CONVEX_URL missing. Run convex dev first.");
+  return url;
 }
 
 async function seed(client: ConvexHttpClient) {
@@ -101,6 +125,57 @@ async function mockRun(client: ConvexHttpClient, launch: Launch) {
   });
 }
 
+async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
+  if (launch.runtime === "cloud") {
+    throw new Error("FACTORY_PROVIDER=openai only supports runtime local");
+  }
+  const baseUrl = requireEnv("OPENAI_BASE_URL");
+  const model =
+    launch.model.trim() !== ""
+      ? launch.model
+      : process.env.OPENAI_MODEL?.trim() || "";
+  if (model === "") {
+    throw new Error("model is empty; set Recipe/Stage model or OPENAI_MODEL");
+  }
+
+  await client.mutation(api.worker.bindAgent, {
+    runId: launch.runId,
+    agentId: `openai-${launch.runId}`,
+  });
+
+  const tools = {
+    ...factoryTools(client, launch.runId),
+    ...codingTools(launch.project.localPath),
+  };
+  const prompt = assemblePrompt({
+    stageKey: launch.stageKey,
+    request: launch.request,
+    projectName: launch.project.name,
+    projectKind: launch.project.kind,
+    acceptedSpec: launch.acceptedSpec,
+    skills: launch.skills,
+  });
+
+  const log = createLiveLog((text) =>
+    client.mutation(api.worker.appendMessage, {
+      runId: launch.runId,
+      text,
+    }),
+  );
+  try {
+    await runOpenAIAgent({
+      baseUrl,
+      apiKey: process.env.OPENAI_API_KEY,
+      model,
+      prompt,
+      tools,
+      onText: (text) => log.push(text),
+    });
+  } finally {
+    await log.close();
+  }
+}
+
 async function runCursor(client: ConvexHttpClient, launch: Launch) {
   const apiKey = requireEnv("CURSOR_API_KEY");
   const tools = factoryTools(client, launch.runId);
@@ -121,7 +196,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
       command: "node",
       args: [path.join(root, "worker/mcpStdio.mjs")],
       env: {
-        CONVEX_URL: requireEnv("CONVEX_URL"),
+        CONVEX_URL: convexUrl(),
         FACTORY_RUN_ID: launch.runId,
       },
     },
@@ -207,13 +282,20 @@ async function runCursor(client: ConvexHttpClient, launch: Launch) {
 
 async function tick(client: ConvexHttpClient) {
   const queued = await client.query(api.worker.listQueued, {});
+  const provider = process.env.FACTORY_PROVIDER ?? "cursor";
   for (const runId of queued) {
     const launch = await client.mutation(api.worker.claim, { runId });
     if (!launch) continue;
-    const mock = process.env.FACTORY_MOCK === "1" || !process.env.CURSOR_API_KEY;
     try {
-      if (mock) await mockRun(client, launch);
-      else await runCursor(client, launch);
+      if (process.env.FACTORY_MOCK === "1") {
+        await mockRun(client, launch);
+      } else if (provider === "openai") {
+        await runOpenAI(client, launch);
+      } else if (!process.env.CURSOR_API_KEY) {
+        await mockRun(client, launch);
+      } else {
+        await runCursor(client, launch);
+      }
     } catch (err) {
       await client.mutation(api.worker.failRun, {
         runId: launch.runId,
@@ -224,8 +306,7 @@ async function tick(client: ConvexHttpClient) {
 }
 
 async function main() {
-  const url = requireEnv("CONVEX_URL");
-  const client = new ConvexHttpClient(url);
+  const client = new ConvexHttpClient(convexUrl());
   await seed(client);
   console.log("factory worker seeded, polling");
   for (;;) {

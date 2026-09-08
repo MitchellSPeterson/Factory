@@ -1,6 +1,7 @@
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
+import type { AgentTool } from "./codingTools";
 
 export type Question = {
   id: string;
@@ -9,7 +10,10 @@ export type Question = {
   recommend: string;
 };
 
-export function factoryTools(client: ConvexHttpClient, runId: Id<"runs">) {
+export function factoryTools(
+  client: ConvexHttpClient,
+  runId: Id<"runs">,
+): Record<string, AgentTool> {
   return {
     ask_human: {
       description:

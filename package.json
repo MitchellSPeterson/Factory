@@ -10,7 +10,7 @@
     "dev:worker": "bun --watch worker/index.ts",
     "worker": "bun worker/index.ts",
     "build": "tsc -b && vite build",
-    "check": "bun test worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
+    "check": "bun test worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
     "verify": "bun scripts/verify-factory.ts"
   },
   "dependencies": {
