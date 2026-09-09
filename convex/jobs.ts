@@ -37,6 +37,7 @@ import {
   runtime,
   stageKey,
   tokenUsage,
+  contextBreakdown,
 } from "./lib/validators";
 import { v } from "convex/values";
 import { isZeroUsage, subUsage, ZERO_USAGE } from "./lib/tokenUsage";
@@ -57,6 +58,7 @@ const jobDoc = v.object({
   milestone: v.optional(v.string()),
   tags: v.optional(v.array(v.string())),
   usage: v.optional(tokenUsage),
+  durationMs: v.optional(v.number()),
 });
 
 const runDoc = v.object({
@@ -72,6 +74,10 @@ const runDoc = v.object({
   error: v.optional(v.string()),
   endedByCommandId: v.optional(v.id("jobCommands")),
   usage: v.optional(tokenUsage),
+  contextBreakdown: v.optional(contextBreakdown),
+  startedAt: v.optional(v.number()),
+  endedAt: v.optional(v.number()),
+  durationMs: v.optional(v.number()),
 });
 
 const commandDoc = v.object({
@@ -152,10 +158,21 @@ export const list = query({
       job: jobDoc,
       projectName: v.string(),
       recipeName: v.string(),
+      liveStartedAt: v.optional(v.number()),
     }),
   ),
   handler: async (ctx) => {
     const jobs = await ctx.db.query("jobs").order("desc").collect();
+    const openRuns = [
+      ...(await ctx.db.query("runs").withIndex("by_status", (q) => q.eq("status", "running")).collect()),
+      ...(await ctx.db.query("runs").withIndex("by_status", (q) => q.eq("status", "awaitingAsk")).collect()),
+    ];
+    const liveByJob = new Map<string, number>();
+    for (const run of openRuns) {
+      if (run.startedAt === undefined || run.endedAt !== undefined) continue;
+      const prev = liveByJob.get(run.jobId);
+      if (prev === undefined || run.startedAt < prev) liveByJob.set(run.jobId, run.startedAt);
+    }
     const rows = [];
     for (const job of jobs) {
       const project = await ctx.db.get(job.projectId);
@@ -164,6 +181,7 @@ export const list = query({
         job,
         projectName: project?.name ?? "missing",
         recipeName: recipe?.name ?? "missing",
+        liveStartedAt: liveByJob.get(job._id),
       });
     }
     return rows;

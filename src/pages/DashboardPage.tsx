@@ -2,7 +2,7 @@ import { useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
-import { formatTokens } from "../formatTokens";
+import { formatTokens, formatUsageIO } from "../formatTokens";
 import { useProjectScope } from "../projectScope";
 
 export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
@@ -23,8 +23,15 @@ export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
   }).length;
   const runs = new Set(scopedJobs.map((row) => row.job._id)).size;
   const workflows = new Set(scopedJobs.map((row) => row.job.recipeId)).size;
-  const totalTokens = currentProject?.usage?.totalTokens
-    ?? scopedJobs.reduce((sum, row) => sum + (row.job.usage?.totalTokens ?? 0), 0);
+  const usage = currentProject?.usage ?? scopedJobs.reduce(
+    (acc, row) => ({
+      inputTokens: acc.inputTokens + (row.job.usage?.inputTokens ?? 0),
+      outputTokens: acc.outputTokens + (row.job.usage?.outputTokens ?? 0),
+      totalTokens: acc.totalTokens + (row.job.usage?.totalTokens ?? 0),
+    }),
+    { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+  );
+  const usageLabel = formatUsageIO(usage);
 
   return (
     <>
@@ -65,8 +72,11 @@ export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
           <h2>Total tokens</h2>
           {jobs === undefined || projects === undefined ? (
             <strong>—</strong>
-          ) : totalTokens > 0 ? (
-            <strong>{formatTokens(totalTokens)}</strong>
+          ) : usageLabel ? (
+            <>
+              <strong>{formatTokens(usage.totalTokens || usage.inputTokens + usage.outputTokens)}</strong>
+              <p className="usage-io">{usageLabel}</p>
+            </>
           ) : (
             <strong className="metric-empty">None yet</strong>
           )}

@@ -17,6 +17,7 @@ import {
   stageKey,
   stageLane,
   tokenUsage,
+  contextBreakdown,
 } from "./lib/validators";
 import { v } from "convex/values";
 
@@ -110,6 +111,7 @@ export default defineSchema({
     milestone: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     usage: v.optional(tokenUsage),
+    durationMs: v.optional(v.number()),
   })
     .index("by_status", ["status"])
     .index("by_project", ["projectId"])
@@ -135,6 +137,10 @@ export default defineSchema({
     error: v.optional(v.string()),
     endedByCommandId: v.optional(v.id("jobCommands")),
     usage: v.optional(tokenUsage),
+    contextBreakdown: v.optional(contextBreakdown),
+    startedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
   })
     .index("by_job", ["jobId"])
     .index("by_status", ["status"]),

@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { canHumanFinish, laneOf, type Lane } from "./jobState";
+import { markRunEnded } from "./runTiming";
 
 export type JobCommand =
   | { kind: "stopJob" }
@@ -313,7 +314,7 @@ export async function applyJobWrites(
         }
         break;
       }
-      case "endRun":
+      case "endRun": {
         await ctx.db.patch(write.runId, {
           status: "failed",
           error: write.error,
@@ -321,10 +322,16 @@ export async function applyJobWrites(
             ? { endedByCommandId: write.endedByCommandId }
             : {}),
         });
+        const ended = await ctx.db.get(write.runId);
+        if (ended) await markRunEnded(ctx, ended);
         break;
-      case "finishRun":
+      }
+      case "finishRun": {
         await ctx.db.patch(write.runId, { status: "finished" });
+        const finished = await ctx.db.get(write.runId);
+        if (finished) await markRunEnded(ctx, finished);
         break;
+      }
       case "cancelAsk":
         await ctx.db.patch(write.askId, { status: "cancelled" });
         break;

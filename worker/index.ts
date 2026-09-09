@@ -10,7 +10,7 @@ import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
 import { runOpenAIAgent } from "./openaiAgent";
-import { assemblePrompt } from "./prompt";
+import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { factoryTools } from "./tools";
@@ -76,6 +76,25 @@ async function reportUsage(
 ) {
   if (!usage) return;
   await client.mutation(api.worker.recordUsage, { runId, usage });
+}
+
+async function reportLaunchContext(
+  client: ConvexHttpClient,
+  runId: Id<"runs">,
+  launch: Pick<Launch, "stageKey" | "request" | "acceptedSpec" | "skills" | "project">,
+) {
+  const { segments } = buildLaunchPrompt({
+    stageKey: launch.stageKey,
+    request: launch.request,
+    projectName: launch.project.name,
+    projectKind: launch.project.kind,
+    acceptedSpec: launch.acceptedSpec,
+    skills: launch.skills,
+  });
+  await client.mutation(api.worker.recordContext, {
+    runId,
+    breakdown: { estimated: true, segments },
+  });
 }
 
 async function seed(client: ConvexHttpClient) {
@@ -171,6 +190,7 @@ async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
     acceptedSpec: launch.acceptedSpec,
     skills: launch.skills,
   });
+  await reportLaunchContext(client, launch.runId, launch);
 
   const log = createLiveLog((text) =>
     client.mutation(api.worker.appendMessage, {
@@ -212,6 +232,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: R
     acceptedSpec: launch.acceptedSpec,
     skills: launch.skills,
   });
+  await reportLaunchContext(client, launch.runId, launch);
 
   const model = toModelSelection(launch.model, launch.effort);
 
@@ -316,6 +337,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: R
 async function runCodex(client: ConvexHttpClient, launch: Launch) {
   const log = createLiveLog(text => client.mutation(api.worker.appendMessage, { runId: launch.runId, text }));
   try {
+    await reportLaunchContext(client, launch.runId, launch);
     await runCodexAgent({
       ...launch,
       root,

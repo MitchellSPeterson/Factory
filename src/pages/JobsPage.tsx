@@ -4,10 +4,15 @@ import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
-import { formatTokens } from "../formatTokens";
+import { formatUsageIO } from "../formatTokens";
+import { formatDuration, jobDurationMs } from "../formatDuration";
 import { useProjectScope } from "../projectScope";
-
-const ATTENTION_LANES = new Set(["needsDetail", "planReview", "codeReview", "failed"]);
+import {
+  ATTENTION_LANES,
+  matchesProgress,
+  PROGRESS_OPTIONS,
+  type ProgressFilter,
+} from "../jobsProgress";
 
 function stageTitle(stageKey: string) {
   return stageKey.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ");
@@ -27,6 +32,7 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
   const migrate = useMutation(api.jobs.migrateLanes);
   const [search, setSearch] = useState("");
   const [workflowId, setWorkflowId] = useState("");
+  const [progress, setProgress] = useState<ProgressFilter>("active");
   const [laneId, setLaneId] = useState("");
   const { projectId } = useProjectScope();
 
@@ -40,12 +46,17 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
     ) ?? [];
   const query = search.trim().toLowerCase();
   const visible = scoped.filter((row) => {
-    const matchesLane = laneId === "" || laneOf(row.job.status) === laneId;
+    const lane = laneOf(row.job.status);
+    const matchesProgressFilter = matchesProgress(lane, progress);
+    const matchesLane = laneId === "" || lane === laneId;
     const matchesSearch = query === "" || [row.job.request, row.projectName, row.recipeName, row.job.stageKey, row.job.runtime, row.job.error, row.job.githubIssueUrl, row.job.milestone, ...(row.job.tags ?? [])]
       .some((value) => value?.toLowerCase().includes(query));
-    return matchesLane && matchesSearch;
+    return matchesProgressFilter && matchesLane && matchesSearch;
   });
   const attentionCount = visible.filter(({ job }) => ATTENTION_LANES.has(laneOf(job.status))).length;
+  const hiddenDone = progress === "active"
+    ? scoped.filter((row) => laneOf(row.job.status) === "pr").length
+    : 0;
 
   return (
     <>
@@ -55,7 +66,7 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
           <p className="muted">
             {jobs === undefined
               ? "View all Jobs across Projects."
-              : `${visible.length} jobs · ${attentionCount} need attention · ${projectId === "" ? "View all" : "Project scope"}`}
+              : `${visible.length} jobs · ${attentionCount} need attention · ${projectId === "" ? "View all" : "Project scope"}${hiddenDone > 0 ? ` · ${hiddenDone} Done hidden` : ""}`}
           </p>
         </div>
         <button type="button" onClick={onNewJob}>New job</button>
@@ -80,6 +91,17 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
           </select>
         </label>
         <label>
+          Progress
+          <select
+            value={progress}
+            onChange={(e) => setProgress(e.target.value as ProgressFilter)}
+          >
+            {PROGRESS_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>{option.title}</option>
+            ))}
+          </select>
+        </label>
+        <label>
           Lane
           <select value={laneId} onChange={(e) => setLaneId(e.target.value)}>
             <option value="">All</option>
@@ -94,9 +116,15 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
         <div className="jobs-empty">No Jobs match the current search and filters.</div>
       ) : (
         <div className="jobs-grid">
-          {visible.map(({ job, projectName, recipeName }) => {
+          {visible.map(({ job, projectName, recipeName, liveStartedAt }) => {
             const lane = laneOf(job.status);
             const needsAttention = ATTENTION_LANES.has(lane);
+            const duration = formatDuration(
+              jobDurationMs(
+                job,
+                liveStartedAt !== undefined ? [{ startedAt: liveStartedAt }] : [],
+              ),
+            );
             return (
               <Link className="job-card" key={job._id} to={`/jobs/${job._id}`}>
                 <div className="job-card-topline">
@@ -115,12 +143,12 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
                     <dd>{recipeName}</dd>
                   </div>
                   <div>
-                    <dt>Token usage</dt>
-                    <dd>{job.usage?.totalTokens ? formatTokens(job.usage.totalTokens) : <span className="muted">—</span>}</dd>
+                    <dt>Duration</dt>
+                    <dd>{duration ?? <span className="muted">—</span>}</dd>
                   </div>
                   <div>
-                    <dt>Runtime</dt>
-                    <dd>{job.runtime}</dd>
+                    <dt>Token usage</dt>
+                    <dd>{formatUsageIO(job.usage) ?? <span className="muted">—</span>}</dd>
                   </div>
                   <div>
                     <dt>Created</dt>

@@ -16,6 +16,7 @@ import type * as lib_docs from "../lib/docs.js";
 import type * as lib_jobControl from "../lib/jobControl.js";
 import type * as lib_jobState from "../lib/jobState.js";
 import type * as lib_recipeGraph from "../lib/recipeGraph.js";
+import type * as lib_runTiming from "../lib/runTiming.js";
 import type * as lib_servers from "../lib/servers.js";
 import type * as lib_tokenUsage from "../lib/tokenUsage.js";
 import type * as lib_validators from "../lib/validators.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   "lib/jobControl": typeof lib_jobControl;
   "lib/jobState": typeof lib_jobState;
   "lib/recipeGraph": typeof lib_recipeGraph;
+  "lib/runTiming": typeof lib_runTiming;
   "lib/servers": typeof lib_servers;
   "lib/tokenUsage": typeof lib_tokenUsage;
   "lib/validators": typeof lib_validators;

@@ -17,6 +17,7 @@ import {
   toAggregate,
   type WorkerResult,
 } from "./lib/jobControl";
+import { markRunEnded, markRunStarted } from "./lib/runTiming";
 import {
   assertTransition,
   laneOf,
@@ -45,6 +46,7 @@ import {
   runtime,
   stageKey,
   tokenUsage,
+  contextBreakdown,
 } from "./lib/validators";
 import { v } from "convex/values";
 import { requireProjectServer } from "./lib/servers";
@@ -154,6 +156,7 @@ export const claim = mutation({
         skills.push({ slug: skill.slug, title: skill.title, body: skill.body, gate: undefined });
       }
     }
+    await markRunStarted(ctx, run);
     await ctx.db.patch(run._id, { status: "running", grillAttached });
     if (laneOf(job.status) === "queued") {
       const nextLane = runningLane(stage);
@@ -248,6 +251,20 @@ export const recordUsage = mutation({
     const project = await requireProject(ctx, job.projectId);
     const projectNext = addUsage(project.usage ?? ZERO_USAGE, delta);
     await ctx.db.patch(project._id, { usage: projectNext });
+    return null;
+  },
+});
+
+/** Store Factory prompt composition for the Run (estimated segments). */
+export const recordContext = mutation({
+  args: {
+    runId: v.id("runs"),
+    breakdown: contextBreakdown,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireRun(ctx, args.runId);
+    await ctx.db.patch(args.runId, { contextBreakdown: args.breakdown });
     return null;
   },
 });
@@ -383,11 +400,13 @@ export const finishStage = mutation({
       }
       assertTransition(job.status, "planReview");
       await ctx.db.patch(run._id, { status: "finished" });
+      await markRunEnded(ctx, run);
       await ctx.db.patch(job._id, { status: "planReview", stageKey: run.stageKey });
       return null;
     }
 
     await ctx.db.patch(run._id, { status: "finished" });
+    await markRunEnded(ctx, run);
     if (stageHalt(stage)) {
       assertTransition(job.status, "codeReview");
       await ctx.db.patch(job._id, { status: "codeReview", stageKey: run.stageKey });

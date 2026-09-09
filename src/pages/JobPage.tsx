@@ -6,7 +6,9 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
-import { formatTokens } from "../formatTokens";
+import { formatUsageIO } from "../formatTokens";
+import { formatDuration, jobDurationMs, runDurationMs } from "../formatDuration";
+import { ContextViewer } from "../ContextViewer";
 
 // ponytail: odd fence count mid-stream would eat the rest of the log
 function renderableLog(text: string): string {
@@ -84,6 +86,8 @@ export function JobPage() {
   } = view;
   const spec = artifacts.filter((a) => a.kind === "spec").at(-1);
   const verdict = artifacts.filter((a) => a.kind === "plan_verdict").at(-1);
+  const jobTime = formatDuration(jobDurationMs(job, runs));
+  const jobUsage = formatUsageIO(job.usage);
 
   async function onAnswer(e: FormEvent) {
     e.preventDefault();
@@ -171,7 +175,8 @@ export function JobPage() {
       {jobActionError ? <p role="alert" className="error">{jobActionError}</p> : null}
       <p className="muted">
         <Link to={`/workflows/${job.recipeId}`}>{recipeName}</Link>
-        {job.usage?.totalTokens ? ` · ${formatTokens(job.usage.totalTokens)} tokens` : null}
+        {jobTime ? ` · ${jobTime}` : null}
+        {jobUsage ? ` · ${jobUsage}` : null}
       </p>
       <p>{job.request}</p>
       {job.githubIssueUrl || job.milestone || (job.tags?.length ?? 0) > 0 ? (
@@ -243,11 +248,20 @@ export function JobPage() {
                       <div className="stage-meta">
                         <span>{stageRuns.length} {stageRuns.length === 1 ? "Run" : "Runs"}</span>
                         {(() => {
-                          const stageTokens = stageRuns.reduce(
-                            (sum, run) => sum + (run.usage?.totalTokens ?? 0),
-                            0,
+                          const stageMs = stageRuns.reduce((sum, run) => sum + (runDurationMs(run) ?? 0), 0);
+                          const label = formatDuration(stageMs > 0 ? stageMs : null);
+                          return label ? <span>{label}</span> : null;
+                        })()}
+                        {(() => {
+                          const stageUsage = stageRuns.reduce(
+                            (acc, run) => ({
+                              inputTokens: acc.inputTokens + (run.usage?.inputTokens ?? 0),
+                              outputTokens: acc.outputTokens + (run.usage?.outputTokens ?? 0),
+                            }),
+                            { inputTokens: 0, outputTokens: 0 },
                           );
-                          return stageTokens > 0 ? <span>{formatTokens(stageTokens)} tokens</span> : null;
+                          const label = formatUsageIO(stageUsage);
+                          return label ? <span>{label}</span> : null;
                         })()}
                         {stage.halt ? <span>Human halt after this Stage</span> : null}
                         {stage.lane ? <span>{stage.lane} Lane</span> : null}
@@ -315,12 +329,24 @@ export function JobPage() {
                                     <strong>Run</strong>
                                     <Badge status={run.status} />
                                     {run.agentId ? <span className="mono muted">{run.agentId}</span> : null}
-                                    {run.usage?.totalTokens ? (
-                                      <span className="muted">{formatTokens(run.usage.totalTokens)} tokens</span>
+                                    {formatDuration(runDurationMs(run)) ? (
+                                      <span className="muted">{formatDuration(runDurationMs(run))}</span>
+                                    ) : null}
+                                    {formatUsageIO(run.usage) ? (
+                                      <span className="muted">{formatUsageIO(run.usage)}</span>
                                     ) : null}
                                   </div>
                                   <span className="muted">{new Date(run._creationTime).toLocaleString()}</span>
                                 </div>
+                                {run.contextBreakdown || run.usage ? (
+                                  <details className="stage-context">
+                                    <summary>Context</summary>
+                                    <ContextViewer
+                                      breakdown={run.contextBreakdown}
+                                      usage={run.usage}
+                                    />
+                                  </details>
+                                ) : null}
                                 {run.error ? <p className="job-error">{run.error}</p> : null}
                                 {runAsks.map((ask) => (
                                   <details className="stage-artifact" key={ask._id} open>

@@ -255,3 +255,79 @@ test("recordUsage rolls Run totals into Job and Project", async () => {
   const after = await t.query(api.projects.get, { projectId: view!.job.projectId });
   expect(after?.usage?.totalTokens).toBe(0);
 });
+
+test("recordContext stores Factory prompt composition on the Run", async () => {
+  const { t, jobId, runId } = await setupJob();
+  await t.mutation(api.worker.recordContext, {
+    runId,
+    breakdown: {
+      estimated: true,
+      segments: [
+        { key: "instructions", label: "Instructions", tokens: 40 },
+        { key: "request", label: "Request", tokens: 12 },
+      ],
+    },
+  });
+  const view = await t.query(api.jobs.get, { jobId });
+  expect(view?.runs[0]?.contextBreakdown?.segments.map((s) => s.key)).toEqual([
+    "instructions",
+    "request",
+  ]);
+});
+
+test("Run timing rolls wall-clock duration into the Job", async () => {
+  const t = convexTest(schema, modules);
+  const ids = await t.run(async (ctx) => {
+    const projectId = await ctx.db.insert("projects", {
+      name: "Timed",
+      kind: "web",
+      localPath: "/tmp/timed",
+      githubRepo: "owner/timed",
+      defaultRuntime: "local",
+    });
+    const recipeId = await ctx.db.insert("recipes", {
+      name: "Timed",
+      slug: "timed",
+      model: "test-model",
+    });
+    await ctx.db.insert("stages", {
+      recipeId,
+      title: "Build",
+      key: "build",
+      order: 0,
+      halt: true,
+    });
+    const jobId = await ctx.db.insert("jobs", {
+      projectId,
+      recipeId,
+      request: "Time me",
+      runtime: "local",
+      forceGrill: false,
+      status: "queued",
+      stageKey: "build",
+    });
+    const runId = await ctx.db.insert("runs", {
+      jobId,
+      stageKey: "build",
+      status: "queued",
+      runtime: "local",
+      grillAttached: false,
+    });
+    return { jobId, runId };
+  });
+
+  await t.mutation(api.worker.claim, { runId: ids.runId });
+  const afterClaim = await t.query(api.jobs.get, { jobId: ids.jobId });
+  expect(afterClaim?.runs[0]?.startedAt).toBeTypeOf("number");
+
+  await t.run(async (ctx) => {
+    const run = await ctx.db.get(ids.runId);
+    if (!run?.startedAt) throw new Error("missing startedAt");
+    await ctx.db.patch(ids.runId, { startedAt: run.startedAt - 5_000 });
+  });
+
+  await t.mutation(api.worker.finishStage, { runId: ids.runId, status: "finished" });
+  const after = await t.query(api.jobs.get, { jobId: ids.jobId });
+  expect(after?.runs[0]?.durationMs).toBeGreaterThanOrEqual(5_000);
+  expect(after?.job.durationMs).toBe(after?.runs[0]?.durationMs);
+});

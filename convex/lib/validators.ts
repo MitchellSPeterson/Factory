@@ -158,3 +158,15 @@ export const tokenUsage = v.object({
   reasoningTokens: v.number(),
   totalTokens: v.number(),
 });
+
+/** Estimated Factory prompt composition for a Run (not the full model window). */
+export const contextSegment = v.object({
+  key: v.string(),
+  label: v.string(),
+  tokens: v.number(),
+});
+
+export const contextBreakdown = v.object({
+  estimated: v.boolean(),
+  segments: v.array(contextSegment),
+});
