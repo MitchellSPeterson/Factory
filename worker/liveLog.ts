@@ -1,5 +1,5 @@
-// ponytail: 120ms batch is the ceiling; drop toward 0 if Convex write load is fine
-const FLUSH_MS = 120;
+// ponytail: 50ms batch is the ceiling; drop toward 0 if Convex write load is fine
+const FLUSH_MS = 50;
 
 export function createLiveLog(write: (text: string) => Promise<unknown>) {
   let buf = "";

@@ -1,6 +1,8 @@
 import { Codex, type CodexOptions, type ThreadOptions, type ThreadEvent } from "@openai/codex-sdk";
 import path from "node:path";
 import type { AGENT_EFFORTS } from "../convex/lib/agentModel";
+import { addUsage, ZERO_USAGE } from "../convex/lib/tokenUsage";
+import { fromCodexUsage } from "./usage";
 
 type CodexClient = { startThread(options: ThreadOptions): { runStreamed(prompt: string): Promise<{ events: AsyncIterable<ThreadEvent> }> } };
 export type CodexAgentOptions = {
@@ -15,6 +17,7 @@ export type CodexAgentOptions = {
   env?: Record<string, string | undefined>;
   onThreadId: (id: string) => Promise<unknown>;
   onText: (text: string) => void;
+  onUsage?: (usage: import("./usage").TokenUsage) => void | Promise<void>;
   getStatus: () => Promise<string | null>;
   createClient?: (options: CodexOptions) => CodexClient;
 };
@@ -54,12 +57,17 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
   const { events } = await thread.runStreamed(opts.prompt);
   const seenText = new Map<string, string>();
   let completed = false;
+  let usage = ZERO_USAGE;
   for await (const event of events) {
     if (event.type === "thread.started") await opts.onThreadId(event.thread_id);
     if (event.type === "error" || event.type === "turn.failed") {
       throw new Error("Codex Run failed. Check Codex authentication, model access, and worker configuration.");
     }
-    if (event.type === "turn.completed") completed = true;
+    if (event.type === "turn.completed") {
+      completed = true;
+      const turn = fromCodexUsage(event.usage);
+      if (turn) usage = addUsage(usage, turn);
+    }
     if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
       const item = event.item;
       if (item.type === "agent_message" || item.type === "reasoning") {
@@ -75,6 +83,7 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
       }
     }
   }
+  await opts.onUsage?.(usage);
   const status = await opts.getStatus();
   if (status === "failed") return;
   if (!completed || status !== "finished") throw new Error("Codex stopped without completing the Stage through finish_stage.");

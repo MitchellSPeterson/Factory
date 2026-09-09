@@ -16,6 +16,7 @@ import {
   runtime,
   stageKey,
   stageLane,
+  tokenUsage,
 } from "./lib/validators";
 import { v } from "convex/values";
 
@@ -46,6 +47,7 @@ export default defineSchema({
     githubRepo: v.string(),
     defaultRuntime: runtime,
     recipeId: v.optional(v.id("recipes")),
+    usage: v.optional(tokenUsage),
   }).index("by_name", ["name"]).index("by_serverId_and_githubRepo", ["serverId", "githubRepo"]),
 
   recipes: defineTable({
@@ -107,6 +109,7 @@ export default defineSchema({
     githubIssueUrl: v.optional(v.string()),
     milestone: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
+    usage: v.optional(tokenUsage),
   })
     .index("by_status", ["status"])
     .index("by_project", ["projectId"])
@@ -131,6 +134,7 @@ export default defineSchema({
     cursorRunId: v.optional(v.string()),
     error: v.optional(v.string()),
     endedByCommandId: v.optional(v.id("jobCommands")),
+    usage: v.optional(tokenUsage),
   })
     .index("by_job", ["jobId"])
     .index("by_status", ["status"]),

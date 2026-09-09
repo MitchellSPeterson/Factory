@@ -2,6 +2,7 @@ import { useQuery } from "convex/react";
 import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
+import { formatTokens } from "../formatTokens";
 import { useProjectScope } from "../projectScope";
 
 export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
@@ -22,6 +23,8 @@ export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
   }).length;
   const runs = new Set(scopedJobs.map((row) => row.job._id)).size;
   const workflows = new Set(scopedJobs.map((row) => row.job.recipeId)).size;
+  const totalTokens = currentProject?.usage?.totalTokens
+    ?? scopedJobs.reduce((sum, row) => sum + (row.job.usage?.totalTokens ?? 0), 0);
 
   return (
     <>
@@ -57,7 +60,22 @@ export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
       </section>
 
       <section className="dashboard-section dashboard-detail-grid">
-        <article className="dashboard-detail"><p className="eyebrow">Usage</p><h2>Total tokens</h2><strong className="metric-empty">Not tracked yet</strong><p>Token usage will appear here once Runs report it.</p></article>
+        <article className="dashboard-detail">
+          <p className="eyebrow">Usage</p>
+          <h2>Total tokens</h2>
+          {jobs === undefined || projects === undefined ? (
+            <strong>—</strong>
+          ) : totalTokens > 0 ? (
+            <strong>{formatTokens(totalTokens)}</strong>
+          ) : (
+            <strong className="metric-empty">None yet</strong>
+          )}
+          <p>
+            {currentProject
+              ? "Sum of every Run on this Project."
+              : "Sum of every Run across all Projects in View all."}
+          </p>
+        </article>
         <article className="dashboard-detail"><p className="eyebrow">Project scope</p><h2>{currentProject?.name ?? "All Projects"}</h2><p>{currentProject ? currentProject.githubRepo || currentProject.localPath : "Choose a Project in the sidebar to focus this dashboard and Jobs board."}</p></article>
       </section>
     </>

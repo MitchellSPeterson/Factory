@@ -41,10 +41,22 @@ test("Codex requires backend Stage completion and rejects failed or truncated st
   await expect(runCodexAgent(harness([{ type: "turn.failed", error: { message: "private provider detail" } }]).options)).rejects.toThrow("Codex Run failed");
   await runCodexAgent(harness([done], "failed").options);
 });
-test("Agent provider overrides worker default; legacy settings remain compatible", () => {
-  expect(resolveProvider("codex", "openai")).toBe("codex");
-  expect(resolveProvider("cursor", "codex")).toBe("cursor");
-  expect(resolveProvider(undefined, "openai")).toBe("openai");
-  expect(resolveProvider()).toBe("cursor");
-  expect(() => resolveProvider(undefined, "invalid")).toThrow();
+test("Codex accumulates turn usage", async () => {
+  const seen: unknown[] = [];
+  const h = harness([
+    { type: "thread.started", thread_id: "codex-1" },
+    { type: "item.completed", item: { type: "agent_message", id: "a", text: "Hi" } },
+    done,
+    { type: "turn.completed", usage: { input_tokens: 4, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 2, reasoning_output_tokens: 0 } },
+  ]);
+  h.options.onUsage = (usage) => { seen.push(usage); };
+  await runCodexAgent(h.options);
+  expect(seen).toEqual([{
+    inputTokens: 5,
+    outputTokens: 3,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 8,
+  }]);
 });

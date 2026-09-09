@@ -13,4 +13,16 @@ describe("createLiveLog", () => {
     await log.close();
     expect(writes).toEqual(["hello!"]);
   });
+
+  test("flushes on timer while open", async () => {
+    const writes: string[] = [];
+    const log = createLiveLog(async (text) => {
+      writes.push(text);
+    });
+    log.push("ab");
+    log.push("c");
+    await Bun.sleep(80);
+    expect(writes).toEqual(["abc"]);
+    await log.close();
+  });
 });

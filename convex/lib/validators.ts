@@ -148,3 +148,13 @@ export const answer = v.object({
   id: v.string(),
   text: v.string(),
 });
+
+/** Absolute token counts for a Run, Job, or Project. */
+export const tokenUsage = v.object({
+  inputTokens: v.number(),
+  outputTokens: v.number(),
+  cacheReadTokens: v.number(),
+  cacheWriteTokens: v.number(),
+  reasoningTokens: v.number(),
+  totalTokens: v.number(),
+});

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
+import { formatTokens } from "../formatTokens";
 import { useProjectScope } from "../projectScope";
 
 const ATTENTION_LANES = new Set(["needsDetail", "planReview", "codeReview", "failed"]);
@@ -115,7 +116,7 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
                   </div>
                   <div>
                     <dt>Token usage</dt>
-                    <dd className="muted">Not tracked</dd>
+                    <dd>{job.usage?.totalTokens ? formatTokens(job.usage.totalTokens) : <span className="muted">—</span>}</dd>
                   </div>
                   <div>
                     <dt>Runtime</dt>

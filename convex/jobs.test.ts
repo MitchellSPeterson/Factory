@@ -220,3 +220,38 @@ test("settleRun does not advance a finished Job", () => {
     writes: [{ kind: "finishRun", runId }],
   });
 });
+
+test("recordUsage rolls Run totals into Job and Project", async () => {
+  const { t, jobId, runId } = await setupJob();
+  const usage = {
+    inputTokens: 100,
+    outputTokens: 20,
+    cacheReadTokens: 5,
+    cacheWriteTokens: 2,
+    reasoningTokens: 3,
+    totalTokens: 122,
+  };
+  await t.mutation(api.worker.recordUsage, { runId, usage });
+  await t.mutation(api.worker.recordUsage, {
+    runId,
+    usage: { ...usage, inputTokens: 150, totalTokens: 172 },
+  });
+
+  const view = await t.query(api.jobs.get, { jobId });
+  expect(view?.runs[0]?.usage).toEqual({
+    ...usage,
+    inputTokens: 150,
+    totalTokens: 172,
+  });
+  expect(view?.job.usage).toEqual({
+    ...usage,
+    inputTokens: 150,
+    totalTokens: 172,
+  });
+  const project = await t.query(api.projects.get, { projectId: view!.job.projectId });
+  expect(project?.usage?.totalTokens).toBe(172);
+
+  await t.mutation(api.jobs.remove, { jobId });
+  const after = await t.query(api.projects.get, { projectId: view!.job.projectId });
+  expect(after?.usage?.totalTokens).toBe(0);
+});

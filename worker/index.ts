@@ -14,6 +14,8 @@ import { assemblePrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { factoryTools } from "./tools";
+import { fromCursorUsage, type TokenUsage } from "./usage";
+import { ZERO_USAGE } from "../convex/lib/tokenUsage";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -65,6 +67,15 @@ function convexUrl(): string {
   const url = process.env.CONVEX_URL ?? process.env.VITE_CONVEX_URL;
   if (!url) throw new Error("CONVEX_URL missing. Run convex dev first.");
   return url;
+}
+
+async function reportUsage(
+  client: ConvexHttpClient,
+  runId: Id<"runs">,
+  usage: TokenUsage | null | undefined,
+) {
+  if (!usage) return;
+  await client.mutation(api.worker.recordUsage, { runId, usage });
 }
 
 async function seed(client: ConvexHttpClient) {
@@ -176,6 +187,7 @@ async function runOpenAI(client: ConvexHttpClient, launch: Launch) {
       prompt,
       tools,
       onText: (text) => log.push(text),
+      onUsage: (usage) => reportUsage(client, launch.runId, usage),
       pullNotes: async () => {
         const rows = await client.mutation(api.worker.takeAgentInput, {
           runId: launch.runId,
@@ -253,6 +265,7 @@ async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: R
     }),
   );
   let live = false;
+  let usage = ZERO_USAGE;
   const run = await agent.send(prompt, {
     onDelta: ({ update }) => {
       if (update.type === "text-delta" || update.type === "thinking-delta") {
@@ -268,6 +281,10 @@ async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: R
   });
   try {
     for await (const event of run.stream()) {
+      if (event.type === "usage") {
+        const next = fromCursorUsage(event.usage);
+        if (next) usage = next;
+      }
       if (live) continue;
       if (event.type === "assistant") {
         for (const block of event.message.content) {
@@ -282,6 +299,8 @@ async function runCursor(client: ConvexHttpClient, launch: Launch, projectEnv: R
     }
     await log.close();
     const result = await run.wait();
+    const finalUsage = fromCursorUsage(result.usage) ?? usage;
+    await reportUsage(client, launch.runId, finalUsage);
     if (result.status === "error") {
       await client.mutation(api.worker.failRun, {
         runId: launch.runId,
@@ -305,6 +324,7 @@ async function runCodex(client: ConvexHttpClient, launch: Launch) {
       prompt: assemblePrompt({ stageKey: launch.stageKey, request: launch.request, projectName: launch.project.name, projectKind: launch.project.kind, acceptedSpec: launch.acceptedSpec, skills: launch.skills }),
       onThreadId: agentId => client.mutation(api.worker.bindAgent, { runId: launch.runId, agentId }),
       onText: text => log.push(text),
+      onUsage: usage => reportUsage(client, launch.runId, usage),
       getStatus: () => client.query(api.worker.getRunStatus, { runId: launch.runId }),
     });
   } finally {

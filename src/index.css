@@ -630,6 +630,7 @@ pre {
 
 .log.live::after {
   content: "▍";
+  margin-left: 2px;
   animation: log-caret 1s step-end infinite;
 }
 

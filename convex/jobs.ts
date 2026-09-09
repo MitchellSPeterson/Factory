@@ -36,8 +36,10 @@ import {
   runStatus,
   runtime,
   stageKey,
+  tokenUsage,
 } from "./lib/validators";
 import { v } from "convex/values";
+import { isZeroUsage, subUsage, ZERO_USAGE } from "./lib/tokenUsage";
 
 const jobDoc = v.object({
   _id: v.id("jobs"),
@@ -54,6 +56,7 @@ const jobDoc = v.object({
   githubIssueUrl: v.optional(v.string()),
   milestone: v.optional(v.string()),
   tags: v.optional(v.array(v.string())),
+  usage: v.optional(tokenUsage),
 });
 
 const runDoc = v.object({
@@ -68,6 +71,7 @@ const runDoc = v.object({
   cursorRunId: v.optional(v.string()),
   error: v.optional(v.string()),
   endedByCommandId: v.optional(v.id("jobCommands")),
+  usage: v.optional(tokenUsage),
 });
 
 const commandDoc = v.object({
@@ -405,6 +409,12 @@ export const remove = mutation({
     for (const artifact of artifacts) await ctx.db.delete(artifact._id);
     for (const command of commands) await ctx.db.delete(command._id);
     for (const run of runs) await ctx.db.delete(run._id);
+    const project = await requireProject(ctx, job.projectId);
+    if (job.usage && !isZeroUsage(job.usage)) {
+      await ctx.db.patch(project._id, {
+        usage: subUsage(project.usage ?? ZERO_USAGE, job.usage),
+      });
+    }
     await ctx.db.delete(job._id);
     return null;
   },

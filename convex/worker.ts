@@ -44,9 +44,16 @@ import {
   runStatus,
   runtime,
   stageKey,
+  tokenUsage,
 } from "./lib/validators";
 import { v } from "convex/values";
 import { requireProjectServer } from "./lib/servers";
+import {
+  addUsage,
+  isZeroUsage,
+  subUsage,
+  ZERO_USAGE,
+} from "./lib/tokenUsage";
 
 const skillBinding = v.object({
   slug: v.string(),
@@ -216,6 +223,31 @@ export const appendMessage = mutation({
       text: args.text,
       createdAt: Date.now(),
     });
+    return null;
+  },
+});
+
+/** Replace a Run's absolute usage and roll the delta into its Job and Project. */
+export const recordUsage = mutation({
+  args: { runId: v.id("runs"), usage: tokenUsage },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const run = await requireRun(ctx, args.runId);
+    const next = args.usage;
+    const prev = run.usage ?? ZERO_USAGE;
+    const delta = subUsage(next, prev);
+    if (isZeroUsage(delta) && run.usage) return null;
+
+    await ctx.db.patch(run._id, { usage: next });
+    if (isZeroUsage(delta)) return null;
+
+    const job = await requireJob(ctx, run.jobId);
+    const jobNext = addUsage(job.usage ?? ZERO_USAGE, delta);
+    await ctx.db.patch(job._id, { usage: jobNext });
+
+    const project = await requireProject(ctx, job.projectId);
+    const projectNext = addUsage(project.usage ?? ZERO_USAGE, delta);
+    await ctx.db.patch(project._id, { usage: projectNext });
     return null;
   },
 });

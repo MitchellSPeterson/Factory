@@ -1,4 +1,6 @@
 import type { AgentTool } from "./codingTools";
+import { addUsage, ZERO_USAGE, type TokenUsage } from "../convex/lib/tokenUsage";
+import { fromOpenAIUsage } from "./usage";
 
 const MAX_STEPS = 40;
 
@@ -20,6 +22,7 @@ export type OpenAIAgentOptions = {
   prompt: string;
   tools: Record<string, AgentTool>;
   onText?: (text: string) => void;
+  onUsage?: (usage: TokenUsage) => void | Promise<void>;
   /** Drain human Stage chat between model turns. */
   pullNotes?: () => Promise<readonly string[]>;
   fetchFn?: typeof fetch;
@@ -37,8 +40,23 @@ type ChatCompletionChoice = {
   finish_reason?: string | null;
 };
 
+type OpenAIUsageRaw = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+  completion_tokens_details?: { reasoning_tokens?: number };
+};
+
 type ChatCompletionResponse = {
   choices?: ChatCompletionChoice[];
+  usage?: OpenAIUsageRaw;
+};
+
+type CompletionResult = {
+  message: ChatMessage & { role: "assistant" };
+  finishReason: string | null;
+  usage: TokenUsage | null;
 };
 
 function toolsToOpenAI(tools: Record<string, AgentTool>) {
@@ -66,7 +84,7 @@ export async function chatCompletion(input: {
   fetchFn?: typeof fetch;
   stream?: boolean;
   onText?: (text: string) => void;
-}): Promise<{ message: ChatMessage & { role: "assistant" }; finishReason: string | null }> {
+}): Promise<CompletionResult> {
   const fetchFn = input.fetchFn ?? fetch;
   const url = `${normalizeBaseUrl(input.baseUrl)}/chat/completions`;
   const headers: Record<string, string> = {
@@ -81,6 +99,7 @@ export async function chatCompletion(input: {
     tools: toolsToOpenAI(input.tools),
     tool_choice: "auto" as const,
     stream: input.stream === true,
+    ...(input.stream === true ? { stream_options: { include_usage: true } } : {}),
   };
 
   const res = await fetchFn(url, {
@@ -111,19 +130,21 @@ export async function chatCompletion(input: {
       tool_calls: choice.message.tool_calls,
     },
     finishReason: choice.finish_reason ?? null,
+    usage: fromOpenAIUsage(data.usage),
   };
 }
 
 async function readStream(
   res: Response,
   onText?: (text: string) => void,
-): Promise<{ message: ChatMessage & { role: "assistant" }; finishReason: string | null }> {
+): Promise<CompletionResult> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buf = "";
   let content = "";
   const toolCalls = new Map<number, ToolCall>();
   let finishReason: string | null = null;
+  let usage: TokenUsage | null = null;
 
   for (;;) {
     const { done, value } = await reader.read();
@@ -149,12 +170,15 @@ async function readStream(
           };
           finish_reason?: string | null;
         }>;
+        usage?: OpenAIUsageRaw;
       };
       try {
         chunk = JSON.parse(payload) as typeof chunk;
       } catch {
         continue;
       }
+      const parsed = fromOpenAIUsage(chunk.usage);
+      if (parsed) usage = parsed;
       const choice = chunk.choices?.[0];
       if (!choice) continue;
       if (choice.finish_reason) finishReason = choice.finish_reason;
@@ -191,6 +215,7 @@ async function readStream(
       tool_calls: calls.length > 0 ? calls : undefined,
     },
     finishReason,
+    usage,
   };
 }
 
@@ -207,6 +232,7 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
   ];
 
   let finished = false;
+  let usage = ZERO_USAGE;
 
   for (let step = 0; step < maxSteps; step++) {
     if (opts.pullNotes) {
@@ -234,7 +260,7 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
       });
     } catch (err) {
       if (!preferStream) throw err;
-      // ponytail: many local servers lack SSE
+      // ponytail: many local servers lack SSE / stream_options
       result = await chatCompletion({
         baseUrl: opts.baseUrl,
         apiKey: opts.apiKey,
@@ -247,6 +273,8 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
         onText: opts.onText,
       });
     }
+
+    if (result.usage) usage = addUsage(usage, result.usage);
 
     const assistant = result.message;
     messages.push(assistant);
@@ -293,8 +321,12 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
       });
     }
 
-    if (finished) return "finished";
+    if (finished) {
+      await opts.onUsage?.(usage);
+      return "finished";
+    }
   }
 
+  await opts.onUsage?.(usage);
   throw new Error(`OpenAI agent exceeded ${maxSteps} steps without finish_stage`);
 }

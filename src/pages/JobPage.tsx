@@ -1,16 +1,30 @@
 import { useMutation, useQuery } from "convex/react";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
+import { formatTokens } from "../formatTokens";
 
 // ponytail: odd fence count mid-stream would eat the rest of the log
 function renderableLog(text: string): string {
   const fences = (text.match(/^```/gm) ?? []).length;
   return fences % 2 === 1 ? `${text}\n\`\`\`` : text;
+}
+
+function AgentLog({ text, live }: { text: string; live: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!live || !ref.current) return;
+    ref.current.scrollTop = ref.current.scrollHeight;
+  }, [text, live]);
+  return (
+    <div ref={ref} className={`log markdown${live ? " live" : ""}`}>
+      {text !== "" ? <Markdown>{renderableLog(text)}</Markdown> : live ? <p className="muted">Streaming…</p> : null}
+    </div>
+  );
 }
 
 function deliveryHint(mode: "pollBetweenTurns" | "nextRun" | "transcriptOnly"): string {
@@ -157,6 +171,7 @@ export function JobPage() {
       {jobActionError ? <p role="alert" className="error">{jobActionError}</p> : null}
       <p className="muted">
         <Link to={`/workflows/${job.recipeId}`}>{recipeName}</Link>
+        {job.usage?.totalTokens ? ` · ${formatTokens(job.usage.totalTokens)} tokens` : null}
       </p>
       <p>{job.request}</p>
       {job.githubIssueUrl || job.milestone || (job.tags?.length ?? 0) > 0 ? (
@@ -227,6 +242,13 @@ export function JobPage() {
                     <div className="stage-history-content">
                       <div className="stage-meta">
                         <span>{stageRuns.length} {stageRuns.length === 1 ? "Run" : "Runs"}</span>
+                        {(() => {
+                          const stageTokens = stageRuns.reduce(
+                            (sum, run) => sum + (run.usage?.totalTokens ?? 0),
+                            0,
+                          );
+                          return stageTokens > 0 ? <span>{formatTokens(stageTokens)} tokens</span> : null;
+                        })()}
                         {stage.halt ? <span>Human halt after this Stage</span> : null}
                         {stage.lane ? <span>{stage.lane} Lane</span> : null}
                       </div>
@@ -293,6 +315,9 @@ export function JobPage() {
                                     <strong>Run</strong>
                                     <Badge status={run.status} />
                                     {run.agentId ? <span className="mono muted">{run.agentId}</span> : null}
+                                    {run.usage?.totalTokens ? (
+                                      <span className="muted">{formatTokens(run.usage.totalTokens)} tokens</span>
+                                    ) : null}
                                   </div>
                                   <span className="muted">{new Date(run._creationTime).toLocaleString()}</span>
                                 </div>
@@ -334,10 +359,13 @@ export function JobPage() {
                                     <div className="markdown"><Markdown>{artifact.body}</Markdown></div>
                                   </details>
                                 ))}
-                                {runMessages.length > 0 ? (
+                                {runMessages.length > 0 || run.status === "running" ? (
                                   <div className="stage-agent-output">
                                     <span className="stage-output-label">Agent activity</span>
-                                    <div className="log markdown"><Markdown>{renderableLog(runMessages.map((message) => message.text).join("\n\n"))}</Markdown></div>
+                                    <AgentLog
+                                      text={runMessages.map((message) => message.text).join("\n\n")}
+                                      live={run.status === "running"}
+                                    />
                                   </div>
                                 ) : runArtifacts.length === 0 && runAsks.length === 0 ? (
                                   <p className="muted">No agent activity has been returned yet.</p>
