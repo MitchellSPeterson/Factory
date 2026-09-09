@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import { LANES, laneOf } from "../../convex/lib/jobState";
 import { Badge } from "../status";
@@ -10,8 +10,9 @@ import { useProjectScope } from "../projectScope";
 import {
   ATTENTION_LANES,
   matchesProgress,
+  parseLane,
+  parseProgress,
   PROGRESS_OPTIONS,
-  type ProgressFilter,
 } from "../jobsProgress";
 
 function stageTitle(stageKey: string) {
@@ -30,11 +31,19 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
   const jobs = useQuery(api.jobs.list);
   const recipes = useQuery(api.recipes.list);
   const migrate = useMutation(api.jobs.migrateLanes);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [workflowId, setWorkflowId] = useState("");
-  const [progress, setProgress] = useState<ProgressFilter>("active");
-  const [laneId, setLaneId] = useState("");
+  const progress = parseProgress(searchParams.get("progress"));
+  const laneId = parseLane(searchParams.get("lane"));
   const { projectId } = useProjectScope();
+
+  function setFilter(key: "progress" | "lane", value: string, blank: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value === blank) next.delete(key);
+    else next.set(key, value);
+    setSearchParams(next, { replace: true });
+  }
 
   useEffect(() => {
     void migrate().catch(() => {});
@@ -94,7 +103,7 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
           Progress
           <select
             value={progress}
-            onChange={(e) => setProgress(e.target.value as ProgressFilter)}
+            onChange={(e) => setFilter("progress", e.target.value, "active")}
           >
             {PROGRESS_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>{option.title}</option>
@@ -103,7 +112,7 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
         </label>
         <label>
           Lane
-          <select value={laneId} onChange={(e) => setLaneId(e.target.value)}>
+          <select value={laneId} onChange={(e) => setFilter("lane", e.target.value, "")}>
             <option value="">All</option>
             {LANES.map((lane) => <option key={lane.id} value={lane.id}>{lane.title}</option>)}
             <option value="failed">Failed</option>
@@ -112,6 +121,11 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
       </div>
       {jobs === undefined ? (
         <p className="muted">Loading Jobs…</p>
+      ) : visible.length === 0 && scoped.length === 0 && query === "" ? (
+        <div className="jobs-empty">
+          <p>No Jobs in this scope yet.</p>
+          <button type="button" onClick={onNewJob}>New job</button>
+        </div>
       ) : visible.length === 0 ? (
         <div className="jobs-empty">No Jobs match the current search and filters.</div>
       ) : (
@@ -125,6 +139,7 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
                 liveStartedAt !== undefined ? [{ startedAt: liveStartedAt }] : [],
               ),
             );
+            const usage = formatUsageIO(job.usage);
             return (
               <Link className="job-card" key={job._id} to={`/jobs/${job._id}`}>
                 <div className="job-card-topline">
@@ -142,14 +157,18 @@ export function JobsPage({ onNewJob }: { onNewJob: () => void }) {
                     <dt>Workflow</dt>
                     <dd>{recipeName}</dd>
                   </div>
-                  <div>
-                    <dt>Duration</dt>
-                    <dd>{duration ?? <span className="muted">—</span>}</dd>
-                  </div>
-                  <div>
-                    <dt>Token usage</dt>
-                    <dd>{formatUsageIO(job.usage) ?? <span className="muted">—</span>}</dd>
-                  </div>
+                  {duration ? (
+                    <div>
+                      <dt>Duration</dt>
+                      <dd>{duration}</dd>
+                    </div>
+                  ) : null}
+                  {usage ? (
+                    <div>
+                      <dt>Token usage</dt>
+                      <dd>{usage}</dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>Created</dt>
                     <dd>{createdAt(job._creationTime)}</dd>

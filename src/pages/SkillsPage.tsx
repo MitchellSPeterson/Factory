@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 
@@ -51,6 +51,15 @@ export function SkillsPage() {
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!importOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setImportOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [importOpen]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();

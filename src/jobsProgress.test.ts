@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { laneOf } from "../convex/lib/jobState";
-import { matchesProgress } from "./jobsProgress";
+import { matchesProgress, parseLane, parseProgress } from "./jobsProgress";
 
 describe("Jobs progress filter", () => {
   test("active hides Done (PR) and keeps the rest", () => {
@@ -17,5 +17,17 @@ describe("Jobs progress filter", () => {
     expect(matchesProgress("needsDetail", "attention")).toBe(true);
     expect(matchesProgress("pr", "done")).toBe(true);
     expect(matchesProgress(laneOf("done"), "done")).toBe(true);
+  });
+
+  test("parseProgress falls back to active", () => {
+    expect(parseProgress("attention")).toBe("attention");
+    expect(parseProgress("nope")).toBe("active");
+    expect(parseProgress(null)).toBe("active");
+  });
+
+  test("parseLane accepts Factory lanes and failed", () => {
+    expect(parseLane("planReview")).toBe("planReview");
+    expect(parseLane("failed")).toBe("failed");
+    expect(parseLane("column")).toBe("");
   });
 });

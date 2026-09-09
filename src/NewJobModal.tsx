@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { Id } from "../convex/_generated/dataModel";
 import { NewJobForm } from "./pages/NewJobPage";
 
@@ -10,6 +11,13 @@ export function NewJobModal({
   onClose: () => void;
   onComplete: (jobId: Id<"jobs">) => void;
 }) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section

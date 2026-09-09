@@ -51,7 +51,7 @@ export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
       <section className="metric-grid" aria-label="Project summary">
         <article className="metric-card"><span>Total jobs</span><strong>{jobs === undefined ? "—" : scopedJobs.length}</strong><small>in this scope</small></article>
         <article className="metric-card"><span>Active jobs</span><strong>{jobs === undefined ? "—" : active}</strong><small>moving through a Workflow</small></article>
-        <article className="metric-card"><span>Needs attention</span><strong>{jobs === undefined ? "—" : needsAttention}</strong><small>asks, reviews, or failed Jobs</small></article>
+        <Link className="metric-card" to="/jobs?progress=attention"><span>Needs attention</span><strong>{jobs === undefined ? "—" : needsAttention}</strong><small>asks, reviews, or failed Jobs</small></Link>
         <article className="metric-card"><span>Workflows used</span><strong>{jobs === undefined ? "—" : workflows}</strong><small>across {runs} Jobs</small></article>
       </section>
 
@@ -61,7 +61,7 @@ export function DashboardPage({ onNewJob }: { onNewJob: () => void }) {
           {LANES.map((lane) => {
             const count = scopedJobs.filter((row) => laneOf(row.job.status) === lane.id).length;
             const percentage = scopedJobs.length === 0 ? 0 : (count / scopedJobs.length) * 100;
-            return <div className="lane-summary-row" key={lane.id}><span>{lane.title}</span><div className="lane-summary-bar"><i style={{ width: `${percentage}%` }} /></div><strong>{jobs === undefined ? "—" : count}</strong></div>;
+            return <Link className="lane-summary-row" key={lane.id} to={`/jobs?lane=${lane.id}&progress=all`}><span>{lane.title}</span><div className="lane-summary-bar"><i style={{ width: `${percentage}%` }} /></div><strong>{jobs === undefined ? "—" : count}</strong></Link>;
           })}
         </div>
       </section>

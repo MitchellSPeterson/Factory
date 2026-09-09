@@ -121,11 +121,13 @@ export function JobPage() {
         <Link to={`/projects/${project._id}`}>{project.name}</Link>
       </p>
       <div className="pagehead">
-        <div className="row">
-          <h1>Job</h1>
-          <Badge status={laneOf(job.status)} />
-          <span className="mono muted">{job.stageKey}</span>
-          <span className="muted">{control.activity}</span>
+        <div>
+          <h1 className="job-heading">{job.request}</h1>
+          <div className="job-status-row">
+            <Badge status={laneOf(job.status)} />
+            <span className="mono muted">{job.stageKey}</span>
+            <span className="muted">{control.activity}</span>
+          </div>
         </div>
         <div className="row">
           {control.availableCommands.includes("finishJob") ? (
@@ -178,7 +180,6 @@ export function JobPage() {
         {jobTime ? ` · ${jobTime}` : null}
         {jobUsage ? ` · ${jobUsage}` : null}
       </p>
-      <p>{job.request}</p>
       {job.githubIssueUrl || job.milestone || (job.tags?.length ?? 0) > 0 ? (
         <div className="job-references">
           {job.githubIssueUrl ? <a href={job.githubIssueUrl} target="_blank" rel="noreferrer">GitHub issue ↗</a> : null}

@@ -1,4 +1,4 @@
-import { type Lane } from "../convex/lib/jobState";
+import { LANES, type Lane } from "../convex/lib/jobState";
 
 export const ATTENTION_LANES = new Set<Lane>(["needsDetail", "planReview", "codeReview", "failed"]);
 export const IN_PROGRESS_LANES = new Set<Lane>(["planning", "building"]);
@@ -21,6 +21,17 @@ export const PROGRESS_OPTIONS: Array<{ id: ProgressFilter; title: string }> = [
   { id: "done", title: "Done" },
   { id: "failed", title: "Failed" },
 ];
+
+export function parseProgress(value: string | null): ProgressFilter {
+  return PROGRESS_OPTIONS.some((option) => option.id === value)
+    ? (value as ProgressFilter)
+    : "active";
+}
+
+export function parseLane(value: string | null): string {
+  if (value === "failed") return "failed";
+  return LANES.some((lane) => lane.id === value) ? value! : "";
+}
 
 export function matchesProgress(lane: Lane, progress: ProgressFilter): boolean {
   if (progress === "all") return true;

@@ -28,6 +28,14 @@ export function GitHubPage() {
   const key = `${connection?.login}:${repo}:${tab}:${page}`;
   useEffect(() => { setPage(1); setDraft(null); }, [projectId, tab]);
   useEffect(() => {
+    if (!draft) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDraft(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [draft]);
+  useEffect(() => {
     if (!connection || !repo) return;
     const controller = new AbortController();
     setBusy(true); setError("");
@@ -71,6 +79,12 @@ export function GitHubPage() {
         </div>}
       </>}
     </>}
-    {draft && project && connection && <div className="github-draft"><div className="section-heading"><div><p className="eyebrow">GitHub issue #{draft.number}</p><h2>Create Job</h2><p className="muted">Review the request and Workflow before starting.</p></div><button className="ghost" onClick={() => setDraft(null)}>Cancel</button></div><NewJobForm key={`${project._id}:${draft.id}`} initialProjectId={project._id} initialDraft={issueDraft(draft)} lockProject /></div>}
+    {draft && project && connection && <>
+      <div className="sheet-scrim" role="presentation" onMouseDown={() => setDraft(null)} />
+      <div className="github-draft">
+        <div className="section-heading"><div><p className="eyebrow">GitHub issue #{draft.number}</p><h2>Create Job</h2><p className="muted">Review the request and Workflow before starting.</p></div><button className="ghost" onClick={() => setDraft(null)}>Cancel</button></div>
+        <NewJobForm key={`${project._id}:${draft.id}`} initialProjectId={project._id} initialDraft={issueDraft(draft)} lockProject />
+      </div>
+    </>}
   </>;
 }

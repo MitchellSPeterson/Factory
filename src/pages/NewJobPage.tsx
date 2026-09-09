@@ -126,6 +126,7 @@ export function NewJobForm({
         <label>
           Request
           <textarea
+            autoFocus={lockProject}
             value={request}
             onChange={(e) => setRequest(e.target.value)}
             placeholder={selectedWorkflow?.requestTemplate ?? "What should the agents do?"}
