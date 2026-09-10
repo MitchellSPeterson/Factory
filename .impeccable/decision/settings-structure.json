@@ -1,0 +1,63 @@
+{
+  "title": "How should Settings be structured?",
+  "question": "The roll assigned a single scrolling page of grouped rows. Keep it, take an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "One page of grouped rows",
+      "kicker": "THE ROLL",
+      "lineage": "Linear and Vercel settings, raised by a factory readout",
+      "thesis": "Every Factory connection lives on one scroll, grouped by job, with a live status strip you cannot miss.",
+      "palette": ["#121212", "#1c1c1c", "#ffffff", "#8b7cf6", "#3fb950"],
+      "materials": ["Notara sidebar chrome", "1px hairline", "pill controls", "system sans"],
+      "viewport": "VASA sidebar stays. Main column opens on a GitHub / this machine / Projects readout, then sticky section labels, then row groups. Incomplete stations expand in place. Appearance is last.",
+      "risk": "A long scroll can bury provider keys if the status strip is not sticky.",
+      "raised": [
+        {
+          "from": "creator-hardware bench",
+          "raise": "A small live readout sits at the top of the scroll, like the amber screen on a desk instrument."
+        },
+        {
+          "from": "darkroom stations",
+          "raise": "When setup is incomplete, GitHub, this machine, and a Project sit as ordered stations before any preference rows."
+        },
+        {
+          "from": "drawcord cape",
+          "raise": "Configured items collapse to one-line rows. Only the blocked job stays open."
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/assigned.jpg"
+    },
+    {
+      "id": "setup-story",
+      "label": "Setup story, then quiet",
+      "lineage": "First-run stations that collapse into preferences",
+      "thesis": "Settings is a short story until the Factory can run a Job, then it becomes a quiet preference list.",
+      "palette": ["#121212", "#1c1c1c", "#ffffff", "#8b7cf6", "#3fb950"],
+      "materials": ["Notara sidebar chrome", "1px hairline", "pill controls", "system sans"],
+      "viewport": "If GitHub, this machine, or a Project is missing, the page is only those three numbered stations. Once they are done, the same route shows compact rows for providers and appearance.",
+      "risk": "Operators who only need to replace a key must wait through a story they already finished, unless the quiet view is the default after setup.",
+      "comp": ".impeccable/mocks/decision/setup-story.jpg"
+    },
+    {
+      "id": "readiness",
+      "label": "Readiness first",
+      "lineage": "Factory health as the first viewport",
+      "thesis": "Open Settings and know in one glance whether a Job can run, then act on the thing that is red.",
+      "palette": ["#121212", "#1c1c1c", "#ffffff", "#8b7cf6", "#3fb950"],
+      "materials": ["Notara sidebar chrome", "1px hairline", "pill controls", "system sans"],
+      "viewport": "Three large status tiles fill the first viewport: GitHub, this machine, Projects. Clicking a tile reveals its form below. Appearance is a small control in the header.",
+      "risk": "Tile language can feel like a dashboard instead of settings, and three equal tiles fight for the one action that matters.",
+      "comp": ".impeccable/mocks/decision/readiness.jpg"
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "comp",
+    "toggle": true
+  },
+  "canon": false,
+  "steer": true
+}

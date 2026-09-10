@@ -33,6 +33,10 @@ export default defineSchema({
   environment: defineTable({
     serverId: v.id("servers"), scope: v.string(), name: v.string(), sealed: v.string(), updatedAt: v.number(),
   }).index("by_serverId_and_scope_and_name", ["serverId", "scope", "name"]),
+  githubConnection: defineTable({
+    login: v.string(),
+    token: v.string(),
+  }),
   projectImports: defineTable({
     projectId: v.id("projects"), serverId: v.id("servers"), repo: v.string(), sealedToken: v.optional(v.string()),
     status: v.union(v.literal("queued"), v.literal("cloning"), v.literal("ready"), v.literal("failed")),

@@ -22,7 +22,7 @@ export function AddGitHubProject() {
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Id<"projects"> | null>(null);
   const imported = useQuery(api.projects.get, created ? { projectId: created } : "skip");
-  return <section className="settings-section"><div className="section-heading"><div><h2>Add from GitHub</h2><p>Choose a repository. Factory clones it on your paired worker automatically.</p></div></div>
+  return <section className="settings-section"><div className="section-heading"><div><h2>Add from GitHub</h2><p>Choose a repository. Factory clones it on this machine automatically.</p></div></div>
     {!connection ? <Link className="text-button" to="/settings?tab=github">Connect GitHub first →</Link> : !server ? <p className="muted">Pair a worker in Settings to choose where the repository is cloned.</p> : <form className="project-form" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setError("");
       try { validateRepository(repo); const id = await create({ accessKey, repo, name: name.trim() || repo.split("/")[1]!, kind, recipeId: recipeId ? recipeId as Id<"recipes"> : undefined, sealedToken: await sealSecret(server.publicKey, connection.token) }); setCreated(id); setRepo(""); setName(""); }

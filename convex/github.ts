@@ -1,8 +1,51 @@
-import { action } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const storedConnection = v.object({ login: v.string(), token: v.string() });
+
+function requireConnection(login: string, token: string) {
+  const next = { login: login.trim(), token: token.trim() };
+  if (!next.login || next.login.length > 100 || !next.token || next.token.length > 10000) throw new Error("Invalid GitHub connection.");
+  return next;
+}
+
+export const connection = query({
+  args: {},
+  returns: v.union(storedConnection, v.null()),
+  handler: async (ctx) => {
+    const row = (await ctx.db.query("githubConnection").take(1))[0];
+    return row ? { login: row.login, token: row.token } : null;
+  },
+});
+
+export const save = mutation({
+  args: storedConnection.fields,
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const next = requireConnection(args.login, args.token);
+    const rows = await ctx.db.query("githubConnection").take(8);
+    if (rows[0]) {
+      await ctx.db.patch(rows[0]._id, next);
+      for (const extra of rows.slice(1)) await ctx.db.delete(extra._id);
+    } else {
+      await ctx.db.insert("githubConnection", next);
+    }
+    return null;
+  },
+});
+
+export const disconnect = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    for (const row of await ctx.db.query("githubConnection").take(8)) await ctx.db.delete(row._id);
+    return null;
+  },
+});
+
 // Device authorization is proxied because GitHub's login endpoints do not
-// support browser CORS. Credentials are never persisted in Factory tables.
+// support browser CORS. The resulting token is stored with save() so every
+// client of this Factory instance can use it.
 async function deviceRequest(path: string, fields: Record<string, string>) {
   const response = await fetch(`https://github.com/login/${path}`, {
     method: "POST",

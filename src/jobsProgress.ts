@@ -14,12 +14,12 @@ export type ProgressFilter =
 
 export const PROGRESS_OPTIONS: Array<{ id: ProgressFilter; title: string }> = [
   { id: "active", title: "Active" },
-  { id: "all", title: "All" },
-  { id: "queued", title: "Queued" },
-  { id: "inProgress", title: "In progress" },
   { id: "attention", title: "Needs attention" },
+  { id: "inProgress", title: "In progress" },
+  { id: "queued", title: "Queued" },
   { id: "done", title: "Done" },
   { id: "failed", title: "Failed" },
+  { id: "all", title: "All" },
 ];
 
 export function parseProgress(value: string | null): ProgressFilter {

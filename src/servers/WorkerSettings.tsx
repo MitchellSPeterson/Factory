@@ -5,7 +5,7 @@ import { sealSecret } from "../../shared/secrets";
 import { serverVariableNames, validateVariableName } from "../../shared/managed";
 import { useServer } from "./connection";
 
-export function WorkerSettings() {
+export function WorkerPairing() {
   const { server, accessKey, pair, unpair } = useServer();
   const live = useQuery(api.servers.paired, server ? { accessKey } : "skip");
   const [key, setKey] = useState("");
@@ -13,14 +13,24 @@ export function WorkerSettings() {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(timer); }, []);
-  return <section className="settings-section"><div className="section-heading"><div><h2>Worker</h2><p>This machine clones repositories and runs your Jobs.</p></div></div>
-    {server ? <><div className="settings-option"><div><strong>{server.name} · {live && now - live.lastSeen < 45000 ? "Online" : "Offline"}</strong><span>Repositories: {server.projectsRoot}</span></div><button className="ghost" onClick={unpair}>Lock settings</button></div><ProviderCards /><details className="provider-advanced"><summary>Advanced worker environment</summary><EnvironmentManager scope="server" /></details></> : <form className="stack" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { await pair(key); setKey(""); } catch { setError("Unable to pair. Check the worker key and make sure the worker has started."); } finally { setBusy(false); } }}><p className="muted">Start the worker, then run <code>bun run worker:pair</code> and paste the key here. Pairing lasts for this browser session.</p><label>Worker pairing key<input type="password" autoComplete="off" value={key} onChange={event => setKey(event.target.value)} /></label><button disabled={busy || !key.trim()}>{busy ? "Pairing…" : "Pair worker"}</button>{error && <p role="alert" className="error">{error}</p>}</form>}
+  const online = !!(live && now - live.lastSeen < 45000);
+  return <section id="machine" className="settings-block"><div className="section-heading"><div><h2>This machine</h2><p>This machine clones repositories and runs your Jobs.</p></div></div>
+    {server ? <div className="settings-option"><div><strong>{server.name} · {online ? "Online" : "Offline"}</strong><span>Repositories: {server.projectsRoot}</span></div><button className="ghost" onClick={unpair}>Lock</button></div> : <form className="stack settings-panel" onSubmit={async event => { event.preventDefault(); setBusy(true); setError(""); try { await pair(key); setKey(""); } catch { setError("Unable to pair. Check the worker key and make sure the worker has started."); } finally { setBusy(false); } }}><p className="muted">Start the worker, then paste the pairing key. Pairing lasts for this browser session.</p>
+        <p className="muted"><code>bun run worker:pair</code></p><label>Pairing key<input type="password" autoComplete="off" value={key} onChange={event => setKey(event.target.value)} /></label><button disabled={busy || !key.trim()}>{busy ? "Pairing…" : "Pair worker"}</button>{error && <p role="alert" className="error">{error}</p>}</form>}
   </section>;
+}
+
+export function WorkerSettings() {
+  const { server } = useServer();
+  return <>
+    <WorkerPairing />
+    {server ? <ProviderCards /> : null}
+  </>;
 }
 
 type ProviderCardProps = { name: string; description: string; variable?: typeof serverVariableNames[number]; placeholder?: string; children?: ReactNode };
 
-function ProviderCards() {
+export function ProviderCards() {
   return <div className="provider-grid" aria-label="Agent providers">
     <ProviderCard name="Cursor" description="Use Cursor Agents with your Cursor API key." variable="CURSOR_API_KEY" placeholder="Cursor API key" />
     <ProviderCard name="Codex" description="Use the Codex CLI login on this machine, or save an API key." variable="CODEX_API_KEY" placeholder="Codex API key (optional)"><p className="muted">Subscription: run <code>codex login</code> once.</p></ProviderCard>

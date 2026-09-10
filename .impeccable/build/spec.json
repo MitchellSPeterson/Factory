@@ -1,0 +1,1469 @@
+{
+  "tool": "comp-spec",
+  "version": 1,
+  "createdAt": "2026-09-10T03:31:46.557Z",
+  "comp": "/Users/mitchell/Projects/Factory/.impeccable/mocks/decision/assigned.jpg",
+  "warnings": [],
+  "uncoveredInkCells": [],
+  "compSize": {
+    "width": 1280,
+    "height": 800
+  },
+  "aspect": 1.6,
+  "orientation": "landscape",
+  "palette": [
+    {
+      "hex": "#181818",
+      "coverage": 0.978
+    },
+    {
+      "hex": "#f1f1f1",
+      "coverage": 0.0076
+    },
+    {
+      "hex": "#808080",
+      "coverage": 0.0054
+    },
+    {
+      "hex": "#483888",
+      "coverage": 0.0046
+    },
+    {
+      "hex": "#484848",
+      "coverage": 0.0044
+    }
+  ],
+  "bands": [
+    {
+      "y": 0.15,
+      "strength": 0.5008
+    },
+    {
+      "y": 0.525,
+      "strength": 0.2026
+    },
+    {
+      "y": 0.9875,
+      "strength": 0.2539
+    }
+  ],
+  "regions": [
+    {
+      "id": "sidebar-brand",
+      "kind": "chrome",
+      "note": "VASA wordmark and Agentic Software Factory tagline",
+      "grid": "A0:B0",
+      "box": {
+        "x": 0,
+        "y": 0,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "px": {
+        "x": 0,
+        "y": 0,
+        "w": 256,
+        "h": 80
+      },
+      "aspect": 3.2,
+      "palette": [
+        {
+          "hex": "#171717",
+          "coverage": 0.9133
+        },
+        {
+          "hex": "#f7f7f7",
+          "coverage": 0.0393
+        },
+        {
+          "hex": "#7f7f7f",
+          "coverage": 0.0255
+        },
+        {
+          "hex": "#484848",
+          "coverage": 0.0147
+        },
+        {
+          "hex": "#bdbdbd",
+          "coverage": 0.0073
+        }
+      ],
+      "detail": {
+        "energy": 19.0163
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "sidebar-switcher",
+      "kind": "control",
+      "note": "Working on label and View all project switcher",
+      "grid": "A1:B1",
+      "coverBox": {
+        "x": 0,
+        "y": 0.1,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.0141,
+        "y": 0.1375,
+        "w": 0.0609,
+        "h": 0.03
+      },
+      "px": {
+        "x": 18,
+        "y": 110,
+        "w": 78,
+        "h": 24
+      },
+      "aspect": 3.25,
+      "palette": [
+        {
+          "hex": "#181818",
+          "coverage": 0.8365
+        },
+        {
+          "hex": "#f1f1f1",
+          "coverage": 0.0817
+        },
+        {
+          "hex": "#4d4d4d",
+          "coverage": 0.0481
+        },
+        {
+          "hex": "#989898",
+          "coverage": 0.024
+        },
+        {
+          "hex": "#c8c8c8",
+          "coverage": 0.0096
+        }
+      ],
+      "detail": {
+        "energy": 17.596
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "sidebar-nav",
+      "kind": "chrome",
+      "note": "Work and Build nav groups",
+      "grid": "A2:B8",
+      "box": {
+        "x": 0,
+        "y": 0.2,
+        "w": 0.2,
+        "h": 0.7
+      },
+      "px": {
+        "x": 0,
+        "y": 160,
+        "w": 256,
+        "h": 560
+      },
+      "aspect": 0.4571,
+      "palette": [
+        {
+          "hex": "#181818",
+          "coverage": 0.9853
+        },
+        {
+          "hex": "#707070",
+          "coverage": 0.0047
+        },
+        {
+          "hex": "#ebebeb",
+          "coverage": 0.0044
+        },
+        {
+          "hex": "#3e3e3e",
+          "coverage": 0.0028
+        },
+        {
+          "hex": "#b0b0b0",
+          "coverage": 0.0028
+        }
+      ],
+      "detail": {
+        "energy": 5.2502
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "sidebar-settings",
+      "kind": "control",
+      "note": "Settings nav item current, collapse control below it",
+      "grid": "A9:B9",
+      "coverBox": {
+        "x": 0,
+        "y": 0.9,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.0047,
+        "y": 0.9525,
+        "w": 0.0703,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 6,
+        "y": 762,
+        "w": 90,
+        "h": 30
+      },
+      "aspect": 3,
+      "palette": [
+        {
+          "hex": "#463987",
+          "coverage": 0.8327
+        },
+        {
+          "hex": "#4a4975",
+          "coverage": 0.0545
+        },
+        {
+          "hex": "#8179df",
+          "coverage": 0.0436
+        },
+        {
+          "hex": "#181813",
+          "coverage": 0.0364
+        },
+        {
+          "hex": "#f6f4f8",
+          "coverage": 0.0327
+        }
+      ],
+      "detail": {
+        "energy": 17.4848
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "title",
+      "kind": "text",
+      "note": "Settings heading",
+      "grid": "C0:D0",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.0375,
+        "w": 0.1641,
+        "h": 0.0625
+      },
+      "px": {
+        "x": 256,
+        "y": 30,
+        "w": 210,
+        "h": 50
+      },
+      "aspect": 4.2,
+      "palette": [
+        {
+          "hex": "#171717",
+          "coverage": 0.8506
+        },
+        {
+          "hex": "#f3f2f3",
+          "coverage": 0.0633
+        },
+        {
+          "hex": "#858584",
+          "coverage": 0.0414
+        },
+        {
+          "hex": "#b8b7b7",
+          "coverage": 0.0253
+        },
+        {
+          "hex": "#454544",
+          "coverage": 0.0194
+        }
+      ],
+      "detail": {
+        "energy": 28.3764
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 1,
+          "glyphs": 5,
+          "capHeightPx": 19.2,
+          "inkIsDark": false,
+          "allCaps": false,
+          "advance": 0.677,
+          "advTall": 1.1977,
+          "advX": 0.677,
+          "gap": 0.0521,
+          "xRatio": 0.7388,
+          "stemW": 0.2059,
+          "contrast": 1.1112,
+          "serif": null,
+          "densTall": 0.6673,
+          "densX": 0.673,
+          "weight": 0.6673
+        },
+        "widthClass": "normal",
+        "weightClass": "black",
+        "chosen": {
+          "family": "Plus Jakarta Sans",
+          "weight": 700,
+          "fontSizePx": 25,
+          "source": "index",
+          "fp": {
+            "lines": 1,
+            "glyphs": 8,
+            "capHeightPx": 19.2,
+            "inkIsDark": true,
+            "allCaps": false,
+            "advance": 0.613,
+            "advTall": 0.4695,
+            "advX": 0.6782,
+            "gap": 0.1043,
+            "xRatio": 0.7175,
+            "stemW": 0.2075,
+            "contrast": 1.1172,
+            "serif": 1.1443,
+            "densTall": 0.5801,
+            "densX": 0.6641,
+            "weight": 0.5801
+          },
+          "stamp": "6294150cae6a"
+        }
+      }
+    },
+    {
+      "id": "purpose",
+      "kind": "text",
+      "note": "Whether this Factory can run a Job.",
+      "grid": "C0:E1",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0,
+        "w": 0.3,
+        "h": 0.2
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.1425,
+        "w": 0.1734,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 256,
+        "y": 114,
+        "w": 222,
+        "h": 30
+      },
+      "aspect": 7.4,
+      "palette": [
+        {
+          "hex": "#141413",
+          "coverage": 0.805
+        },
+        {
+          "hex": "#f0f0f0",
+          "coverage": 0.0954
+        },
+        {
+          "hex": "#b5b5b6",
+          "coverage": 0.0484
+        },
+        {
+          "hex": "#8b8d8c",
+          "coverage": 0.0263
+        },
+        {
+          "hex": "#505353",
+          "coverage": 0.0249
+        }
+      ],
+      "detail": {
+        "energy": 50.5651
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 1,
+          "glyphs": 19,
+          "capHeightPx": 11.3,
+          "inkIsDark": false,
+          "allCaps": false,
+          "advance": 0.677,
+          "advTall": 0.9272,
+          "advX": 0.6328,
+          "gap": 0.0294,
+          "xRatio": 0.7237,
+          "stemW": 0.2116,
+          "contrast": 1.1024,
+          "serif": 0.2051,
+          "densTall": 0.6061,
+          "densX": 0.6596,
+          "weight": 0.6061
+        },
+        "widthClass": "normal",
+        "weightClass": "bold"
+      }
+    },
+    {
+      "id": "readout-github",
+      "kind": "control",
+      "note": "GitHub @mitchell connected status",
+      "grid": "C1:E1",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.1,
+        "w": 0.3,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.1375,
+        "w": 0.1734,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 256,
+        "y": 110,
+        "w": 222,
+        "h": 30
+      },
+      "aspect": 7.4,
+      "palette": [
+        {
+          "hex": "#141413",
+          "coverage": 0.846
+        },
+        {
+          "hex": "#f1f2f1",
+          "coverage": 0.0818
+        },
+        {
+          "hex": "#464747",
+          "coverage": 0.0361
+        },
+        {
+          "hex": "#868684",
+          "coverage": 0.0208
+        },
+        {
+          "hex": "#b5b7b5",
+          "coverage": 0.0153
+        }
+      ],
+      "detail": {
+        "energy": 50.2273
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "readout-machine",
+      "kind": "control",
+      "note": "This machine online status",
+      "grid": "F1:G1",
+      "coverBox": {
+        "x": 0.5,
+        "y": 0.1,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.5,
+        "y": 0.1375,
+        "w": 0.0891,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 640,
+        "y": 110,
+        "w": 114,
+        "h": 30
+      },
+      "aspect": 3.8,
+      "palette": [
+        {
+          "hex": "#141414",
+          "coverage": 0.8427
+        },
+        {
+          "hex": "#f1f2f2",
+          "coverage": 0.0533
+        },
+        {
+          "hex": "#353535",
+          "coverage": 0.0507
+        },
+        {
+          "hex": "#818181",
+          "coverage": 0.0347
+        },
+        {
+          "hex": "#cdcdcf",
+          "coverage": 0.0187
+        }
+      ],
+      "detail": {
+        "energy": 29.8987
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "readout-projects",
+      "kind": "control",
+      "note": "Projects 3 ready status",
+      "grid": "H1:J1",
+      "coverBox": {
+        "x": 0.7,
+        "y": 0.1,
+        "w": 0.3,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.7141,
+        "y": 0.1375,
+        "w": 0.1172,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 914,
+        "y": 110,
+        "w": 150,
+        "h": 30
+      },
+      "aspect": 5,
+      "palette": [
+        {
+          "hex": "#141414",
+          "coverage": 0.8912
+        },
+        {
+          "hex": "#ededed",
+          "coverage": 0.0575
+        },
+        {
+          "hex": "#b1afb1",
+          "coverage": 0.0185
+        },
+        {
+          "hex": "#32e86a",
+          "coverage": 0.0164
+        },
+        {
+          "hex": "#404044",
+          "coverage": 0.0164
+        }
+      ],
+      "detail": {
+        "energy": 33.4708
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "machine-label",
+      "kind": "text",
+      "note": "This machine section label",
+      "grid": "C2:D2",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.2,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.245,
+        "w": 0.1313,
+        "h": 0.055
+      },
+      "px": {
+        "x": 256,
+        "y": 196,
+        "w": 168,
+        "h": 44
+      },
+      "aspect": 3.8182,
+      "palette": [
+        {
+          "hex": "#1a1919",
+          "coverage": 0.781
+        },
+        {
+          "hex": "#f2f2f2",
+          "coverage": 0.0876
+        },
+        {
+          "hex": "#606060",
+          "coverage": 0.0839
+        },
+        {
+          "hex": "#8a8a8a",
+          "coverage": 0.0255
+        },
+        {
+          "hex": "#3b3938",
+          "coverage": 0.0219
+        }
+      ],
+      "detail": {
+        "energy": 40.5103
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 1,
+          "glyphs": 14,
+          "capHeightPx": 11.3,
+          "inkIsDark": false,
+          "allCaps": false,
+          "advance": 0.7351,
+          "advTall": 0.8086,
+          "advX": 0.6763,
+          "gap": 0.0588,
+          "xRatio": 0.7227,
+          "stemW": 0.251,
+          "contrast": 1.1821,
+          "serif": 0.1827,
+          "densTall": 0.6806,
+          "densX": 0.6923,
+          "weight": 0.6806
+        },
+        "widthClass": "normal",
+        "weightClass": "black"
+      }
+    },
+    {
+      "id": "machine-row",
+      "kind": "control",
+      "note": "Factory-MBP online row with Lock",
+      "grid": "C2:J2",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.2,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.245,
+        "w": 0.1313,
+        "h": 0.055
+      },
+      "px": {
+        "x": 256,
+        "y": 196,
+        "w": 168,
+        "h": 44
+      },
+      "aspect": 3.8182,
+      "palette": [
+        {
+          "hex": "#1a1919",
+          "coverage": 0.781
+        },
+        {
+          "hex": "#f2f2f2",
+          "coverage": 0.0876
+        },
+        {
+          "hex": "#606060",
+          "coverage": 0.0839
+        },
+        {
+          "hex": "#8a8a8a",
+          "coverage": 0.0255
+        },
+        {
+          "hex": "#3b3938",
+          "coverage": 0.0219
+        }
+      ],
+      "detail": {
+        "energy": 40.5103
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "github-label",
+      "kind": "text",
+      "note": "GitHub section label",
+      "grid": "C3:D3",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.3,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.315,
+        "w": 0.0984,
+        "h": 0.085
+      },
+      "px": {
+        "x": 256,
+        "y": 252,
+        "w": 126,
+        "h": 68
+      },
+      "aspect": 1.8529,
+      "palette": [
+        {
+          "hex": "#181818",
+          "coverage": 0.8507
+        },
+        {
+          "hex": "#70706f",
+          "coverage": 0.0526
+        },
+        {
+          "hex": "#3d3d3a",
+          "coverage": 0.0389
+        },
+        {
+          "hex": "#f4f3f1",
+          "coverage": 0.0379
+        },
+        {
+          "hex": "#cbcbca",
+          "coverage": 0.02
+        }
+      ],
+      "detail": {
+        "energy": 22.9473
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 2,
+          "glyphs": 7,
+          "capHeightPx": 12,
+          "inkIsDark": false,
+          "allCaps": false,
+          "advance": 0.6393,
+          "advTall": 0.6393,
+          "advX": 0.6393,
+          "gap": 0.0434,
+          "xRatio": 0.7034,
+          "stemW": 0.2332,
+          "contrast": 1.0947,
+          "serif": 0.2521,
+          "densTall": 0.6602,
+          "densX": 0.7382,
+          "weight": 0.6602
+        },
+        "widthClass": "normal",
+        "weightClass": "black"
+      }
+    },
+    {
+      "id": "github-row",
+      "kind": "control",
+      "note": "@mitchell connected row with Disconnect",
+      "grid": "C3:J3",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.3,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.8938,
+        "y": 0.3525,
+        "w": 0.075,
+        "h": 0.0475
+      },
+      "px": {
+        "x": 1144,
+        "y": 282,
+        "w": 96,
+        "h": 38
+      },
+      "aspect": 2.5263,
+      "palette": [
+        {
+          "hex": "#18181b",
+          "coverage": 0.7896
+        },
+        {
+          "hex": "#1f1538",
+          "coverage": 0.1213
+        },
+        {
+          "hex": "#f5f5f6",
+          "coverage": 0.0421
+        },
+        {
+          "hex": "#4a4a4a",
+          "coverage": 0.0322
+        },
+        {
+          "hex": "#7d7d7d",
+          "coverage": 0.0149
+        }
+      ],
+      "detail": {
+        "energy": 21.5826
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "projects-label",
+      "kind": "text",
+      "note": "Projects section label",
+      "grid": "C4:D4",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.4,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.4225,
+        "w": 0.0516,
+        "h": 0.0775
+      },
+      "px": {
+        "x": 256,
+        "y": 338,
+        "w": 66,
+        "h": 62
+      },
+      "aspect": 1.0645,
+      "palette": [
+        {
+          "hex": "#171717",
+          "coverage": 0.813
+        },
+        {
+          "hex": "#ececec",
+          "coverage": 0.1283
+        },
+        {
+          "hex": "#a1a1a1",
+          "coverage": 0.0326
+        },
+        {
+          "hex": "#4a4a4a",
+          "coverage": 0.0196
+        },
+        {
+          "hex": "#737373",
+          "coverage": 0.0065
+        }
+      ],
+      "detail": {
+        "energy": 17.9706
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 2,
+          "glyphs": 9,
+          "capHeightPx": 10.8,
+          "inkIsDark": false,
+          "allCaps": false,
+          "advance": 0.7359,
+          "advTall": 0.449,
+          "advX": 0.7359,
+          "gap": 0.032,
+          "xRatio": 0.7786,
+          "stemW": 0.2563,
+          "contrast": 1.1841,
+          "serif": 0.456,
+          "densTall": 0.6442,
+          "densX": 0.6416,
+          "weight": 0.6442
+        },
+        "widthClass": "wide",
+        "weightClass": "bold"
+      }
+    },
+    {
+      "id": "project-factory",
+      "kind": "control",
+      "note": "Factory project row with Edit and Remove",
+      "grid": "C4:J4",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.4,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.875,
+        "y": 0.46,
+        "w": 0.0938,
+        "h": 0.04
+      },
+      "px": {
+        "x": 1120,
+        "y": 368,
+        "w": 120,
+        "h": 32
+      },
+      "aspect": 3.75,
+      "palette": [
+        {
+          "hex": "#18181b",
+          "coverage": 0.7985
+        },
+        {
+          "hex": "#18173a",
+          "coverage": 0.0957
+        },
+        {
+          "hex": "#c2c1c5",
+          "coverage": 0.0453
+        },
+        {
+          "hex": "#444544",
+          "coverage": 0.0302
+        },
+        {
+          "hex": "#3f3760",
+          "coverage": 0.0302
+        }
+      ],
+      "detail": {
+        "energy": 26.8632
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "project-ios",
+      "kind": "control",
+      "note": "ios-app project row with Edit and Remove",
+      "grid": "C5:J5",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.5,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.875,
+        "y": 0.5,
+        "w": 0.0938,
+        "h": 0.1
+      },
+      "px": {
+        "x": 1120,
+        "y": 400,
+        "w": 120,
+        "h": 80
+      },
+      "aspect": 1.5,
+      "palette": [
+        {
+          "hex": "#1b191d",
+          "coverage": 0.7903
+        },
+        {
+          "hex": "#5e639a",
+          "coverage": 0.1254
+        },
+        {
+          "hex": "#eaeceb",
+          "coverage": 0.0339
+        },
+        {
+          "hex": "#141135",
+          "coverage": 0.0257
+        },
+        {
+          "hex": "#808183",
+          "coverage": 0.0247
+        }
+      ],
+      "detail": {
+        "energy": 24.3929
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "project-web",
+      "kind": "control",
+      "note": "web project row with Edit and Remove",
+      "grid": "C6:J6",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.6,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2094,
+        "y": 0.6075,
+        "w": 0.0703,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 268,
+        "y": 486,
+        "w": 90,
+        "h": 30
+      },
+      "aspect": 3,
+      "palette": [
+        {
+          "hex": "#19191a",
+          "coverage": 0.849
+        },
+        {
+          "hex": "#efefef",
+          "coverage": 0.057
+        },
+        {
+          "hex": "#444442",
+          "coverage": 0.0369
+        },
+        {
+          "hex": "#bcbebb",
+          "coverage": 0.0369
+        },
+        {
+          "hex": "#858585",
+          "coverage": 0.0201
+        }
+      ],
+      "detail": {
+        "energy": 22.0534
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "add-project",
+      "kind": "control",
+      "note": "Add Project button",
+      "grid": "C6:D6",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.6,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2094,
+        "y": 0.6075,
+        "w": 0.0703,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 268,
+        "y": 486,
+        "w": 90,
+        "h": 30
+      },
+      "aspect": 3,
+      "palette": [
+        {
+          "hex": "#19191a",
+          "coverage": 0.849
+        },
+        {
+          "hex": "#efefef",
+          "coverage": 0.057
+        },
+        {
+          "hex": "#444442",
+          "coverage": 0.0369
+        },
+        {
+          "hex": "#bcbebb",
+          "coverage": 0.0369
+        },
+        {
+          "hex": "#858585",
+          "coverage": 0.0201
+        }
+      ],
+      "detail": {
+        "energy": 22.0534
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "providers-label",
+      "kind": "text",
+      "note": "Providers section label",
+      "grid": "C7:D7",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.7,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.7075,
+        "w": 0.0563,
+        "h": 0.0925
+      },
+      "px": {
+        "x": 256,
+        "y": 566,
+        "w": 72,
+        "h": 74
+      },
+      "aspect": 0.973,
+      "palette": [
+        {
+          "hex": "#191919",
+          "coverage": 0.8557
+        },
+        {
+          "hex": "#515150",
+          "coverage": 0.0487
+        },
+        {
+          "hex": "#929291",
+          "coverage": 0.0403
+        },
+        {
+          "hex": "#f3f2f1",
+          "coverage": 0.0319
+        },
+        {
+          "hex": "#c3c5c2",
+          "coverage": 0.0235
+        }
+      ],
+      "detail": {
+        "energy": 15.2203
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "provider-cursor",
+      "kind": "control",
+      "note": "Cursor row, key saved, password field",
+      "grid": "C7:J7",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.7,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.7075,
+        "w": 0.0563,
+        "h": 0.0925
+      },
+      "px": {
+        "x": 256,
+        "y": 566,
+        "w": 72,
+        "h": 74
+      },
+      "aspect": 0.973,
+      "palette": [
+        {
+          "hex": "#191919",
+          "coverage": 0.8557
+        },
+        {
+          "hex": "#515150",
+          "coverage": 0.0487
+        },
+        {
+          "hex": "#929291",
+          "coverage": 0.0403
+        },
+        {
+          "hex": "#f3f2f1",
+          "coverage": 0.0319
+        },
+        {
+          "hex": "#c3c5c2",
+          "coverage": 0.0235
+        }
+      ],
+      "detail": {
+        "energy": 15.2203
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "provider-codex",
+      "kind": "control",
+      "note": "Codex row, CLI login, password field",
+      "grid": "C8:J8",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.8,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.8,
+        "w": 0.0656,
+        "h": 0.09
+      },
+      "px": {
+        "x": 256,
+        "y": 640,
+        "w": 84,
+        "h": 72
+      },
+      "aspect": 1.1667,
+      "palette": [
+        {
+          "hex": "#181818",
+          "coverage": 0.8463
+        },
+        {
+          "hex": "#7f7f7d",
+          "coverage": 0.0657
+        },
+        {
+          "hex": "#474845",
+          "coverage": 0.0418
+        },
+        {
+          "hex": "#f1f1f1",
+          "coverage": 0.0403
+        },
+        {
+          "hex": "#c4c4c4",
+          "coverage": 0.006
+        }
+      ],
+      "detail": {
+        "energy": 15.5652
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "provider-grok",
+      "kind": "control",
+      "note": "Grok Build row, CLI login, password field",
+      "grid": "C8:I8",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.8,
+        "w": 0.7,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.8,
+        "w": 0.0656,
+        "h": 0.09
+      },
+      "px": {
+        "x": 256,
+        "y": 640,
+        "w": 84,
+        "h": 72
+      },
+      "aspect": 1.1667,
+      "palette": [
+        {
+          "hex": "#181818",
+          "coverage": 0.8463
+        },
+        {
+          "hex": "#7f7f7d",
+          "coverage": 0.0657
+        },
+        {
+          "hex": "#474845",
+          "coverage": 0.0418
+        },
+        {
+          "hex": "#f1f1f1",
+          "coverage": 0.0403
+        },
+        {
+          "hex": "#c4c4c4",
+          "coverage": 0.006
+        }
+      ],
+      "detail": {
+        "energy": 15.5652
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    },
+    {
+      "id": "appearance-label",
+      "kind": "text",
+      "note": "Appearance section label",
+      "grid": "C9:D9",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.9,
+        "w": 0.2,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.2,
+        "y": 0.9525,
+        "w": 0.0703,
+        "h": 0.0375
+      },
+      "px": {
+        "x": 256,
+        "y": 762,
+        "w": 90,
+        "h": 30
+      },
+      "aspect": 3,
+      "palette": [
+        {
+          "hex": "#181717",
+          "coverage": 0.8261
+        },
+        {
+          "hex": "#ececec",
+          "coverage": 0.0669
+        },
+        {
+          "hex": "#464647",
+          "coverage": 0.0435
+        },
+        {
+          "hex": "#b4b4b2",
+          "coverage": 0.0368
+        },
+        {
+          "hex": "#7c7a7c",
+          "coverage": 0.0268
+        }
+      ],
+      "detail": {
+        "energy": 23.9826
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null,
+      "type": {
+        "comp": {
+          "lines": 1,
+          "glyphs": 5,
+          "capHeightPx": 11.1,
+          "inkIsDark": false,
+          "allCaps": false,
+          "advance": 1.5058,
+          "advTall": 1.5359,
+          "advX": 0.8432,
+          "gap": 0.0301,
+          "xRatio": 0.744,
+          "stemW": 0.2506,
+          "contrast": 1.0648,
+          "serif": 0.3829,
+          "densTall": 0.5276,
+          "densX": 0.7257,
+          "weight": 0.5276
+        },
+        "widthClass": "wide",
+        "weightClass": "medium"
+      }
+    },
+    {
+      "id": "appearance-row",
+      "kind": "control",
+      "note": "Color mode Dark Light segmented control",
+      "grid": "C9:J9",
+      "coverBox": {
+        "x": 0.2,
+        "y": 0.9,
+        "w": 0.8,
+        "h": 0.1
+      },
+      "box": {
+        "x": 0.8844,
+        "y": 0.945,
+        "w": 0.075,
+        "h": 0.0525
+      },
+      "px": {
+        "x": 1132,
+        "y": 756,
+        "w": 96,
+        "h": 42
+      },
+      "aspect": 2.2857,
+      "palette": [
+        {
+          "hex": "#1a1a1b",
+          "coverage": 0.6966
+        },
+        {
+          "hex": "#8067f7",
+          "coverage": 0.1626
+        },
+        {
+          "hex": "#8574ea",
+          "coverage": 0.0631
+        },
+        {
+          "hex": "#190d28",
+          "coverage": 0.0437
+        },
+        {
+          "hex": "#4d4d4e",
+          "coverage": 0.034
+        }
+      ],
+      "detail": {
+        "energy": 10.6998
+      },
+      "medium": "semantic",
+      "plate": null,
+      "text": null
+    }
+  ]
+}

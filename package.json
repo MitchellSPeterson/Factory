@@ -11,7 +11,7 @@
     "worker": "bun worker/index.ts",
     "worker:pair": "bun worker/index.ts --pair",
     "build": "tsc -b && vite build",
-    "check": "bun test worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/mcpStdio.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
+    "check": "bun test worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/mcpStdio.test.ts src/github/connectionState.test.ts src/pages/settingsReadiness.test.ts src/jobsBoard.test.ts src/jobsProgress.test.ts src/jobNeed.test.ts src/contextViewer.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "verify": "bun scripts/verify-factory.ts"
   },
   "dependencies": {

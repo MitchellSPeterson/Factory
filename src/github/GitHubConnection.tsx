@@ -53,14 +53,14 @@ export function GitHubConnection() {
       setDevice({ ...result, clientId: clientId.trim(), interval: Math.max(5, result.interval), expiresAt: Date.now() + result.expiresIn * 1000 });
     } catch (err) { setError(err instanceof Error ? err.message : "Sign-in failed."); } finally { setBusy(false); }
   }
-  return <section className="settings-section github-connection">
-    <div className="section-heading"><div><h2>GitHub connection</h2><p>Connect GitHub to import repositories into VASA.</p></div>{connection && <span className="github-badge">Connected</span>}</div>
-    {connection ? <div className="settings-option"><div><strong>@{connection.login}</strong><span>Connected for this browser session. Reloading requires reconnecting.</span></div><button type="button" className="ghost" onClick={disconnect}>Disconnect</button></div> : <>
-      <form className="stack" onSubmit={event => { event.preventDefault(); void tokenConnect(); }}>
-        <p className="muted">Create a fine-grained token for the repositories you want to import, with read access to Contents. Metadata access is included.</p>
+  return <section id="github" className="settings-block github-connection">
+    <div className="section-heading"><div><h2>GitHub</h2>{connection ? null : <p>Connect GitHub to import repositories into VASA.</p>}</div>{connection && <span className="github-badge">Connected</span>}</div>
+    {connection ? <div className="settings-option"><div><strong>@{connection.login}</strong><span>Saved on this Factory. Other devices use the same connection.</span></div><button type="button" className="ghost" onClick={disconnect}>Disconnect</button></div> : <>
+      <form className="stack settings-panel" onSubmit={event => { event.preventDefault(); void tokenConnect(); }}>
+        <p className="muted">Needs a fine-grained token with Contents read.</p>
         <a className="text-button" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create a GitHub token ↗</a>
         <label>Personal access token<input type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} placeholder="github_pat_…" disabled={!!device || busy} /></label>
-        <p className="muted">Your token stays in memory and is sent directly to GitHub. It is not saved in Factory.</p>
+        <p className="muted">Saved on this Factory and sent to GitHub, not into source.</p>
         <button disabled={!token.trim() || busy || !!device} type="submit">{busy ? "Connecting…" : "Connect GitHub"}</button>
       </form>
       <details className="github-app-setup"><summary>Connect with a GitHub App</summary><div className="stack">

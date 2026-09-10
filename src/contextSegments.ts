@@ -44,3 +44,37 @@ export function displayContextSegments(
 }
 
 export { formatTokens };
+
+const DEFAULT_CONTEXT_WINDOW = 256_000;
+
+const MODEL_WINDOWS: Array<{ match: string; tokens: number }> = [
+  { match: "claude", tokens: 200_000 },
+  { match: "grok", tokens: 256_000 },
+  { match: "composer", tokens: 256_000 },
+  { match: "auto-smart", tokens: 256_000 },
+  { match: "gpt", tokens: 256_000 },
+];
+
+/** Context window the model will accept. Unknown models use 256k. */
+export function modelContextWindow(model: string | undefined) {
+  if (!model) return DEFAULT_CONTEXT_WINDOW;
+  const key = model.toLowerCase();
+  const hit = MODEL_WINDOWS.find((row) => key.includes(row.match));
+  return hit?.tokens ?? DEFAULT_CONTEXT_WINDOW;
+}
+
+export function latestAgentContext<T extends { contextBreakdown?: ContextBreakdown | null; usage?: UsageLike | null }>(
+  runs: readonly T[],
+) {
+  for (let index = runs.length - 1; index >= 0; index--) {
+    const run = runs[index];
+    if (!run) continue;
+    if (run.contextBreakdown || run.usage) return run;
+  }
+  return null;
+}
+
+export function contextFill(used: number, windowTokens: number) {
+  if (windowTokens <= 0 || used <= 0) return 0;
+  return Math.min(1, used / windowTokens);
+}

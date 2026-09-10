@@ -10,7 +10,7 @@ Open **Settings → GitHub** and connect your GitHub account. The connection is 
 4. If an organization requires approval, wait for that approval.
 5. Paste the token into Factory's GitHub connection form. Do not put it in source code or send it in chat.
 
-The token stays in React memory and is sent directly to `api.github.com`. Reloading or closing Factory ends the local connection. Disconnect clears it locally; revoke it in GitHub settings if you want to invalidate the token itself. Repository discovery may show repositories outside a fine-grained token's selected permissions; cloning those repositories will fail unless GitHub permits it.
+The token is stored in this Factory instance and sent directly to `api.github.com`. Every client device using this instance shares the connection. Disconnect removes it from Factory; revoke it in GitHub settings if you want to invalidate the token itself. Repository discovery may show repositories outside a fine-grained token's selected permissions; cloning those repositories will fail unless GitHub permits it.
 
 ## Connect with a GitHub App
 
@@ -22,7 +22,7 @@ The token stays in React memory and is sent directly to `api.github.com`. Reload
 6. In Factory, expand **Connect with a GitHub App**, enter the public **Client ID** (not App ID), and click sign in.
 7. Open GitHub's device verification page using the displayed link and enter the code. Factory completes sign-in automatically.
 
-Only the public client ID is saved in localStorage. Device authorization passes through two stateless Convex actions because GitHub's login endpoints do not support browser CORS. The resulting user access token stays in browser memory. No GitHub credentials are persisted in Factory tables. GitHub enforces access as the intersection of the App installation and the authorizing user's permissions. Tokens are not automatically refreshed; reconnect when one expires.
+The public client ID stays in this browser. Device authorization passes through two stateless Convex actions because GitHub's login endpoints do not support browser CORS. The resulting user access token is stored in this Factory instance. GitHub enforces access as the intersection of the App installation and the authorizing user's permissions. Tokens are not automatically refreshed; reconnect when one expires.
 
 ## Scope
 
@@ -32,6 +32,6 @@ A Job can still record a GitHub issue URL, milestone, and tags from the New Job 
 
 ## Verification
 
-Run `bun run check` and `bun run build`. The GitHub tests cover credential destination, cancellation propagation, and access/rate-limit errors. Complete a live sign-in and import a selected private repository after supplying your own token or registering the App.
+Run `bun run check` and `bun run build`. The GitHub tests cover credential destination, cancellation propagation, access/rate-limit errors, and storing the connection on the Factory instance. Complete a live sign-in and import a selected private repository after supplying your own token or registering the App.
 
 For automatic cloning and environment settings, see [worker settings](worker-settings.md).

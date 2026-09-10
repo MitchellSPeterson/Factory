@@ -1,0 +1,240 @@
+{
+  "tool": "build-phase",
+  "version": 2,
+  "startedAt": "2026-09-10T03:30:32.089Z",
+  "comp": "/Users/mitchell/Projects/Factory/.impeccable/mocks/decision/assigned.jpg",
+  "direction": null,
+  "breakpoint": "1280x800",
+  "artifact": null,
+  "phase": "hero",
+  "phases": {
+    "comps": {
+      "status": "skipped",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [
+        {
+          "at": "2026-09-10T03:30:32.089Z",
+          "text": "started with an approved comp; the comp round happened before this state (surface round or manual)"
+        }
+      ],
+      "gate": null,
+      "forced": null
+    },
+    "spec": {
+      "status": "closed",
+      "openedAt": "2026-09-10T03:30:32.089Z",
+      "closedAt": "2026-09-10T03:32:29.917Z",
+      "attempts": 2,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "24 regions, 0 plates, 7 text regions measured",
+        "at": "2026-09-10T03:32:29.917Z"
+      },
+      "forced": null
+    },
+    "plates": {
+      "status": "closed",
+      "openedAt": "2026-09-10T03:32:29.917Z",
+      "closedAt": "2026-09-10T03:32:31.940Z",
+      "attempts": 1,
+      "notes": [],
+      "gate": {
+        "ok": true,
+        "reasons": [],
+        "summary": "no plates owed",
+        "at": "2026-09-10T03:32:31.940Z"
+      },
+      "forced": null
+    },
+    "hero": {
+      "status": "open",
+      "openedAt": "2026-09-10T03:32:31.940Z",
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": {
+        "ok": false,
+        "reasons": [
+          "hero overall 58.7% < 72% (structure 76%, color 97%, detail 31%)",
+          "region title is missing (detail 0%, structure 50%): the comp shows material the build does not",
+          "region github-row is missing (detail 0%, structure 67%): the comp shows material the build does not",
+          "region projects-label is missing (detail 0%, structure 60%): the comp shows material the build does not",
+          "region project-factory is missing (detail 0%, structure 62%): the comp shows material the build does not",
+          "region project-ios is missing (detail 0%, structure 52%): the comp shows material the build does not",
+          "region project-web is missing (detail 2%, structure 55%): the comp shows material the build does not",
+          "region add-project is missing (detail 2%, structure 55%): the comp shows material the build does not",
+          "region providers-label is missing (detail 1%, structure 60%): the comp shows material the build does not",
+          "region provider-cursor is missing (detail 1%, structure 60%): the comp shows material the build does not",
+          "region provider-codex is missing (detail 0%, structure 63%): the comp shows material the build does not",
+          "region provider-grok is missing (detail 0%, structure 63%): the comp shows material the build does not",
+          "region appearance-label is missing (detail 13%, structure 43%): the comp shows material the build does not",
+          "region appearance-row is missing (detail 9%, structure 48%): the comp shows material the build does not",
+          "region sidebar-settings (control) is contradicted (structure 36%, detail added 3%): this control does not read as the comp's: rebuild its chrome from the crop (border, fill, radius, chevron or arrow, label size) rather than from a component default",
+          "control sidebar-switcher drifts to 62% (structure 63%, color 92%): its chrome differs from the comp's; open .impeccable/review/diff/hero/regions/sidebar-switcher.png and match the border, fill, radius, chevron or arrow, and label size",
+          "control readout-projects drifts to 63% (structure 64%, color 85%): its chrome differs from the comp's; open .impeccable/review/diff/hero/regions/readout-projects.png and match the border, fill, radius, chevron or arrow, and label size",
+          "control machine-row drifts to 57% (structure 50%, color 88%): its chrome differs from the comp's; open .impeccable/review/diff/hero/regions/machine-row.png and match the border, fill, radius, chevron or arrow, and label size",
+          "region provider-cursor: its ink sits in a 51x60px box in the comp and 44x35px in the build (padding, row height, or size); match the box, not only the position",
+          "region provider-codex: its ink sits in a 67x61px box in the comp and 38x23px in the build (padding, row height, or size); match the box, not only the position",
+          "region provider-grok: its ink sits in a 67x61px box in the comp and 38x23px in the build (padding, row height, or size); match the box, not only the position",
+          "READINGS, each one CSS edit (8 of 9, the rest after these):",
+          "text purpose: letter-spacing is wider than the comp's (gap 0.129 vs 0.029 of the cap height); set letter-spacing to close it by about 1px",
+          "text machine-label: letter-spacing is wider than the comp's (gap 0.097 vs 0.059 of the cap height); set letter-spacing to close it by about 0px",
+          "text providers-label: the face renders 37% heavier than the comp's (ink density 0.74 vs 0.54); drop a weight step or use the ranked face",
+          "text appearance-label: ink is #181818 in the build, #ececec in the comp; use the comp's colour",
+          "text purpose: it starts 36px further right than in the comp",
+          "text github-label: it starts 46px further right than in the comp",
+          "text providers-label: its first line starts 29px lower than in the comp (39px vs 10px into the region box); the spacing above it is too large",
+          "text providers-label: it starts 18px further right than in the comp",
+          "the build carries ink in 11 grid cells where the comp is calm (D3, D4, D5, D6, A8, D9, E9, F9, G9, H9, I9); nothing exists on the page that the comp does not show (a kicker, an extra nav item, a divider, a second row of controls); remove it or name it in a stated decision after the hero passes"
+        ],
+        "summary": "hero 59% (contradicted)",
+        "score": 0.5871,
+        "verdict": "contradicted",
+        "report": ".impeccable/review/diff/hero/report.json",
+        "sideBySide": "/Users/mitchell/Projects/Factory/.impeccable/review/diff/hero/side-by-side.png",
+        "worst": [
+          "sidebar-settings contradicted 30%",
+          "appearance-row missing 44%",
+          "project-ios missing 45%"
+        ],
+        "worstIds": [
+          "sidebar-settings",
+          "appearance-row",
+          "project-ios"
+        ],
+        "worstCrops": [
+          {
+            "id": "sidebar-settings",
+            "verdict": "contradicted",
+            "score": {
+              "overall": 0.3039,
+              "structure": 0.3572,
+              "color": 0.2926,
+              "colorIntersection": 0.2389,
+              "paletteMatch": 0.3215,
+              "detail": 0.2037,
+              "detailRaw": 0.2193,
+              "detailAdded": 0.0313,
+              "bands": 0.52
+            },
+            "file": ".impeccable/review/diff/hero/regions/sidebar-settings.png"
+          },
+          {
+            "id": "appearance-row",
+            "verdict": "missing",
+            "score": {
+              "overall": 0.4438,
+              "structure": 0.4802,
+              "color": 0.6003,
+              "colorIntersection": 0.4696,
+              "paletteMatch": 0.6706,
+              "detail": 0.0882,
+              "detailRaw": 0.1195,
+              "detailAdded": 0.0625,
+              "bands": 0.52
+            },
+            "file": ".impeccable/review/diff/hero/regions/appearance-row.png"
+          },
+          {
+            "id": "project-ios",
+            "verdict": "missing",
+            "score": {
+              "overall": 0.4503,
+              "structure": 0.524,
+              "color": 0.6128,
+              "colorIntersection": 0.4708,
+              "paletteMatch": 0.6892,
+              "detail": 0.0002,
+              "detailRaw": 0.0002,
+              "detailAdded": 0,
+              "bands": 0.4
+            },
+            "file": ".impeccable/review/diff/hero/regions/project-ios.png"
+          }
+        ],
+        "regionVerdicts": {
+          "sidebar-brand": "drift",
+          "sidebar-switcher": "drift",
+          "sidebar-nav": "match",
+          "sidebar-settings": "contradicted",
+          "title": "missing",
+          "purpose": "drift",
+          "readout-github": "drift",
+          "readout-machine": "drift",
+          "readout-projects": "drift",
+          "machine-label": "drift",
+          "machine-row": "drift",
+          "github-label": "drift",
+          "github-row": "missing",
+          "projects-label": "missing",
+          "project-factory": "missing",
+          "project-ios": "missing",
+          "project-web": "missing",
+          "add-project": "missing",
+          "providers-label": "missing",
+          "provider-cursor": "missing",
+          "provider-codex": "missing",
+          "provider-grok": "missing",
+          "appearance-label": "missing",
+          "appearance-row": "missing"
+        },
+        "at": "2026-09-10T03:42:43.768Z"
+      },
+      "forced": null,
+      "readingsSeen": {
+        "text purpose: letter-spacing is wider than the comp's (gap 0.129 vs 0.029 of the cap height); set letter-spacing to close it by about 1px": 1,
+        "text machine-label: letter-spacing is wider than the comp's (gap 0.097 vs 0.059 of the cap height); set letter-spacing to close it by about 0px": 1,
+        "text providers-label: the face renders 37% heavier than the comp's (ink density 0.74 vs 0.54); drop a weight step or use the ranked face": 1,
+        "text appearance-label: ink is #181818 in the build, #ececec in the comp; use the comp's colour": 1,
+        "text purpose: it starts 36px further right than in the comp": 1,
+        "text github-label: it starts 46px further right than in the comp": 1,
+        "text providers-label: its first line starts 29px lower than in the comp (39px vs 10px into the region box); the spacing above it is too large": 1,
+        "text providers-label: it starts 18px further right than in the comp": 1,
+        "control sidebar-switcher: its rule sits 10px into the box in the comp and 3px in the build (-7px), so the strip is shorter than the comp's; match the height, not only the position": 1
+      },
+      "records": 1
+    },
+    "sections": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "motion": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "responsive": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    },
+    "review": {
+      "status": "pending",
+      "openedAt": null,
+      "closedAt": null,
+      "attempts": 0,
+      "notes": [],
+      "gate": null,
+      "forced": null
+    }
+  },
+  "finish": null,
+  "plates": {}
+}

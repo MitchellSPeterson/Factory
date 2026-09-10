@@ -1,0 +1,28 @@
+{
+  "regions": [
+    { "id": "sidebar-brand", "kind": "chrome", "grid": "A0:B0", "note": "VASA wordmark and Agentic Software Factory tagline" },
+    { "id": "sidebar-switcher", "kind": "control", "grid": "A1:B1", "note": "Working on label and View all project switcher" },
+    { "id": "sidebar-nav", "kind": "chrome", "grid": "A2:B8", "note": "Work and Build nav groups" },
+    { "id": "sidebar-settings", "kind": "control", "grid": "A9:B9", "note": "Settings nav item current, collapse control below it" },
+    { "id": "title", "kind": "text", "grid": "C0:D0", "note": "Settings heading" },
+    { "id": "purpose", "kind": "text", "grid": "C0:E1", "note": "Whether this Factory can run a Job." },
+    { "id": "readout-github", "kind": "control", "grid": "C1:E1", "note": "GitHub @mitchell connected status" },
+    { "id": "readout-machine", "kind": "control", "grid": "F1:G1", "note": "This machine online status" },
+    { "id": "readout-projects", "kind": "control", "grid": "H1:J1", "note": "Projects 3 ready status" },
+    { "id": "machine-label", "kind": "text", "grid": "C2:D2", "note": "This machine section label" },
+    { "id": "machine-row", "kind": "control", "grid": "C2:J2", "note": "Factory-MBP online row with Lock" },
+    { "id": "github-label", "kind": "text", "grid": "C3:D3", "note": "GitHub section label" },
+    { "id": "github-row", "kind": "control", "grid": "C3:J3", "note": "@mitchell connected row with Disconnect" },
+    { "id": "projects-label", "kind": "text", "grid": "C4:D4", "note": "Projects section label" },
+    { "id": "project-factory", "kind": "control", "grid": "C4:J4", "note": "Factory project row with Edit and Remove" },
+    { "id": "project-ios", "kind": "control", "grid": "C5:J5", "note": "ios-app project row with Edit and Remove" },
+    { "id": "project-web", "kind": "control", "grid": "C6:J6", "note": "web project row with Edit and Remove" },
+    { "id": "add-project", "kind": "control", "grid": "C6:D6", "note": "Add Project button" },
+    { "id": "providers-label", "kind": "text", "grid": "C7:D7", "note": "Providers section label" },
+    { "id": "provider-cursor", "kind": "control", "grid": "C7:J7", "note": "Cursor row, key saved, password field" },
+    { "id": "provider-codex", "kind": "control", "grid": "C8:J8", "note": "Codex row, CLI login, password field" },
+    { "id": "provider-grok", "kind": "control", "grid": "C8:I8", "note": "Grok Build row, CLI login, password field" },
+    { "id": "appearance-label", "kind": "text", "grid": "C9:D9", "note": "Appearance section label" },
+    { "id": "appearance-row", "kind": "control", "grid": "C9:J9", "note": "Color mode Dark Light segmented control" }
+  ]
+}
