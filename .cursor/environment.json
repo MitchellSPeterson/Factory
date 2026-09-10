@@ -1,0 +1,25 @@
+{
+  "name": "Factory",
+  "install": "./.cursor/install.sh",
+  "terminals": [
+    {
+      "name": "convex",
+      "description": "Isolated anonymous Convex backend (serves port 3210 and watches functions).",
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\" && export CONVEX_AGENT_MODE=anonymous && bunx convex dev"
+    },
+    {
+      "name": "worker",
+      "description": "Factory worker that drives the Job state machine. Runs in mock mode unless CURSOR_API_KEY is set.",
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\" && until curl -sf http://127.0.0.1:3210/version >/dev/null 2>&1; do sleep 1; done && export CONVEX_URL=http://127.0.0.1:3210 && bun run dev:worker"
+    },
+    {
+      "name": "frontend",
+      "description": "Vite dev server for the Factory UI on port 5173.",
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\" && bun run dev:frontend"
+    }
+  ],
+  "ports": [
+    { "name": "frontend", "port": 5173 },
+    { "name": "convex", "port": 3210 }
+  ]
+}
