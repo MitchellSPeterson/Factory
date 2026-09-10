@@ -8,12 +8,10 @@ import { useProjectScope } from "../projectScope";
 
 export function NewJobForm({
   initialProjectId,
-  initialDraft,
   onComplete,
   lockProject = false,
 }: {
   initialProjectId?: string;
-  initialDraft?: { request: string; githubIssueUrl: string; milestone: string; tags: string };
   onComplete?: (jobId: Id<"jobs">) => void;
   lockProject?: boolean;
 }) {
@@ -24,13 +22,13 @@ export function NewJobForm({
   const navigate = useNavigate();
   const { projectId: scopedProjectId } = useProjectScope();
   const [projectId, setProjectId] = useState(initialProjectId ?? scopedProjectId);
-  const [request, setRequest] = useState(initialDraft?.request ?? "");
+  const [request, setRequest] = useState("");
   const [runtime, setRuntime] = useState<"local" | "cloud">("local");
   const [forceGrill, setForceGrill] = useState(false);
   const [recipeId, setRecipeId] = useState("");
-  const [githubIssueUrl, setGithubIssueUrl] = useState(initialDraft?.githubIssueUrl ?? "");
-  const [milestone, setMilestone] = useState(initialDraft?.milestone ?? "");
-  const [tags, setTags] = useState(initialDraft?.tags ?? "");
+  const [githubIssueUrl, setGithubIssueUrl] = useState("");
+  const [milestone, setMilestone] = useState("");
+  const [tags, setTags] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -174,7 +172,7 @@ export function NewJobForm({
           </p>
         ) : null}
         {selected?.serverId && selected.cloneStatus !== "ready" && <p className="muted">Wait for cloning to finish before starting a Job.</p>}
-        {selected?.serverId && server?.id !== selected.serverId && <p className="muted">Pair this Project’s worker in Settings before starting a Job.</p>}
+        {selected?.serverId && server?.id !== selected.serverId && <p className="muted">Pair this machine in Settings before starting a Job.</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <button type="submit" disabled={!selected || submitting || !request.trim() || (!!selected.serverId && (selected.cloneStatus !== "ready" || server?.id !== selected.serverId))}>{submitting ? "Starting…" : "Start job"}</button>
       </form>

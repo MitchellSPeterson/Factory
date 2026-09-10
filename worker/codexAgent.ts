@@ -23,7 +23,7 @@ export type CodexAgentOptions = {
 };
 
 export async function runCodexAgent(opts: CodexAgentOptions) {
-  if (opts.runtime !== "local") throw new Error("Codex requires a local Run on the Project’s worker.");
+  if (opts.runtime !== "local") throw new Error("Codex requires a local Run on this machine.");
   const env = Object.fromEntries(Object.entries(opts.env ?? process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   // The OpenAI-compatible runner may target a different service on this worker.
   delete env.OPENAI_BASE_URL;

@@ -9,6 +9,7 @@ import { resolveProvider, type AgentProvider, type AGENT_EFFORTS, toModelSelecti
 import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
+import { runGrokAgent } from "./grokAgent";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
@@ -354,12 +355,33 @@ async function runCodex(client: ConvexHttpClient, launch: Launch) {
   }
 }
 
+async function runGrok(client: ConvexHttpClient, launch: Launch) {
+  const log = createLiveLog(text => client.mutation(api.worker.appendMessage, { runId: launch.runId, text }));
+  try {
+    await reportLaunchContext(client, launch.runId, launch);
+    await runGrokAgent({
+      ...launch,
+      root,
+      workingDirectory: launch.project.localPath,
+      convexUrl: client.url,
+      prompt: assemblePrompt({ stageKey: launch.stageKey, request: launch.request, projectName: launch.project.name, projectKind: launch.project.kind, acceptedSpec: launch.acceptedSpec, skills: launch.skills }),
+      onSessionId: agentId => client.mutation(api.worker.bindAgent, { runId: launch.runId, agentId: `grok-${agentId}` }),
+      onText: text => log.push(text),
+      onUsage: usage => reportUsage(client, launch.runId, usage),
+      getStatus: () => client.query(api.worker.getRunStatus, { runId: launch.runId }),
+    });
+  } finally {
+    await log.close();
+  }
+}
+
 // Each Run gets its own process so one Project's environment cannot leak into
 // another Run, and settings updates do not mutate an active Run.
 async function execute(client: ConvexHttpClient, launch: Launch, projectEnv: Record<string, string>) {
   const provider = resolveProvider(launch.provider, process.env.FACTORY_PROVIDER);
   if (process.env.FACTORY_MOCK === "1") await mockRun(client, launch);
   else if (provider === "codex") await runCodex(client, launch);
+  else if (provider === "grok") await runGrok(client, launch);
   else if (provider === "openai") await runOpenAI(client, launch);
   else if (!process.env.CURSOR_API_KEY) throw new Error("Set CURSOR_API_KEY in Settings → Worker environment before starting a Run.");
   else await runCursor(client, launch, projectEnv);

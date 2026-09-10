@@ -8,7 +8,7 @@ export const projectKind = v.union(
 
 export const runtime = v.union(v.literal("local"), v.literal("cloud"));
 
-export const agentProvider = v.union(v.literal("cursor"), v.literal("codex"), v.literal("openai"));
+export const agentProvider = v.union(v.literal("cursor"), v.literal("codex"), v.literal("grok"), v.literal("openai"));
 
 export const agentModel = v.string();
 

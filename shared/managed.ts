@@ -1,9 +1,9 @@
-export const serverVariableNames = ["FACTORY_PROVIDER", "CURSOR_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "CODEX_API_KEY", "CODEX_BASE_URL", "CODEX_PATH"] as const;
+export const serverVariableNames = ["FACTORY_PROVIDER", "CURSOR_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "CODEX_API_KEY", "CODEX_BASE_URL", "CODEX_PATH", "XAI_API_KEY", "GROK_PATH"] as const;
 export function validateVariableName(name: string, server: boolean) {
   if (!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name)) throw new Error("Use an environment variable name such as DATABASE_URL.");
   if (server) {
     if (!(serverVariableNames as readonly string[]).includes(name)) throw new Error("Choose a supported server setting.");
-  } else if (/^(FACTORY_|CONVEX_|CURSOR_|CODEX_|OPENAI_|GIT_|BUN_|NODE_|LD_|DYLD_)/.test(name) || ["PATH", "HOME", "SHELL", "ENV", "BASH_ENV", "ZDOTDIR", "NODE_OPTIONS"].includes(name)) {
+  } else if (/^(FACTORY_|CONVEX_|CURSOR_|CODEX_|GROK_|XAI_|OPENAI_|GIT_|BUN_|NODE_|LD_|DYLD_)/.test(name) || ["PATH", "HOME", "SHELL", "ENV", "BASH_ENV", "ZDOTDIR", "NODE_OPTIONS"].includes(name)) {
     throw new Error("This name is reserved for worker configuration.");
   }
 }

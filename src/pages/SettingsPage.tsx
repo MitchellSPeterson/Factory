@@ -3,7 +3,7 @@ import { AddGitHubProject } from "../servers/AddGitHubProject";
 import { useServer } from "../servers/connection";
 import { useMutation, useQuery } from "convex/react";
 import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useProjectScope, useTheme } from "../projectScope";
@@ -12,6 +12,9 @@ import { GitHubConnection } from "../github/GitHubConnection";
 import { RepositoryField } from "../github/RepositoryField";
 
 export function SettingsPage() {
+  const [params, setParams] = useSearchParams();
+  const requestedTab = params.get("tab");
+  const tab = (["general", "github", "projects", "providers"] as const).includes(requestedTab as SettingsTab) ? requestedTab as SettingsTab : "general";
   const { accessKey } = useServer();
   const projects = useQuery(api.projects.list);
   const recipes = useQuery(api.recipes.list);
@@ -38,15 +41,17 @@ export function SettingsPage() {
     if (projectId === id) setProjectId("");
   }
 
+  function selectTab(value: SettingsTab) { setParams(value === "general" ? {} : { tab: value }); }
+
   return <>
-    <div className="pagehead"><div><p className="eyebrow">Settings</p><h1>Projects</h1><p className="muted">Add a repository to Factory or remove one you no longer work on.</p></div></div>
-    <section className="settings-section"><div className="section-heading"><div><h2>Appearance</h2><p>Choose the color mode that is easiest on your eyes.</p></div></div>
+    <div className="pagehead"><div><p className="eyebrow">Settings</p><h1>{tabLabel(tab)}</h1><p className="muted">{tabDescription(tab)}</p></div></div>
+    <nav className="settings-tabs" aria-label="Settings sections">{(["general", "github", "projects", "providers"] as const).map(value => <button type="button" key={value} className={tab === value ? "active" : ""} aria-current={tab === value ? "page" : undefined} onClick={() => selectTab(value)}>{tabLabel(value)}</button>)}</nav>
+    {tab === "general" && <section className="settings-section"><div className="section-heading"><div><h2>Appearance</h2><p>Choose the color mode that is easiest on your eyes.</p></div></div>
       <div className="settings-option"><div><strong>Color mode</strong><span>{theme === "dark" ? "Dark mode is active" : "Light mode is active"}</span></div><div className="theme-toggle" aria-label="Color mode"><button className={theme === "dark" ? "active" : ""} onClick={() => setTheme("dark")} type="button">Dark</button><button className={theme === "light" ? "active" : ""} onClick={() => setTheme("light")} type="button">Light</button></div></div>
-    </section>
-    <GitHubConnection />
-    <WorkerSettings />
-    <AddGitHubProject />
-    <section className="settings-section"><div className="section-heading"><div><h2>Connected Projects</h2><p>Use the sidebar switcher to choose your active Project.</p></div></div>
+    </section>}
+    {tab === "github" && <><GitHubConnection /><AddGitHubProject /></>}
+    {tab === "providers" && <WorkerSettings />}
+    {tab === "projects" && <><section className="settings-section"><div className="section-heading"><div><h2>Connected Projects</h2><p>Use the sidebar switcher to choose your active Project.</p></div></div>
       <div className="settings-project-list">
         {projects?.map((project) => <div className="settings-project" key={project._id}><div><strong>{project.name}</strong><span>{project.githubRepo || project.localPath}{project.cloneStatus ? ` · ${project.cloneStatus}` : ""}</span></div><div className="row"><Link className="text-button" to={`/projects/${project._id}`}>Edit</Link><button className="danger-button" type="button" onClick={() => void removeProject(project._id, project.name)}>Remove</button></div></div>)}
       </div>
@@ -61,6 +66,15 @@ export function SettingsPage() {
         <label>Workflow<select value={recipeId} onChange={(event) => setRecipeId(event.target.value)}><option value="">Feature (default)</option>{recipes?.map((recipe) => <option key={recipe._id} value={recipe._id}>{recipe.name}</option>)}</select></label>
         <button type="submit">Add project</button>
       </form>
-    </section>
+    </section></>}
   </>;
+}
+
+type SettingsTab = "general" | "github" | "projects" | "providers";
+function tabLabel(tab: SettingsTab) { return tab === "github" ? "GitHub" : tab[0]!.toUpperCase() + tab.slice(1); }
+function tabDescription(tab: SettingsTab) {
+  if (tab === "github") return "Connect GitHub and import repositories into VASA.";
+  if (tab === "projects") return "Add a repository to VASA or remove one you no longer work on.";
+  if (tab === "providers") return "Authenticate the Agent providers that run Jobs on this machine.";
+  return "Manage VASA’s workspace preferences.";
 }

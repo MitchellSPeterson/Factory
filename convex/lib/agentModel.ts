@@ -37,10 +37,11 @@ export function toModelSelection(model: string, effort: string) {
 }
 
 export const CODEX_MODELS = ["gpt-5.6-terra", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"] as const;
-export const AGENT_PROVIDERS = ["cursor", "codex", "openai"] as const;
+export const GROK_MODELS = ["grok-4.6", "grok-4.5", "grok-build-0.1"] as const;
+export const AGENT_PROVIDERS = ["cursor", "codex", "grok", "openai"] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 export function providerLabel(provider?: AgentProvider) {
-  return provider === "codex" ? "Codex" : provider === "cursor" ? "Cursor" : provider === "openai" ? "OpenAI-compatible API" : "Worker default";
+  return provider === "codex" ? "Codex" : provider === "cursor" ? "Cursor" : provider === "grok" ? "Grok Build" : provider === "openai" ? "OpenAI-compatible API" : "Worker default";
 }
 
 /** Older Agents and unassigned Stages retain the worker's configured provider. */

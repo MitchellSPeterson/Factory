@@ -54,17 +54,17 @@ export function GitHubConnection() {
     } catch (err) { setError(err instanceof Error ? err.message : "Sign-in failed."); } finally { setBusy(false); }
   }
   return <section className="settings-section github-connection">
-    <div className="section-heading"><div><h2>GitHub connection</h2><p>Bring repositories, issues, pull requests, and CI into Factory.</p></div>{connection && <span className="github-badge">Connected</span>}</div>
+    <div className="section-heading"><div><h2>GitHub connection</h2><p>Connect GitHub to import repositories into VASA.</p></div>{connection && <span className="github-badge">Connected</span>}</div>
     {connection ? <div className="settings-option"><div><strong>@{connection.login}</strong><span>Connected for this browser session. Reloading requires reconnecting.</span></div><button type="button" className="ghost" onClick={disconnect}>Disconnect</button></div> : <>
       <form className="stack" onSubmit={event => { event.preventDefault(); void tokenConnect(); }}>
-        <p className="muted">Create a fine-grained token for the repositories you want to use, with read access to Contents, Issues, Pull requests, and Actions. Metadata access is included.</p>
+        <p className="muted">Create a fine-grained token for the repositories you want to import, with read access to Contents. Metadata access is included.</p>
         <a className="text-button" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">Create a GitHub token ↗</a>
         <label>Personal access token<input type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} placeholder="github_pat_…" disabled={!!device || busy} /></label>
         <p className="muted">Your token stays in memory and is sent directly to GitHub. It is not saved in Factory.</p>
         <button disabled={!token.trim() || busy || !!device} type="submit">{busy ? "Connecting…" : "Connect GitHub"}</button>
       </form>
       <details className="github-app-setup"><summary>Connect with a GitHub App</summary><div className="stack">
-        <p>Register a GitHub App, enable Device Flow, and grant read access to Contents, Issues, Pull requests, and Actions. Install it on the repositories you want Factory to access, then enter its public client ID.</p>
+        <p>Register a GitHub App, enable Device Flow, and grant read access to Contents. Install it on the repositories you want VASA to access, then enter its public client ID.</p>
         <a className="text-button" href="https://github.com/settings/apps/new" target="_blank" rel="noreferrer">Register a GitHub App ↗</a>
         <label>GitHub App client ID<input value={clientId} onChange={event => setClientId(event.target.value)} placeholder="Iv…" disabled={!!device || busy} /></label>
         {device ? <div className="github-device" role="status"><p>Enter this code on GitHub:</p><strong>{device.userCode}</strong><a className="button" href="https://github.com/login/device" target="_blank" rel="noreferrer">Open GitHub ↗</a><p>Waiting for authorization…</p><button className="ghost" onClick={() => setDevice(null)}>Cancel</button></div> : <button type="button" disabled={!clientId.trim() || busy} onClick={() => void appConnect()}>Sign in with GitHub App</button>}
