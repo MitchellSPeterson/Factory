@@ -1,19 +1,26 @@
-import { Codex, type CodexOptions, type ThreadOptions, type ThreadEvent } from "@openai/codex-sdk";
+import { Codex, type CodexOptions, type Input, type ThreadOptions, type ThreadEvent } from "@openai/codex-sdk";
 import path from "node:path";
 import type { AGENT_EFFORTS } from "../convex/lib/agentModel";
 import { addUsage, ZERO_USAGE } from "../convex/lib/tokenUsage";
 import { fromCodexUsage } from "./usage";
 
-type CodexClient = { startThread(options: ThreadOptions): { runStreamed(prompt: string): Promise<{ events: AsyncIterable<ThreadEvent> }> } };
+type ThreadHandle = { runStreamed(input: Input): Promise<{ events: AsyncIterable<ThreadEvent> }> };
+type CodexClient = {
+  startThread(options: ThreadOptions): ThreadHandle;
+  resumeThread?: (id: string, options?: ThreadOptions) => ThreadHandle;
+};
 export type CodexAgentOptions = {
   runtime: "local" | "cloud";
   root: string;
   workingDirectory: string;
   convexUrl: string;
-  runId: string;
+  runId?: string;
+  mode?: "stage" | "session";
+  resumeThreadId?: string;
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
   prompt: string;
+  imagePaths?: string[];
   env?: Record<string, string | undefined>;
   onThreadId: (id: string) => Promise<unknown>;
   onText: (text: string) => void;
@@ -23,45 +30,57 @@ export type CodexAgentOptions = {
 };
 
 export async function runCodexAgent(opts: CodexAgentOptions) {
-  if (opts.runtime !== "local") throw new Error("Codex requires a local Run on this machine.");
+  const mode = opts.mode ?? "stage";
+  if (opts.runtime !== "local") throw new Error(mode === "session" ? "Codex requires a local Session on this machine." : "Codex requires a local Run on this machine.");
   const env = Object.fromEntries(Object.entries(opts.env ?? process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   // The OpenAI-compatible runner may target a different service on this worker.
   delete env.OPENAI_BASE_URL;
+  const config: CodexOptions["config"] = { model_provider: "openai" };
+  if (mode === "stage" && opts.runId) {
+    config.mcp_servers = {
+      factory: {
+        command: process.execPath,
+        args: [path.join(opts.root, "worker/mcpStdio.mjs")],
+        env: { CONVEX_URL: opts.convexUrl, FACTORY_RUN_ID: opts.runId, FACTORY_MCP_TRANSPORT: "jsonl" },
+        required: true,
+        // Human Asks can remain pending overnight.
+        tool_timeout_sec: 604800,
+      },
+    };
+  }
   const codex = (opts.createClient ?? (options => new Codex(options)))({
     apiKey: env.CODEX_API_KEY || env.OPENAI_API_KEY || undefined,
     baseUrl: env.CODEX_BASE_URL || undefined,
     codexPathOverride: env.CODEX_PATH || undefined,
     env,
-    config: {
-      model_provider: "openai",
-      mcp_servers: {
-        factory: {
-          command: process.execPath,
-          args: [path.join(opts.root, "worker/mcpStdio.mjs")],
-          env: { CONVEX_URL: opts.convexUrl, FACTORY_RUN_ID: opts.runId, FACTORY_MCP_TRANSPORT: "jsonl" },
-          required: true,
-          // Human Asks can remain pending overnight.
-          tool_timeout_sec: 604800,
-        },
-      },
-    },
+    config,
   });
-  const thread = codex.startThread({
+  const threadOptions: ThreadOptions = {
     model: opts.model,
     modelReasoningEffort: opts.effort,
     workingDirectory: opts.workingDirectory,
     sandboxMode: "workspace-write",
     approvalPolicy: "never",
     networkAccessEnabled: true,
-  });
-  const { events } = await thread.runStreamed(opts.prompt);
+  };
+  const thread = opts.resumeThreadId && codex.resumeThread
+    ? codex.resumeThread(opts.resumeThreadId, threadOptions)
+    : codex.startThread(threadOptions);
+  const imagePaths = opts.imagePaths ?? [];
+  const input: Input = imagePaths.length === 0
+    ? opts.prompt
+    : [
+        { type: "text", text: opts.prompt.trim() === "" ? "See the attached image." : opts.prompt },
+        ...imagePaths.map((path) => ({ type: "local_image" as const, path })),
+      ];
+  const { events } = await thread.runStreamed(input);
   const seenText = new Map<string, string>();
   let completed = false;
   let usage = ZERO_USAGE;
   for await (const event of events) {
     if (event.type === "thread.started") await opts.onThreadId(event.thread_id);
     if (event.type === "error" || event.type === "turn.failed") {
-      throw new Error("Codex Run failed. Check Codex authentication, model access, and worker configuration.");
+      throw new Error(mode === "session" ? "Codex Session failed. Check Codex authentication, model access, and worker configuration." : "Codex Run failed. Check Codex authentication, model access, and worker configuration.");
     }
     if (event.type === "turn.completed") {
       completed = true;
@@ -85,6 +104,10 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
   }
   await opts.onUsage?.(usage);
   const status = await opts.getStatus();
-  if (status === "failed") return;
+  if (status === "failed" || status === "stopped") return;
+  if (mode === "session") {
+    if (!completed) throw new Error("Codex Session turn did not complete.");
+    return;
+  }
   if (!completed || status !== "finished") throw new Error("Codex stopped without completing the Stage through finish_stage.");
 }

@@ -34,6 +34,15 @@ export async function requireRun(
   return run;
 }
 
+export async function requireSession(
+  ctx: QueryCtx | MutationCtx,
+  sessionId: Id<"sessions">,
+): Promise<Doc<"sessions">> {
+  const session = await ctx.db.get(sessionId);
+  if (!session) throw new Error("Session not found");
+  return session;
+}
+
 export async function latestVerdict(
   ctx: QueryCtx | MutationCtx,
   jobId: Id<"jobs">,

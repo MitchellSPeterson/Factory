@@ -128,6 +128,18 @@ export const unchangedReason = v.union(
   v.literal("superseded"),
 );
 
+export const sessionProvider = v.union(v.literal("grok"), v.literal("codex"));
+
+export const sessionStatus = v.union(
+  v.literal("idle"),
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("failed"),
+  v.literal("stopped"),
+);
+
+export const sessionMessageRole = v.union(v.literal("user"), v.literal("assistant"));
+
 export const askKind = v.union(
   v.literal("grill"),
   v.literal("generic"),

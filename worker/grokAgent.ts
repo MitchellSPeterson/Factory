@@ -1,3 +1,5 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { AGENT_EFFORTS } from "../convex/lib/agentModel";
 import type { TokenUsage } from "./usage";
@@ -7,10 +9,13 @@ export type GrokAgentOptions = {
   root: string;
   workingDirectory: string;
   convexUrl: string;
-  runId: string;
+  runId?: string;
+  mode?: "stage" | "session";
+  resumeSessionId?: string;
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
   prompt: string;
+  imagePaths?: string[];
   env?: Record<string, string | undefined>;
   onSessionId: (id: string) => Promise<unknown>;
   onText: (text: string) => void;
@@ -41,6 +46,48 @@ export function parseGrokEvent(line: string): GrokEvent | null {
   try { return JSON.parse(line) as GrokEvent; } catch { return null; }
 }
 
+export function grokResumeId(agentId?: string): string | undefined {
+  if (!agentId) return undefined;
+  return agentId.startsWith("grok-") ? agentId.slice("grok-".length) : agentId;
+}
+
+export function grokPromptBlocks(prompt: string, imagePaths: string[] = []) {
+  const text = prompt.trim() === "" && imagePaths.length > 0 ? "See the attached image." : prompt;
+  return [
+    { type: "text", text },
+    ...imagePaths.map((path) => ({ type: "image", path })),
+  ];
+}
+
+export function grokArgs(opts: {
+  prompt: string;
+  workingDirectory: string;
+  model: string;
+  effort: (typeof AGENT_EFFORTS)[number];
+  mode: "stage" | "session";
+  root: string;
+  resumeSessionId?: string;
+  promptFile?: string;
+}): string[] {
+  const effort = opts.effort === "ultra" ? "max" : opts.effort;
+  const args = opts.promptFile
+    ? ["--prompt-file", opts.promptFile]
+    : ["-p", opts.prompt];
+  args.push(
+    "--cwd", opts.workingDirectory,
+    "--model", opts.model,
+    "--effort", effort,
+    "--output-format", "streaming-json",
+    "--always-approve",
+    "--no-auto-update",
+  );
+  if (opts.mode === "stage") {
+    args.push("--no-plan", "--no-subagents", "--rules", grokRules(opts.root));
+  }
+  if (opts.resumeSessionId) args.push("-r", opts.resumeSessionId);
+  return args;
+}
+
 function tokenUsage(event: GrokEvent): TokenUsage | null {
   const usage = event.usage;
   if (!usage) return null;
@@ -53,17 +100,37 @@ function tokenUsage(event: GrokEvent): TokenUsage | null {
 }
 
 export async function runGrokAgent(opts: GrokAgentOptions) {
-  if (opts.runtime !== "local") throw new Error("Grok Build requires a local Run on this machine.");
+  const mode = opts.mode ?? "stage";
+  if (opts.runtime !== "local") throw new Error(mode === "session" ? "Grok Build requires a local Session on this machine." : "Grok Build requires a local Run on this machine.");
   const env = Object.fromEntries(Object.entries(opts.env ?? process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   const executable = env.GROK_PATH || "grok";
-  const effort = opts.effort === "ultra" ? "max" : opts.effort;
+  const imagePaths = opts.imagePaths ?? [];
+  let promptFile: string | undefined;
+  if (imagePaths.length > 0) {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "factory-grok-"));
+    promptFile = path.join(dir, "prompt.json");
+    writeFileSync(promptFile, JSON.stringify(grokPromptBlocks(opts.prompt, imagePaths)));
+  }
   const proc = Bun.spawn([
-    executable, "-p", opts.prompt, "--cwd", opts.workingDirectory, "--model", opts.model,
-    "--effort", effort, "--output-format", "streaming-json", "--always-approve",
-    "--no-plan", "--no-subagents", "--no-auto-update", "--rules", grokRules(opts.root),
+    executable,
+    ...grokArgs({
+      prompt: opts.prompt,
+      workingDirectory: opts.workingDirectory,
+      model: opts.model,
+      effort: opts.effort,
+      mode,
+      root: opts.root,
+      resumeSessionId: opts.resumeSessionId,
+      promptFile,
+    }),
   ], {
     cwd: opts.workingDirectory,
-    env: { ...env, CONVEX_URL: opts.convexUrl, FACTORY_RUN_ID: opts.runId, GROK_DISABLE_AUTOUPDATER: "1" },
+    env: {
+      ...env,
+      CONVEX_URL: opts.convexUrl,
+      GROK_DISABLE_AUTOUPDATER: "1",
+      ...(opts.runId ? { FACTORY_RUN_ID: opts.runId } : {}),
+    },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -90,9 +157,10 @@ export async function runGrokAgent(opts: GrokAgentOptions) {
   if (finalUsage) await opts.onUsage?.(finalUsage);
   if (exitCode !== 0) {
     const detail = (await stderrText).trim();
-    throw new Error(detail.includes("auth") ? "Grok Build is not signed in. Run `grok login` on this machine." : "Grok Build Run failed. Check the CLI installation, authentication, and model access.");
+    throw new Error(detail.includes("auth") ? "Grok Build is not signed in. Run `grok login` on this machine." : mode === "session" ? "Grok Build Session failed. Check the CLI installation, authentication, and model access." : "Grok Build Run failed. Check the CLI installation, authentication, and model access.");
   }
   const status = await opts.getStatus();
-  if (status === "failed") return;
+  if (status === "failed" || status === "stopped") return;
+  if (mode === "session") return;
   if (status !== "finished") throw new Error("Grok Build stopped without completing the Stage through finish_stage.");
 }

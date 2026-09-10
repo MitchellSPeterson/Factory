@@ -9,6 +9,8 @@ const LABELS: Record<string, string> = {
   failed: "failed",
   finished: "finished",
   running: "running",
+  idle: "idle",
+  stopped: "stopped",
 };
 
 export function Badge({ status }: { status: string }) {
@@ -25,6 +27,7 @@ export function Badge({ status }: { status: string }) {
               status === "needsDetail" ||
               status === "planReview" ||
               status === "codeReview" ||
+              status === "stopped" ||
               status.startsWith("awaiting")
             ? "wait"
             : "open";

@@ -32,17 +32,21 @@ export function ContextMeter({
   breakdown,
   usage,
   windowTokens,
+  hideWhenEmpty = true,
+  placement = "down",
 }: {
   breakdown?: ContextBreakdown | null;
   usage?: UsageLike | null;
   windowTokens: number;
+  hideWhenEmpty?: boolean;
+  placement?: "down" | "up";
 }) {
   const segments = displayContextSegments(breakdown, usage);
   const used = segments.reduce((sum, segment) => sum + segment.tokens, 0);
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const labelId = useId();
-  if (used <= 0) return null;
+  if (hideWhenEmpty && used <= 0) return null;
 
   const ratio = contextFill(used, windowTokens);
   const percent = Math.round(ratio * 100);
@@ -69,7 +73,7 @@ export function ContextMeter({
   }, [open]);
 
   return (
-    <div className="context-meter" ref={root}>
+    <div className={`context-meter${placement === "up" ? " up" : ""}`} ref={root}>
       <button
         type="button"
         className="context-ring"

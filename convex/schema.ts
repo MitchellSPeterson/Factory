@@ -5,6 +5,9 @@ import {
   artifactKind,
   askKind,
   askStatus,
+  sessionProvider,
+  sessionStatus,
+  sessionMessageRole,
   gateName,
   jobCommand,
   jobStatus,
@@ -177,4 +180,28 @@ export default defineSchema({
     text: v.string(),
     createdAt: v.number(),
   }).index("by_run", ["runId"]),
+
+  sessions: defineTable({
+    projectId: v.id("projects"),
+    title: v.string(),
+    provider: sessionProvider,
+    model: v.string(),
+    effort: agentEffort,
+    status: sessionStatus,
+    agentId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    usage: v.optional(tokenUsage),
+    durationMs: v.optional(v.number()),
+    turnStartedAt: v.optional(v.number()),
+  })
+    .index("by_project", ["projectId"])
+    .index("by_status", ["status"]),
+
+  sessionMessages: defineTable({
+    sessionId: v.id("sessions"),
+    role: sessionMessageRole,
+    text: v.string(),
+    imageIds: v.optional(v.array(v.id("_storage"))),
+    createdAt: v.number(),
+  }).index("by_session", ["sessionId"]),
 });

@@ -51,9 +51,13 @@ _Avoid_: Column, status, swimlane
 One agent execution of one Stage of a Job.
 _Avoid_: Session, attempt, launch
 
+**Session**:
+A long-lived conversation with Grok Build or Codex in one Project. Independent of Jobs and Workflows. You talk; the agent works in the Project.
+_Avoid_: Chat, thread, Ask
+
 **Ask**:
 A pending human-in-the-loop round on a Run. The agent asked. You answer in the Factory.
-_Avoid_: Prompt, question set, interview, HITL
+_Avoid_: Prompt, question set, interview, HITL, Session
 
 **Artifact**:
 A durable output of a Stage. v1 kinds are plan_verdict, spec, and pr_url.

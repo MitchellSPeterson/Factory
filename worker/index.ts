@@ -1,6 +1,7 @@
 import { Agent } from "@cursor/sdk";
 import { ConvexHttpClient } from "convex/browser";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { api } from "../convex/_generated/api";
@@ -9,7 +10,7 @@ import { resolveProvider, type AgentProvider, type AGENT_EFFORTS, toModelSelecti
 import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
-import { runGrokAgent } from "./grokAgent";
+import { grokResumeId, runGrokAgent } from "./grokAgent";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
@@ -56,6 +57,17 @@ type Launch = {
     githubRepo: string;
   };
   skills: Array<{ slug: string; title: string; body: string }>;
+};
+
+type SessionLaunch = {
+  sessionId: Id<"sessions">;
+  prompt: string;
+  provider: "grok" | "codex";
+  model: string;
+  effort: (typeof AGENT_EFFORTS)[number];
+  agentId?: string;
+  images: Array<{ url: string }>;
+  project: Launch["project"];
 };
 
 function requireEnv(name: string): string {
@@ -375,6 +387,99 @@ async function runGrok(client: ConvexHttpClient, launch: Launch) {
   }
 }
 
+async function reportSessionUsage(
+  client: ConvexHttpClient,
+  sessionId: Id<"sessions">,
+  usage: TokenUsage | null | undefined,
+) {
+  if (!usage) return;
+  await client.mutation(api.sessions.recordUsage, { sessionId, usage });
+}
+
+async function mockSession(client: ConvexHttpClient, launch: SessionLaunch) {
+  await client.mutation(api.sessions.bindAgent, {
+    sessionId: launch.sessionId,
+    agentId: `mock-${launch.sessionId}`,
+  });
+  await client.mutation(api.sessions.appendMessage, {
+    sessionId: launch.sessionId,
+    text: `mock ${launch.provider} reply`,
+  });
+  await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });
+}
+
+async function materializeImages(images: Array<{ url: string }>): Promise<string[]> {
+  if (images.length === 0) return [];
+  const dir = mkdtempSync(path.join(os.tmpdir(), "factory-session-"));
+  const files: string[] = [];
+  for (const [index, image] of images.entries()) {
+    const response = await fetch(image.url);
+    if (!response.ok) throw new Error("Could not load an attached image.");
+    const type = response.headers.get("content-type") ?? "";
+    const ext = type.includes("jpeg") ? "jpg" : type.includes("webp") ? "webp" : type.includes("gif") ? "gif" : "png";
+    const file = path.join(dir, `image-${index}.${ext}`);
+    writeFileSync(file, Buffer.from(await response.arrayBuffer()));
+    files.push(file);
+  }
+  return files;
+}
+
+async function runSessionGrok(client: ConvexHttpClient, launch: SessionLaunch) {
+  const log = createLiveLog(text => client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }));
+  try {
+    await runGrokAgent({
+      runtime: "local",
+      root,
+      workingDirectory: launch.project.localPath,
+      convexUrl: client.url,
+      mode: "session",
+      resumeSessionId: grokResumeId(launch.agentId),
+      model: launch.model,
+      effort: launch.effort,
+      prompt: launch.prompt,
+      imagePaths: await materializeImages(launch.images),
+      onSessionId: agentId => client.mutation(api.sessions.bindAgent, { sessionId: launch.sessionId, agentId: `grok-${agentId}` }),
+      onText: text => log.push(text),
+      onUsage: usage => reportSessionUsage(client, launch.sessionId, usage),
+      getStatus: () => client.query(api.sessions.getStatus, { sessionId: launch.sessionId }),
+    });
+    await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });
+  } finally {
+    await log.close();
+  }
+}
+
+async function runSessionCodex(client: ConvexHttpClient, launch: SessionLaunch) {
+  const log = createLiveLog(text => client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }));
+  try {
+    await runCodexAgent({
+      runtime: "local",
+      root,
+      workingDirectory: launch.project.localPath,
+      convexUrl: client.url,
+      mode: "session",
+      resumeThreadId: launch.agentId,
+      model: launch.model,
+      effort: launch.effort,
+      prompt: launch.prompt,
+      imagePaths: await materializeImages(launch.images),
+      onThreadId: agentId => client.mutation(api.sessions.bindAgent, { sessionId: launch.sessionId, agentId }),
+      onText: text => log.push(text),
+      onUsage: usage => reportSessionUsage(client, launch.sessionId, usage),
+      getStatus: () => client.query(api.sessions.getStatus, { sessionId: launch.sessionId }),
+    });
+    await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });
+  } finally {
+    await log.close();
+  }
+}
+
+async function executeSession(client: ConvexHttpClient, launch: SessionLaunch) {
+  if (process.env.FACTORY_MOCK === "1") await mockSession(client, launch);
+  else if (launch.provider === "grok") await runSessionGrok(client, launch);
+  else await runSessionCodex(client, launch);
+}
+
 // Each Run gets its own process so one Project's environment cannot leak into
 // another Run, and settings updates do not mutate an active Run.
 async function execute(client: ConvexHttpClient, launch: Launch, projectEnv: Record<string, string>) {
@@ -418,12 +523,49 @@ async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
       await client.mutation(api.worker.failRun, { runId: launch.runId, error: "Run failed. Check worker environment settings and provider credentials." });
     }
   }
+  const queuedSessions = await client.query(api.sessions.listQueued, {});
+  for (const sessionId of queuedSessions) {
+    const launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: identity.accessKey });
+    if (!launch) continue;
+    try {
+      const values = await environmentFor(client, identity, launch.project.serverId ? launch.project.id : undefined);
+      const proc = Bun.spawn([process.execPath, path.join(root, "worker/index.ts"), "--execute-session"], {
+        stdin: "pipe", stdout: "ignore", stderr: "ignore",
+        env: { ...process.env, ...values.server, ...values.project },
+      });
+      proc.stdin.write(JSON.stringify({ launch, convexUrl: identity.convexUrl }));
+      proc.stdin.end();
+      let exitCode: number | undefined;
+      const exited = proc.exited.then((code) => {
+        exitCode = code;
+        return code;
+      });
+      while (exitCode === undefined) {
+        await Promise.race([exited, Bun.sleep(500)]);
+        if (exitCode !== undefined) break;
+        const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
+        if (status === null || status === "failed" || status === "stopped") {
+          proc.kill("SIGTERM");
+          break;
+        }
+      }
+      if (await exited !== 0) throw new Error("Session failed. Check the worker environment, provider credentials, and Project configuration.");
+    } catch {
+      await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: "Session failed. Check worker environment settings and provider credentials." });
+    }
+  }
 }
 async function main() {
   if (process.argv.includes("--execute")) {
     const payload = JSON.parse(await Bun.stdin.text()) as { launch: Launch; projectEnv: Record<string, string>; convexUrl: string };
     const client = new ConvexHttpClient(payload.convexUrl);
     try { await execute(client, payload.launch, payload.projectEnv); } catch { process.exitCode = 1; }
+    return;
+  }
+  if (process.argv.includes("--execute-session")) {
+    const payload = JSON.parse(await Bun.stdin.text()) as { launch: SessionLaunch; convexUrl: string };
+    const client = new ConvexHttpClient(payload.convexUrl);
+    try { await executeSession(client, payload.launch); } catch { process.exitCode = 1; }
     return;
   }
   const urlIndex = process.argv.indexOf("--url");

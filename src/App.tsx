@@ -16,6 +16,8 @@ import { RecipesPage } from "./pages/RecipesPage";
 import { SkillPage } from "./pages/SkillPage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { SkillsPage } from "./pages/SkillsPage";
+import { SessionsPage } from "./pages/SessionsPage";
+import { SessionPage } from "./pages/SessionPage";
 import { Sidebar } from "./Sidebar";
 
 export function App() {
@@ -33,6 +35,10 @@ export function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage onNewJob={() => setNewJobOpen(true)} />} />
+          <Route path="/ask" element={<Navigate to="/sessions" replace />} />
+          <Route path="/asks" element={<Navigate to="/sessions" replace />} />
+          <Route path="/sessions" element={<SessionsPage />} />
+          <Route path="/sessions/:sessionId" element={<SessionPage />} />
           <Route path="/jobs" element={<JobsPage onNewJob={() => setNewJobOpen(true)} />} />
           <Route path="/jobs/new" element={<NewJobPage />} />
           <Route path="/jobs/:jobId" element={<JobPage />} />
