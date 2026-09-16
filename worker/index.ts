@@ -17,6 +17,7 @@ import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { defaultSimRunner, reconcileSimHub } from "./simHub";
+import { startDeviceHub } from "./deviceHub";
 import { factoryTools } from "./tools";
 import { fromCursorUsage, type TokenUsage } from "./usage";
 import { ZERO_USAGE } from "../convex/lib/tokenUsage";
@@ -617,6 +618,10 @@ async function main() {
   await client.mutation(api.servers.register, { accessKey: identity.accessKey, name: identity.name, publicKey: identity.publicKey, projectsRoot: identity.projectsRoot });
   await seed(client);
   console.log("Factory worker ready.");
+  const stopDeviceHub = await startDeviceHub().catch((error: unknown) => {
+    console.error("Device Hub could not start:", error instanceof Error ? error.message : String(error));
+    return () => {};
+  });
   // Imports and heartbeats continue while a long-running agent is active.
   const heartbeat = setInterval(() => { void client.mutation(api.servers.heartbeat, { accessKey: identity.accessKey }).catch(() => {}); }, 15_000);
   async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
@@ -651,7 +656,7 @@ async function main() {
     }
   }
   try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
-  finally { clearInterval(heartbeat); }
+  finally { clearInterval(heartbeat); stopDeviceHub(); }
 }
 
 void main().catch(() => { console.error("Worker startup failed. Check the deployment connection and worker identity, then restart."); process.exitCode = 1; });

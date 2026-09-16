@@ -24,6 +24,7 @@ export function DeviceStream({ uri }: { uri: string; name: string }) {
       url: rawStreamUrl(uri),
       signal: controller.signal,
       onFrame: (bytes) => {
+        if (controller.signal.aborted) return;
         latest.current = bytes;
         if (raf.current != null) return;
         raf.current = requestAnimationFrame(() => {
@@ -57,6 +58,7 @@ export function DeviceStream({ uri }: { uri: string; name: string }) {
           source={{ uri: frame }}
           style={{ width: size.width, height: size.height }}
           resizeMode="stretch"
+          fadeDuration={0}
         />
       ) : (
         <View style={styles.message}>

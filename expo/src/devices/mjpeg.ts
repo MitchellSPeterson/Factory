@@ -60,11 +60,15 @@ export async function readMjpegFrames(opts: {
     if (!res.ok) throw new Error(`Stream failed (${res.status}).`);
     const reader = res.body && 'getReader' in res.body ? res.body.getReader() : null;
     if (reader) {
-      while (!opts.signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) push(value);
-        await new Promise<void>((resolve) => setTimeout(resolve, 40));
+      try {
+        while (!opts.signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done || opts.signal.aborted) break;
+          if (value) push(value);
+        }
+      } finally {
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
       }
       return;
     }

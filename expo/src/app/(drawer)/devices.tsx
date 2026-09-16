@@ -1,364 +1,113 @@
-import { useMutation, useQuery } from 'convex/react';
-import { useNavigation } from 'expo-router';
-import { useEffect, useLayoutEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { useFocusEffect, useNavigation } from 'expo-router';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AppState, ScrollView, View } from 'react-native';
 import { ActionButton } from '@/components/action-button';
-import { EmptyState } from '@/components/empty-state';
 import { IconButton } from '@/components/icon-button';
-import { ThemedText } from '@/components/themed-text';
-import { DeviceScreen, DeviceToolbar } from '@/devices/DeviceScreen';
-import { preferredDevice, type SimDevice } from '@/devices/preferredDevice';
-import { api } from '@/lib/api';
-import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { connectDeviceHub, hubRequest, parseDevices, type HubDevice } from '@/devices/hub/api';
+import { DeviceList } from '@/devices/hub/DeviceList';
+import { Inspector } from '@/devices/hub/Inspector';
+import { Label } from '@/devices/hub/controls';
+import { shareScreenshot } from '@/devices/hub/files';
+import { StreamView } from '@/devices/hub/StreamView';
+import { numeric, text, type HubMessage, type StreamSelection } from '@/devices/hub/protocol';
 
 export default function DevicesPage() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const { width } = useWindowDimensions();
-  const live = useQuery(api.servers.local);
-  const setWanted = useMutation(api.servers.setSimHubWanted);
-  const enqueue = useMutation(api.servers.enqueueDeviceCommand);
-  const [now, setNow] = useState(Date.now());
-  const [selected, setSelected] = useState('');
-  const [busy, setBusy] = useState('');
+  const [baseUrl, setBaseUrl] = useState<string | null>(null);
+  const endpoint = useRef<string | null>(null);
+  const [connectionError, setConnectionError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const [devices, setDevices] = useState<HubDevice[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [state, setState] = useState<Record<string, unknown>>({});
   const [error, setError] = useState('');
-  const [listOpen, setListOpen] = useState(false);
-
+  const [online, setOnline] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [focused, setFocused] = useState(true);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
+  const [deviceList, setDeviceList] = useState(false);
+  const [inspector, setInspector] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [mode, setMode] = useState<StreamSelection['streamMode']>('webrtc');
+  const sender = useRef<((message: HubMessage) => void) | null>(null);
+  const mounted = useRef(false);
+  const selected = devices.find(d => d.id === selectedId) ?? devices.find(d => d.booted && d.supported) ?? devices[0];
+  const bind = useCallback((value: ((message: HubMessage) => void) | null) => { sender.current = value; }, []);
+  const send = useCallback((message: HubMessage) => { sender.current?.(message); }, []);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(timer);
+    mounted.current = true;
+    const subscription = AppState.addEventListener('change', value => setForeground(value === 'active'));
+    return () => { mounted.current = false; subscription.remove(); };
   }, []);
-
-  const hub = live?.simHub;
-  const devices = hub?.devices ?? [];
-  const online = !!(live && now - live.lastSeen < 45_000);
-  const wanted = live?.simHubWanted === true;
-  const current = devices.find((device) => device.udid === selected) ?? preferredDevice(devices);
-
+  const refresh = useCallback(async () => {
+    const current = endpoint.current;
+    try {
+      if (current) {
+        const data = await hubRequest(current, '/api/devices');
+        if (mounted.current) { setDevices(parseDevices(data)); setOnline(true); }
+      } else {
+        const connection = await connectDeviceHub();
+        if (mounted.current) {
+          endpoint.current = connection.baseUrl;
+          setBaseUrl(connection.baseUrl);
+          setDevices(connection.devices);
+          setOnline(true);
+        }
+      }
+    } catch (error) {
+      endpoint.current = null;
+      throw error;
+    }
+  }, []);
   useEffect(() => {
-    if (current && current.udid !== selected) setSelected(current.udid);
-  }, [current, selected]);
-
+    if (!focused || !foreground) return;
+    let live = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try { await refresh(); if (live) setConnectionError(''); }
+      catch (error) { if (live) { setOnline(false); setConnectionError(error instanceof Error ? error.message : 'Reconnecting to your machine…'); } }
+      if (live) timer = setTimeout(poll, 3000);
+    };
+    void poll();
+    return () => { live = false; clearTimeout(timer); };
+  }, [refresh, focused, foreground, retry]);
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: current?.name ?? 'Devices',
-      headerRight: () => (
-        <View style={styles.headerRight}>
-          <IconButton
-            icon="devices"
-            accessibilityLabel="Simulators"
-            onPress={() => setListOpen(true)}
-          />
-        </View>
-      ),
+      title: selected?.name ?? 'Devices', headerShown: !fullscreen,
+      headerRight: () => <View style={{ flexDirection: 'row', gap: 8, paddingRight: 8 }}>
+        <IconButton icon="devices" accessibilityLabel="Devices" onPress={() => setDeviceList(true)} />
+        <IconButton icon="settings" accessibilityLabel="Inspector" onPress={() => setInspector(true)} />
+      </View>,
     });
-  }, [navigation, current?.name]);
-
-  async function run(label: string, work: () => Promise<unknown>) {
-    setBusy(label);
-    setError('');
-    try {
-      await work();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update this Device.');
-    } finally {
-      setBusy('');
-    }
-  }
-
-  function togglePreview() {
-    void run(wanted ? 'stop' : 'start', () => setWanted({ wanted: !wanted }));
-  }
-
-  const preview = {
-    wanted,
-    busy: busy !== '',
-    onToggle: togglePreview,
-  };
-
-  const listModal = (
-    <DeviceListModal
-      visible={listOpen}
-      wide={width >= 760}
-      devices={devices}
-      currentId={current?.udid}
-      busy={busy}
-      onClose={() => setListOpen(false)}
-      onSelect={(udid) => {
-        setSelected(udid);
-        setListOpen(false);
-      }}
-      onToggle={(device) =>
-        void run(device.udid, () =>
-          enqueue({
-            command: device.state === 'booted' ? { kind: 'shutdown', udid: device.udid } : { kind: 'boot', udid: device.udid },
-          }),
-        )
-      }
-    />
-  );
-
-  if (live === undefined) {
-    return (
-      <View style={[styles.shell, { backgroundColor: theme.background }]}>
-        <EmptyState title="Devices" body="Checking this machine…" />
-        {listModal}
-      </View>
-    );
-  }
-
-  if (live === null || !online) {
-    return (
-      <View style={[styles.shell, { backgroundColor: theme.background }]}>
-        <EmptyState title="Devices" body="This machine is offline. Start the worker, then return here." />
-        {listModal}
-      </View>
-    );
-  }
-
-  if (hub && !hub.supported) {
-    return (
-      <View style={[styles.shell, { backgroundColor: theme.background }]}>
-        <EmptyState title="Devices" body={hub.message ?? 'iOS Simulator preview needs macOS with Xcode.'} />
-        {listModal}
-      </View>
-    );
-  }
-
-  return (
-    <View style={[styles.shell, { backgroundColor: theme.background }]}>
-      {current?.streamUrl ? (
-        <DeviceScreen
-          name={current.name}
-          streamUrl={current.streamUrl}
-          wsUrl={current.wsUrl}
-          preview={preview}
-          onHome={() =>
-            void run('home', () =>
-              enqueue({ command: { kind: 'button', udid: current.udid, name: 'home' } }),
-            )
-          }
-        />
-      ) : (
-        <View style={styles.empty}>
-          <EmptyState
-            title={current?.name ?? 'No Device selected'}
-            body={
-              current?.state === 'booted'
-                ? wanted
-                  ? 'Waiting for serve-sim to publish this stream.'
-                  : 'Start preview to watch and interact with this simulator.'
-                : 'Boot a simulator, then start preview.'
-            }
-          />
-          <DeviceToolbar
-            wanted={wanted}
-            busy={busy !== ''}
-            homeDisabled
-            onPreview={togglePreview}
-            onHome={() => {}}
-          />
-        </View>
-      )}
-      {error ? (
-        <ThemedText type="small" style={[styles.error, { color: theme.danger }]} accessibilityRole="alert">
-          {error}
-        </ThemedText>
-      ) : null}
-      {listModal}
+  }, [navigation, selected?.name, fullscreen]);
+  const selection = useMemo<StreamSelection | null>(() =>
+    selected?.booted && selected.supported && !paused && focused && foreground
+      ? { device: selected.id, platform: selected.platform, streamMode: mode } : null,
+  [selected?.id, selected?.booted, selected?.supported, selected?.platform, paused, focused, foreground, mode]);
+  useEffect(() => { setState({}); }, [selected?.id]);
+  const onScreenshot = useCallback((data: string) => { void shareScreenshot(data).catch(error => { if (mounted.current) setError(String(error)); }); }, []);
+  return <View style={{ flex: 1, backgroundColor: theme.sidebar }}>
+    <View style={{ flex: 1 }}>
+      {baseUrl && online ? <StreamView baseUrl={baseUrl} selection={selection} onState={setState} onError={setError} onScreenshot={onScreenshot} bind={bind} /> : <View style={{ flex: 1, padding: 24, justifyContent: 'center', gap: 16 }}><Label>{connectionError ? 'Reconnecting to Devices…' : 'Preparing Devices…'}</Label><Label muted>{connectionError || 'Starting the device service and finding your simulators.'}</Label><ActionButton label="Reconnect" variant="ghost" onPress={() => { endpoint.current = null; setConnectionError(''); setRetry(value => value + 1); }} /></View>}
+      {online && (!selected?.booted || paused) && <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: theme.sidebar, justifyContent: 'center', alignItems: 'center', gap: 16 }}><Label>{paused ? 'Preview paused' : 'Choose a running device'}</Label><ActionButton label={paused ? 'Resume preview' : 'Devices'} onPress={() => paused ? setPaused(false) : setDeviceList(true)} /></View>}
     </View>
-  );
+    {error ? <View style={{ padding: 12 }}><Label>{error}</Label></View> : null}
+    {!fullscreen && <View style={{ paddingHorizontal: 16, paddingTop: 8 }}><Label muted>{text(state.status, online ? 'Ready' : 'Connecting')} · {Math.round(numeric(state.fps))} FPS · {mode.toUpperCase()}</Label></View>}
+    <View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: 12, paddingBottom: 20, gap: 8 }}>
+      <IconButton icon={paused ? 'play' : 'stop'} accessibilityLabel={paused ? 'Resume preview' : 'Pause preview'} onPress={() => setPaused(value => !value)} />
+      <IconButton icon="home" accessibilityLabel="Home" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['home'] } })} />
+      <ActionButton label="Rotate" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'rotate', args: [] } })} />
+      <ActionButton label="Screenshot" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'screenshot', args: [] } })} />
+      <ActionButton label="Reload" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'reload', args: [] } })} />
+      <ActionButton label={fullscreen ? 'Exit full screen' : 'Full screen'} variant="ghost" onPress={() => setFullscreen(value => !value)} />
+      <ActionButton label="Inspector" variant="ghost" onPress={() => setInspector(true)} />
+      <ActionButton label="Devices" variant="ghost" onPress={() => setDeviceList(true)} />
+      {selected?.platform === 'android' && <><ActionButton label="Back" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['back'] } })} /><ActionButton label="Recents" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['recents'] } })} /></>}
+    </ScrollView></View>
+    {baseUrl && <DeviceList visible={deviceList} onClose={() => setDeviceList(false)} devices={devices} selected={selected?.id} onSelect={device => { setSelectedId(device.id); setPaused(false); }} baseUrl={baseUrl} refresh={refresh} />}
+    <Inspector key={selected?.id} visible={inspector} onClose={() => setInspector(false)} state={state} send={send} mode={mode} setMode={setMode} onError={setError} />
+  </View>;
 }
-
-function DeviceListModal({
-  visible,
-  wide,
-  devices,
-  currentId,
-  busy,
-  onClose,
-  onSelect,
-  onToggle,
-}: {
-  visible: boolean;
-  wide: boolean;
-  devices: SimDevice[];
-  currentId?: string;
-  busy: string;
-  onClose: () => void;
-  onSelect: (udid: string) => void;
-  onToggle: (device: SimDevice) => void;
-}) {
-  const theme = useTheme();
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss simulators"
-          onPress={onClose}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[
-            styles.sheet,
-            wide ? styles.sheetWide : styles.sheetNarrow,
-            { backgroundColor: theme.backgroundElement, borderColor: theme.line },
-          ]}>
-          <SafeAreaView edges={wide ? [] : ['bottom']}>
-            <View style={[styles.sheetHead, { borderBottomColor: theme.line }]}>
-              <ThemedText type="section">Simulators</ThemedText>
-              <IconButton icon="close" accessibilityLabel="Close" onPress={onClose} />
-            </View>
-            <ScrollView contentContainerStyle={styles.listContent} accessibilityLabel="Simulators">
-              {devices.length === 0 ? (
-                <ThemedText type="small" themeColor="textSecondary">
-                  No simulators yet. Add one in Xcode → Settings → Platforms.
-                </ThemedText>
-              ) : (
-                devices.map((device) => (
-                  <DeviceRow
-                    key={device.udid}
-                    device={device}
-                    active={currentId === device.udid}
-                    busy={busy === device.udid}
-                    disabled={busy !== ''}
-                    onSelect={() => onSelect(device.udid)}
-                    onToggle={() => onToggle(device)}
-                  />
-                ))
-              )}
-            </ScrollView>
-          </SafeAreaView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function DeviceRow({
-  device,
-  active,
-  busy,
-  disabled,
-  onSelect,
-  onToggle,
-}: {
-  device: SimDevice;
-  active: boolean;
-  busy: boolean;
-  disabled: boolean;
-  onSelect: () => void;
-  onToggle: () => void;
-}) {
-  const theme = useTheme();
-  const detail = device.runtime ? `${device.runtime} · ${device.state}` : device.state;
-
-  return (
-    <View style={[styles.row, active && { backgroundColor: theme.backgroundSelected }]}>
-      <Pressable
-        accessibilityRole="button"
-        onPress={onSelect}
-        style={({ pressed }) => [styles.rowMain, pressed && { backgroundColor: theme.subtleHover }]}>
-        <ThemedText type="smallBold" numberOfLines={1}>
-          {device.name}
-        </ThemedText>
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1} style={styles.rowDetail}>
-          {detail}
-        </ThemedText>
-      </Pressable>
-      <ActionButton
-        variant="ghost"
-        disabled={disabled}
-        label={busy ? '…' : device.state === 'booted' ? 'Shut down' : 'Boot'}
-        onPress={onToggle}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  shell: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 0,
-  },
-  empty: {
-    flex: 1,
-    minHeight: 0,
-    paddingBottom: 16,
-  },
-  headerRight: {
-    marginRight: 8,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  sheet: {
-    maxHeight: '80%',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderCurve: 'continuous',
-  },
-  sheetWide: {
-    width: 420,
-    maxWidth: '100%',
-    alignSelf: 'center',
-    borderRadius: 16,
-  },
-  sheetNarrow: {
-    marginTop: 'auto',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  sheetHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingLeft: 16,
-    paddingRight: 8,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-  listContent: {
-    gap: 6,
-    padding: 14,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 4,
-    paddingLeft: 2,
-    paddingRight: 4,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-  },
-  rowMain: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 44,
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderCurve: 'continuous',
-    gap: 2,
-  },
-  rowDetail: {
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  error: {
-    paddingHorizontal: 28,
-    paddingTop: 10,
-    paddingBottom: 16,
-  },
-});

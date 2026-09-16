@@ -12,7 +12,7 @@ export function lanHostFromManifest(values: Array<string | undefined | null>): s
     const match = String(value).match(/(\d{1,3}(?:\.\d{1,3}){3})/);
     if (match && match[1] !== '127.0.0.1' && match[1] !== '0.0.0.0') hosts.push(match[1]);
   }
-  return hosts.find(isTailscaleHost) ?? hosts[0] ?? null;
+  return hosts[0] ?? null;
 }
 
 export function rewriteLoopbackUrl(url: string, lanHost: string | null): string {

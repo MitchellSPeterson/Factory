@@ -1,0 +1,82 @@
+import { type DeviceStreamEncoderSettings } from './types';
+
+export const DEVICE_STREAM_SETTING_BOUNDS = {
+  mjpegFps: [1, 120],
+  mjpegQuality: [0.05, 1],
+  maxDimension: [0, 4096],
+  h264Bitrate: [100_000, 50_000_000],
+  h264Fps: [1, 120],
+} as const satisfies Record<keyof DeviceStreamEncoderSettings, readonly [number, number]>;
+
+export const DEFAULT_DEVICE_STREAM_SETTINGS: DeviceStreamEncoderSettings = {
+  mjpegFps: 60,
+  mjpegQuality: 0.7,
+  maxDimension: 0,
+  h264Bitrate: 6_000_000,
+  h264Fps: 60,
+};
+
+/** Field-wise equality so resource refreshes only publish semantic changes. */
+export function sameDeviceStreamSettings(
+  a: DeviceStreamEncoderSettings | null,
+  b: DeviceStreamEncoderSettings,
+): boolean {
+  return (
+    a?.mjpegFps === b.mjpegFps &&
+    a.mjpegQuality === b.mjpegQuality &&
+    a.maxDimension === b.maxDimension &&
+    a.h264Bitrate === b.h264Bitrate &&
+    a.h264Fps === b.h264Fps
+  );
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function numberInRange(value: unknown, fallback: number, min: number, max: number): number {
+  const number = finiteNumber(value);
+  return number === null ? fallback : Math.min(max, Math.max(min, number));
+}
+
+function integerInRange(value: unknown, fallback: number, min: number, max: number): number {
+  return Math.round(numberInRange(value, fallback, min, max));
+}
+
+/** Normalize the untrusted GET/PATCH response using serve-sim's documented ranges. */
+export function normalizeDeviceStreamSettings(
+  value: unknown,
+  fallback: DeviceStreamEncoderSettings = DEFAULT_DEVICE_STREAM_SETTINGS,
+): DeviceStreamEncoderSettings {
+  const settings =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  return {
+    mjpegFps: integerInRange(
+      settings.mjpegFps,
+      fallback.mjpegFps,
+      ...DEVICE_STREAM_SETTING_BOUNDS.mjpegFps,
+    ),
+    mjpegQuality: numberInRange(
+      settings.mjpegQuality,
+      fallback.mjpegQuality,
+      ...DEVICE_STREAM_SETTING_BOUNDS.mjpegQuality,
+    ),
+    maxDimension: integerInRange(
+      settings.maxDimension,
+      fallback.maxDimension,
+      ...DEVICE_STREAM_SETTING_BOUNDS.maxDimension,
+    ),
+    h264Bitrate: integerInRange(
+      settings.h264Bitrate,
+      fallback.h264Bitrate,
+      ...DEVICE_STREAM_SETTING_BOUNDS.h264Bitrate,
+    ),
+    h264Fps: integerInRange(
+      settings.h264Fps,
+      fallback.h264Fps,
+      ...DEVICE_STREAM_SETTING_BOUNDS.h264Fps,
+    ),
+  };
+}

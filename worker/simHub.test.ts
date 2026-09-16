@@ -145,6 +145,11 @@ test("boot attaches serve-sim only when preview is wanted", async () => {
     now: 1,
   });
   expect(calls).toContain(
-    "serve-sim -q --codec mjpeg --host 0.0.0.0 --mjpeg-fps 12 --mjpeg-quality 0.45 --max-dimension 720",
+    "serve-sim -q --codec mjpeg --host 0.0.0.0 --mjpeg-fps 30 --mjpeg-quality 0.75 --max-dimension 1080",
+  );
+  const { startPersistent, ...detachedRunner } = runner;
+  await reconcileSimHub({ wanted: true, commands: [], runner: detachedRunner, now: 8_002 });
+  expect(calls).toContain(
+    "serve-sim --detach -q --codec mjpeg --host 0.0.0.0 --mjpeg-fps 30 --mjpeg-quality 0.75 --max-dimension 1080",
   );
 });

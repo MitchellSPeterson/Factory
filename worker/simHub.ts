@@ -284,11 +284,11 @@ function serveSimLanArgs(): string[] {
     "--host",
     "0.0.0.0",
     "--mjpeg-fps",
-    "12",
+    "30",
     "--mjpeg-quality",
-    "0.45",
+    "0.75",
     "--max-dimension",
-    "720",
+    "1080",
   ];
 }
 
@@ -302,7 +302,7 @@ async function startPreview(runner: SimRunner): Promise<string | undefined> {
       return error instanceof Error ? error.message : "serve-sim failed to start.";
     }
   }
-  const started = await runServeSim(runner, ["--detach", "-q", "--codec", "mjpeg"], 120_000);
+  const started = await runServeSim(runner, ["--detach", ...serveSimLanArgs()], 120_000);
   if (!started) return "serve-sim timed out while starting.";
   if (started.code !== 0) {
     if (/not found|ENOENT|command not found/i.test(started.text)) {

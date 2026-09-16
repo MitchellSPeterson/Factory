@@ -1,0 +1,60 @@
+diff --git a/build/fork/useLinking.native.js b/build/fork/useLinking.native.js
+index c080a5853fa71f2708c6ed0f15092b6f43231f76..17add88e0530c00623b55419d69143db0f76670d 100644
+--- a/build/fork/useLinking.native.js
++++ b/build/fork/useLinking.native.js
+@@ -114,6 +114,30 @@ function useLinking(ref, { enabled = true, prefixes, filter, config, getInitialU
+         const path = (0, extractPathFromURL_1.extractExpoPathFromURL)(prefixesRef.current, url);
+         return path !== undefined ? getStateFromPathRef.current(path, configRef.current) : undefined;
+     }, []);
++    // Initial URL resolution starts during render, which may never commit.
++    // https://github.com/expo/expo/issues/49378
++    const initialLinkRef = (0, react_1.useRef)({ status: 'pending', queued: undefined });
++    (0, react_1.useEffect)(() => {
++        const initialLink = initialLinkRef.current;
++        initialLink.status = 'mounted';
++        if (initialLink.queued) {
++            onUnhandledLinking(initialLink.queued.path);
++            initialLink.queued = undefined;
++        }
++        return () => {
++            initialLink.status = 'unmounted';
++            initialLink.queued = undefined;
++        };
++    }, [onUnhandledLinking]);
++    const reportInitialLink = (0, react_1.useCallback)((path) => {
++        const initialLink = initialLinkRef.current;
++        if (initialLink.status === 'mounted') {
++            onUnhandledLinking(path);
++        }
++        else if (initialLink.status === 'pending') {
++            initialLink.queued = { path };
++        }
++    }, [onUnhandledLinking]);
+     const getInitialState = (0, react_1.useCallback)(() => {
+         let state;
+         if (enabledRef.current) {
+@@ -124,13 +148,13 @@ function useLinking(ref, { enabled = true, prefixes, filter, config, getInitialU
+                         const state = getStateFromURL(url);
+                         if (typeof url === 'string') {
+                             // If the link were handled, it gets cleared in NavigationContainer
+-                            onUnhandledLinking((0, extractPathFromURL_1.extractExpoPathFromURL)(prefixes, url));
++                            reportInitialLink((0, extractPathFromURL_1.extractExpoPathFromURL)(prefixes, url));
+                         }
+                         return state;
+                     });
+                 }
+                 else {
+-                    onUnhandledLinking((0, extractPathFromURL_1.extractExpoPathFromURL)(prefixes, url));
++                    reportInitialLink((0, extractPathFromURL_1.extractExpoPathFromURL)(prefixes, url));
+                 }
+             }
+             state = getStateFromURL(url);
+@@ -144,7 +168,7 @@ function useLinking(ref, { enabled = true, prefixes, filter, config, getInitialU
+             },
+         };
+         return thenable;
+-    }, [getStateFromURL, onUnhandledLinking, prefixes]);
++    }, [getStateFromURL, reportInitialLink, prefixes]);
+     (0, react_1.useEffect)(() => {
+         const listener = (url) => {
+             if (!enabled) {

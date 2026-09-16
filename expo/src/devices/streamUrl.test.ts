@@ -10,10 +10,10 @@ test('lanHostFromManifest picks an IPv4 from Expo hostUri', () => {
   expect(lanHostFromManifest(['127.0.0.1:8081'])).toBeNull();
 });
 
-test('lanHostFromManifest prefers a Tailscale address', () => {
+test('lanHostFromManifest respects host priority instead of preferring Tailscale', () => {
   expect(isTailscaleHost('100.89.56.56')).toBe(true);
   expect(isTailscaleHost('192.168.1.39')).toBe(false);
-  expect(lanHostFromManifest(['192.168.1.39:8081', '100.89.56.56'])).toBe('100.89.56.56');
+  expect(lanHostFromManifest(['192.168.1.39:8081', '100.89.56.56'])).toBe('192.168.1.39');
   expect(lanHostFromManifest(['100.89.56.56', '192.168.1.39:8081'])).toBe('100.89.56.56');
 });
 

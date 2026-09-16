@@ -58,7 +58,7 @@ export function DeviceToolbar({
 function deviceLanHost(): string | null {
   if (process.env.EXPO_OS === 'web') return null;
   return lanHostFromManifest([
-    process.env.EXPO_PUBLIC_DEVICE_HOST ?? '100.89.56.56',
+    process.env.EXPO_PUBLIC_DEVICE_HOST,
     stringField(Constants.expoGoConfig, 'debuggerHost'),
     Constants.expoConfig?.hostUri,
     Constants.linkingUri,
