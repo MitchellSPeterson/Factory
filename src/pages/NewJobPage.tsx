@@ -172,7 +172,7 @@ export function NewJobForm({
           </p>
         ) : null}
         {selected?.serverId && selected.cloneStatus !== "ready" && <p className="muted">Wait for cloning to finish before starting a Job.</p>}
-        {selected?.serverId && server?.id !== selected.serverId && <p className="muted">Pair this machine in Settings before starting a Job.</p>}
+        {selected?.serverId && server?.id !== selected.serverId && <p className="muted">Start the worker on this machine before starting a Job.</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <button type="submit" disabled={!selected || submitting || !request.trim() || (!!selected.serverId && (selected.cloneStatus !== "ready" || server?.id !== selected.serverId))}>{submitting ? "Starting…" : "Start job"}</button>
       </form>

@@ -55,6 +55,10 @@ _Avoid_: Session, attempt, launch
 A long-lived conversation with Grok Build or Codex in one Project. Independent of Jobs and Workflows. You talk; the agent works in the Project.
 _Avoid_: Chat, thread, Ask
 
+**Device**:
+An iOS Simulator on this machine. Factory can boot it and stream it into the browser through serve-sim so you can watch, tap, and swipe.
+_Avoid_: emulator, phone, preview pane
+
 **Ask**:
 A pending human-in-the-loop round on a Run. The agent asked. You answer in the Factory.
 _Avoid_: Prompt, question set, interview, HITL, Session

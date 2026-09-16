@@ -11,10 +11,12 @@ import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
 import { grokResumeId, runGrokAgent } from "./grokAgent";
+import { probeGrokCatalog, runGrokAcpSession } from "./grokAcp";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
+import { defaultSimRunner, reconcileSimHub } from "./simHub";
 import { factoryTools } from "./tools";
 import { fromCursorUsage, type TokenUsage } from "./usage";
 import { ZERO_USAGE } from "../convex/lib/tokenUsage";
@@ -65,6 +67,7 @@ type SessionLaunch = {
   provider: "grok" | "codex";
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
+  permissionMode: "supervised" | "auto-accept-edits" | "auto" | "full-access";
   agentId?: string;
   images: Array<{ url: string }>;
   project: Launch["project"];
@@ -424,23 +427,62 @@ async function materializeImages(images: Array<{ url: string }>): Promise<string
   return files;
 }
 
+async function waitForSessionPermission(
+  client: ConvexHttpClient,
+  sessionId: Id<"sessions">,
+  requestId: string,
+): Promise<{ outcome: "selected"; optionId: string } | { outcome: "cancelled" }> {
+  for (;;) {
+    const status = await client.query(api.sessions.getStatus, { sessionId });
+    if (status === "stopped" || status === "failed" || status === null) return { outcome: "cancelled" };
+    const decision = await client.query(api.sessions.getPermission, { sessionId, requestId });
+    if (decision?.status === "resolved" || decision?.status === "denied") {
+      if (decision.optionId) return { outcome: "selected", optionId: decision.optionId };
+      return { outcome: "cancelled" };
+    }
+    await Bun.sleep(400);
+  }
+}
+
 async function runSessionGrok(client: ConvexHttpClient, launch: SessionLaunch) {
   const log = createLiveLog(text => client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }));
   try {
-    await runGrokAgent({
-      runtime: "local",
-      root,
+    await runGrokAcpSession({
       workingDirectory: launch.project.localPath,
-      convexUrl: client.url,
-      mode: "session",
       resumeSessionId: grokResumeId(launch.agentId),
       model: launch.model,
       effort: launch.effort,
+      permissionMode: launch.permissionMode,
       prompt: launch.prompt,
       imagePaths: await materializeImages(launch.images),
       onSessionId: agentId => client.mutation(api.sessions.bindAgent, { sessionId: launch.sessionId, agentId: `grok-${agentId}` }),
       onText: text => log.push(text),
+      onItem: item => client.mutation(api.sessions.upsertItem, {
+        sessionId: launch.sessionId,
+        itemId: item.itemId,
+        kind: item.kind,
+        title: item.title,
+        detail: item.detail,
+        status: item.status,
+        text: item.text,
+        requestId: item.requestId,
+        options: item.options,
+      }),
       onUsage: usage => reportSessionUsage(client, launch.sessionId, usage),
+      waitForPermission: async (input) => {
+        await client.mutation(api.sessions.upsertItem, {
+          sessionId: launch.sessionId,
+          itemId: input.itemId,
+          kind: "permission",
+          title: input.title,
+          detail: input.detail,
+          status: "pending",
+          text: input.detail ?? input.title,
+          requestId: input.requestId,
+          options: input.options,
+        });
+        return waitForSessionPermission(client, launch.sessionId, input.requestId);
+      },
       getStatus: () => client.query(api.sessions.getStatus, { sessionId: launch.sessionId }),
     });
     await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });
@@ -571,16 +613,44 @@ async function main() {
   const urlIndex = process.argv.indexOf("--url");
   const url = urlIndex >= 0 ? process.argv[urlIndex + 1] : process.env.CONVEX_URL ?? process.env.VITE_CONVEX_URL;
   const identity = await loadIdentity(root, url);
-  if (process.argv.includes("--pair")) { console.log(identity.accessKey); return; }
   const client = new ConvexHttpClient(identity.convexUrl);
   await client.mutation(api.servers.register, { accessKey: identity.accessKey, name: identity.name, publicKey: identity.publicKey, projectsRoot: identity.projectsRoot });
   await seed(client);
-  console.log("Factory worker ready. Pair in Settings using the key from: bun run worker:pair");
+  console.log("Factory worker ready.");
   // Imports and heartbeats continue while a long-running agent is active.
   const heartbeat = setInterval(() => { void client.mutation(api.servers.heartbeat, { accessKey: identity.accessKey }).catch(() => {}); }, 15_000);
   async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
   void imports();
-  try { for (;;) { try { await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  let lastGrokProbe = 0;
+  let lastSimHub = 0;
+  let lastSimRunning = false;
+  async function grokCatalogTick() {
+    if (Date.now() - lastGrokProbe < 60_000) return;
+    lastGrokProbe = Date.now();
+    try {
+      const catalog = await probeGrokCatalog();
+      await client.mutation(api.servers.reportGrokCatalog, { accessKey: identity.accessKey, catalog });
+    } catch {
+      console.error("Grok catalog probe failed; retrying.");
+    }
+  }
+  async function simHubTick() {
+    try {
+      const work = await client.mutation(api.servers.claimDeviceCommands, { accessKey: identity.accessKey });
+      const due = work.wanted !== lastSimRunning || Date.now() - lastSimHub > (work.wanted ? 2500 : 15000) || work.commands.length > 0;
+      if (!due) return;
+      lastSimHub = Date.now();
+      const { hub, results } = await reconcileSimHub({ wanted: work.wanted, commands: work.commands, runner: defaultSimRunner() });
+      lastSimRunning = hub.running;
+      await client.mutation(api.servers.reportSimHub, { accessKey: identity.accessKey, hub });
+      for (const result of results) {
+        await client.mutation(api.servers.finishDeviceCommand, { accessKey: identity.accessKey, commandId: result.commandId, error: result.error });
+      }
+    } catch {
+      console.error("Device preview synchronization failed; retrying.");
+    }
+  }
+  try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
   finally { clearInterval(heartbeat); }
 }
 

@@ -140,6 +140,88 @@ export const sessionStatus = v.union(
 
 export const sessionMessageRole = v.union(v.literal("user"), v.literal("assistant"));
 
+export const permissionMode = v.union(
+  v.literal("supervised"),
+  v.literal("auto-accept-edits"),
+  v.literal("auto"),
+  v.literal("full-access"),
+);
+export type PermissionMode = "supervised" | "auto-accept-edits" | "auto" | "full-access";
+export const DEFAULT_PERMISSION_MODE: PermissionMode = "supervised";
+
+export const sessionItemKind = v.union(
+  v.literal("message"),
+  v.literal("tool"),
+  v.literal("permission"),
+  v.literal("reasoning"),
+);
+
+export const sessionItemStatus = v.union(
+  v.literal("inProgress"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("pending"),
+  v.literal("resolved"),
+  v.literal("denied"),
+);
+
+export const permissionOption = v.object({
+  optionId: v.string(),
+  name: v.string(),
+  kind: v.optional(v.string()),
+});
+
+export const grokCatalogModel = v.object({
+  slug: v.string(),
+  name: v.string(),
+  isDefault: v.optional(v.boolean()),
+});
+
+export const grokCatalog = v.object({
+  checkedAt: v.number(),
+  installed: v.boolean(),
+  authenticated: v.optional(v.boolean()),
+  version: v.optional(v.string()),
+  message: v.optional(v.string()),
+  models: v.array(grokCatalogModel),
+});
+
+export const simDeviceState = v.union(
+  v.literal("booted"),
+  v.literal("shutdown"),
+  v.literal("creating"),
+  v.literal("unknown"),
+);
+
+export const simDevice = v.object({
+  udid: v.string(),
+  name: v.string(),
+  state: simDeviceState,
+  runtime: v.optional(v.string()),
+  previewUrl: v.optional(v.string()),
+  streamUrl: v.optional(v.string()),
+  wsUrl: v.optional(v.string()),
+});
+
+export const simHub = v.object({
+  checkedAt: v.number(),
+  supported: v.boolean(),
+  running: v.boolean(),
+  message: v.optional(v.string()),
+  devices: v.array(simDevice),
+});
+
+export const deviceCommand = v.union(
+  v.object({ kind: v.literal("boot"), udid: v.string() }),
+  v.object({ kind: v.literal("shutdown"), udid: v.string() }),
+  v.object({ kind: v.literal("button"), udid: v.string(), name: v.literal("home") }),
+);
+
+export const deviceCommandStatus = v.union(
+  v.literal("queued"),
+  v.literal("taken"),
+);
+
 export const askKind = v.union(
   v.literal("grill"),
   v.literal("generic"),

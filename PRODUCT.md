@@ -8,7 +8,7 @@ web
 
 ## Users
 
-[Inferred from CONTEXT.md and the existing app.] The primary user is a single trusted operator sitting at their own machine. They run Cursor, Codex, and Grok agents across their product repos from this control plane. There is no multi-user login; GitHub connection and worker pairing are shared on this Factory instance.
+[Inferred from CONTEXT.md and the existing app.] The primary user is a single trusted operator sitting at their own machine. They run Cursor, Codex, and Grok agents across their product repos from this control plane. There is no multi-user login; GitHub connection and this machine's worker are shared on this Factory instance.
 
 ## Product Purpose
 
@@ -26,10 +26,10 @@ web
 
 Confirmed from the running product:
 
-- Settings currently has four tabs: General (color mode), GitHub (connection + clone-from-GitHub), Projects (list + add local Project), Providers (worker pairing, provider keys, advanced environment).
+- Settings currently has four tabs: General (color mode), GitHub (connection + clone-from-GitHub), Projects (list + add local Project), Providers (this machine, provider keys, advanced environment).
 - Projects also exist as their own page (`/projects`) with overlapping add-Project forms.
 - Domain language is locked in CONTEXT.md: Project, Workflow, Agent, Stage, Skill, Binding, Gate, Job, View all, Project scope, Lane, Run, Ask, Artifact. Do not invent synonyms.
-- GitHub Enterprise is not supported. Cloud Jobs are Cursor-only. Worker pairing is not application-wide auth.
+- GitHub Enterprise is not supported. Cloud Jobs are Cursor-only. The worker on this machine is not application-wide auth.
 - [Inferred from the request.] This work redesigns Settings to be easier to use. It keeps every current capability. It does not restyle the rest of the Factory.
 
 Undecided: whether Projects should stay duplicated between `/projects` and Settings, or Settings should only connect and `/projects` should own the list.
@@ -55,6 +55,6 @@ Confirmed from project rules:
 
 1. The operator should see whether the Factory can run a Job without hunting through tabs.
 2. Setup has an order: GitHub, this machine, then a Project. The UI should make that order obvious.
-3. Speak Factory language. Prefer "this machine" and "pair worker" over "providers" when the task is pairing.
+3. Speak Factory language. Prefer "this machine" over "providers" when the task is the local worker.
 4. Appearance is a preference, not the first job of Settings.
 5. Keep the VASA chrome. Settings should feel like the rest of the Factory, just clearer.

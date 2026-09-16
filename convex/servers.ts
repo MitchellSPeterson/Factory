@@ -1,12 +1,25 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireServer } from "./lib/servers";
+import { localServer, requireServer, resolveServer } from "./lib/servers";
 import { validateRepository, validateVariableName } from "../shared/managed";
-import { projectKind } from "./lib/validators";
+import { deviceCommand, grokCatalog, projectKind, simHub } from "./lib/validators";
 import schema from "./schema";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
-const serverView = v.object({ id: v.id("servers"), name: v.string(), publicKey: v.string(), projectsRoot: v.string(), lastSeen: v.number() });
+const serverView = v.object({
+  id: v.id("servers"),
+  name: v.string(),
+  publicKey: v.string(),
+  projectsRoot: v.string(),
+  lastSeen: v.number(),
+  grokCatalog: v.optional(grokCatalog),
+  simHubWanted: v.optional(v.boolean()),
+  simHub: v.optional(simHub),
+});
+const deviceCommandView = v.object({
+  commandId: v.string(),
+  command: deviceCommand,
+});
 export const register = mutation({
   args: { accessKey: v.string(), name: v.string(), publicKey: v.string(), projectsRoot: v.string() }, returns: v.id("servers"),
   handler: async (ctx, args) => {
@@ -19,32 +32,138 @@ export const register = mutation({
     return ctx.db.insert("servers", { ...args, lastSeen: Date.now() });
   },
 });
+function toView(server: Doc<"servers">) {
+  return {
+    id: server._id,
+    name: server.name,
+    publicKey: server.publicKey,
+    projectsRoot: server.projectsRoot,
+    lastSeen: server.lastSeen,
+    grokCatalog: server.grokCatalog,
+    simHubWanted: server.simHubWanted,
+    simHub: server.simHub,
+  };
+}
 export const paired = query({
   args: { accessKey: v.string() }, returns: serverView,
-  handler: async (ctx, args) => { const server = await requireServer(ctx, args.accessKey); return { id: server._id, name: server.name, publicKey: server.publicKey, projectsRoot: server.projectsRoot, lastSeen: server.lastSeen }; },
+  handler: async (ctx, args) => toView(await requireServer(ctx, args.accessKey)),
+});
+export const local = query({
+  args: {}, returns: v.union(serverView, v.null()),
+  handler: async (ctx) => {
+    const server = await localServer(ctx);
+    return server ? toView(server) : null;
+  },
+});
+export const reportGrokCatalog = mutation({
+  args: { accessKey: v.string(), catalog: grokCatalog },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const server = await requireServer(ctx, args.accessKey);
+    await ctx.db.patch(server._id, { grokCatalog: args.catalog, lastSeen: Date.now() });
+    return null;
+  },
 });
 export const heartbeat = mutation({
   args: { accessKey: v.string() }, returns: v.null(),
   handler: async (ctx, args) => { const server = await requireServer(ctx, args.accessKey); await ctx.db.patch(server._id, { lastSeen: Date.now() }); return null; },
 });
-async function checkScope(ctx: Parameters<typeof requireServer>[0], serverId: Id<"servers">, scope: string) {
+export const reportSimHub = mutation({
+  args: { accessKey: v.string(), hub: simHub },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const server = await requireServer(ctx, args.accessKey);
+    await ctx.db.patch(server._id, { simHub: args.hub, lastSeen: Date.now() });
+    return null;
+  },
+});
+export const setSimHubWanted = mutation({
+  args: { accessKey: v.optional(v.string()), wanted: v.boolean() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const server = await resolveServer(ctx, args.accessKey);
+    await ctx.db.patch(server._id, { simHubWanted: args.wanted });
+    return null;
+  },
+});
+export const enqueueDeviceCommand = mutation({
+  args: { accessKey: v.optional(v.string()), command: deviceCommand },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const server = await resolveServer(ctx, args.accessKey);
+    if ("udid" in args.command && (args.command.udid.length < 8 || args.command.udid.length > 80)) {
+      throw new Error("Unknown Device.");
+    }
+    const queued = await ctx.db.query("deviceCommands").withIndex("by_serverId_and_status", q => q.eq("serverId", server._id).eq("status", "queued")).take(20);
+    const taken = await ctx.db.query("deviceCommands").withIndex("by_serverId_and_status", q => q.eq("serverId", server._id).eq("status", "taken")).take(20);
+    const open = [...queued, ...taken];
+    const duplicate = open.find((row) => sameDeviceCommand(row.command, args.command));
+    if (duplicate) return duplicate.commandId;
+    if (open.length >= 20) throw new Error("This machine already has Device work queued.");
+    const commandId = `${Date.now().toString(36)}-${open.length}`;
+    await ctx.db.insert("deviceCommands", {
+      serverId: server._id,
+      commandId,
+      command: args.command,
+      status: "queued",
+      leaseUntil: 0,
+    });
+    return commandId;
+  },
+});
+export const claimDeviceCommands = mutation({
+  args: { accessKey: v.string() },
+  returns: v.object({ wanted: v.boolean(), commands: v.array(deviceCommandView) }),
+  handler: async (ctx, args) => {
+    const server = await requireServer(ctx, args.accessKey);
+    const now = Date.now();
+    const queued = await ctx.db.query("deviceCommands").withIndex("by_serverId_and_status", q => q.eq("serverId", server._id).eq("status", "queued")).take(10);
+    const taken = await ctx.db.query("deviceCommands").withIndex("by_serverId_and_status", q => q.eq("serverId", server._id).eq("status", "taken")).take(10);
+    const batch = [...queued, ...taken.filter((row) => row.leaseUntil < now)].slice(0, 5);
+    const leaseUntil = now + 60_000;
+    for (const row of batch) {
+      await ctx.db.patch(row._id, { status: "taken", leaseUntil });
+    }
+    return {
+      wanted: server.simHubWanted === true,
+      commands: batch.map((row) => ({ commandId: row.commandId, command: row.command })),
+    };
+  },
+});
+export const finishDeviceCommand = mutation({
+  args: { accessKey: v.string(), commandId: v.string(), error: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const server = await requireServer(ctx, args.accessKey);
+    const row = await ctx.db.query("deviceCommands").withIndex("by_serverId_and_commandId", q => q.eq("serverId", server._id).eq("commandId", args.commandId)).unique();
+    if (row) await ctx.db.delete(row._id);
+    return null;
+  },
+});
+function sameDeviceCommand(
+  left: { kind: string; udid?: string; name?: string },
+  right: { kind: string; udid?: string; name?: string },
+) {
+  return left.kind === right.kind && left.udid === right.udid && left.name === right.name;
+}
+async function checkScope(ctx: Parameters<typeof resolveServer>[0], serverId: Id<"servers">, scope: string) {
   if (scope === "server") return;
   const id = ctx.db.normalizeId("projects", scope);
   const project = id ? await ctx.db.get(id) : null;
   if (!project || project.serverId !== serverId) throw new Error("Choose a Project belonging to this worker.");
 }
 export const variables = query({
-  args: { accessKey: v.string(), scope: v.string() }, returns: v.array(v.object({ name: v.string(), updatedAt: v.number() })),
+  args: { accessKey: v.optional(v.string()), scope: v.string() }, returns: v.array(v.object({ name: v.string(), updatedAt: v.number() })),
   handler: async (ctx, args) => {
-    const server = await requireServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.scope);
+    const server = await resolveServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.scope);
     const rows = await ctx.db.query("environment").withIndex("by_serverId_and_scope_and_name", q => q.eq("serverId", server._id).eq("scope", args.scope)).take(100);
     return rows.map(({ name, updatedAt }) => ({ name, updatedAt }));
   },
 });
 export const setVariable = mutation({
-  args: { accessKey: v.string(), scope: v.string(), name: v.string(), sealed: v.string() }, returns: v.null(),
+  args: { accessKey: v.optional(v.string()), scope: v.string(), name: v.string(), sealed: v.string() }, returns: v.null(),
   handler: async (ctx, args) => {
-    const server = await requireServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.scope);
+    const server = await resolveServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.scope);
     validateVariableName(args.name, args.scope === "server");
     if (args.sealed.length < 100 || args.sealed.length > 30000) throw new Error("Invalid encrypted value.");
     const rows = await ctx.db.query("environment").withIndex("by_serverId_and_scope_and_name", q => q.eq("serverId", server._id).eq("scope", args.scope)).take(100);
@@ -55,10 +174,10 @@ export const setVariable = mutation({
   },
 });
 export const removeVariable = mutation({
-  args: { accessKey: v.string(), scope: v.string(), name: v.string() }, returns: v.null(),
-  handler: async (ctx, args) => { const server = await requireServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.scope); const row = await ctx.db.query("environment").withIndex("by_serverId_and_scope_and_name", q => q.eq("serverId", server._id).eq("scope", args.scope).eq("name", args.name)).unique(); if (row) await ctx.db.delete(row._id); return null; },
+  args: { accessKey: v.optional(v.string()), scope: v.string(), name: v.string() }, returns: v.null(),
+  handler: async (ctx, args) => { const server = await resolveServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.scope); const row = await ctx.db.query("environment").withIndex("by_serverId_and_scope_and_name", q => q.eq("serverId", server._id).eq("scope", args.scope).eq("name", args.name)).unique(); if (row) await ctx.db.delete(row._id); return null; },
 });
-// External worker endpoint: requires the same unguessable pairing capability.
+// Worker-only: decryptable environment for the registered identity.
 export const readEnvironment = query({
   args: { accessKey: v.string(), projectId: v.optional(v.id("projects")) }, returns: v.array(v.object({ name: v.string(), sealed: v.string(), scope: v.string() })),
   handler: async (ctx, args) => {
@@ -72,9 +191,9 @@ export const readEnvironment = query({
   },
 });
 export const importRepository = mutation({
-  args: { accessKey: v.string(), repo: v.string(), name: v.string(), kind: projectKind, recipeId: v.optional(v.id("recipes")), sealedToken: v.string() }, returns: v.id("projects"),
+  args: { accessKey: v.optional(v.string()), repo: v.string(), name: v.string(), kind: projectKind, recipeId: v.optional(v.id("recipes")), sealedToken: v.string() }, returns: v.id("projects"),
   handler: async (ctx, args) => {
-    const server = await requireServer(ctx, args.accessKey);
+    const server = await resolveServer(ctx, args.accessKey);
     const repo = validateRepository(args.repo).toLowerCase();
     if (!args.name.trim() || args.name.length > 200 || args.sealedToken.length < 100 || args.sealedToken.length > 30000) throw new Error("Invalid import request.");
     if (args.recipeId && !await ctx.db.get(args.recipeId)) throw new Error("Workflow not found.");
@@ -86,9 +205,9 @@ export const importRepository = mutation({
   },
 });
 export const retryImport = mutation({
-  args: { accessKey: v.string(), projectId: v.id("projects"), sealedToken: v.string() }, returns: v.null(),
+  args: { accessKey: v.optional(v.string()), projectId: v.id("projects"), sealedToken: v.string() }, returns: v.null(),
   handler: async (ctx, args) => {
-    const server = await requireServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.projectId);
+    const server = await resolveServer(ctx, args.accessKey); await checkScope(ctx, server._id, args.projectId);
     const row = await ctx.db.query("projectImports").withIndex("by_projectId", q => q.eq("projectId", args.projectId)).unique();
     if (!row || row.status !== "failed" || args.sealedToken.length < 100 || args.sealedToken.length > 30000) throw new Error("This import cannot be retried.");
     await ctx.db.patch(row._id, { status: "queued", sealedToken: args.sealedToken, leaseUntil: 0 });

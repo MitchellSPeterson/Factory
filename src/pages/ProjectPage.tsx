@@ -127,7 +127,7 @@ export function ProjectPage() {
           </button>
         </div>
       </form>
-      {project.serverId && <section className="settings-section">{server?.id === project.serverId ? <EnvironmentManager key={id} scope={id} /> : <p className="muted">Pair this machine in Settings to manage its environment.</p>}</section>}
+      {project.serverId && <section className="settings-section">{server?.id === project.serverId ? <EnvironmentManager key={id} scope={id} /> : <p className="muted">Start the worker on this machine to manage its environment.</p>}</section>}
     </>
   );
 }

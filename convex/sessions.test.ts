@@ -82,6 +82,7 @@ test("the worker claims a Session, streams a reply, and returns it to idle", asy
   expect(view?.session.status).toBe("idle");
   expect(view?.session.agentId).toBe("thread-1");
   expect(view?.messages.map((message) => message.text)).toEqual(["Explain the board", "Hello world"]);
+  expect(launch?.permissionMode).toBe("supervised");
   expect(view?.messages[0]?.imageUrls).toEqual([]);
   expect(view?.session.usage?.totalTokens).toBe(14);
 });
@@ -159,6 +160,61 @@ test("removing a Session deletes its transcript", async () => {
   await t.mutation(api.sessions.remove, { sessionId });
   expect(await t.query(api.sessions.get, { sessionId })).toBeNull();
   expect(await t.query(api.sessions.list, {})).toEqual([]);
+});
+
+test("structured Grok items stay separate from the assistant log", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    permissionMode: "supervised",
+    text: "Edit auth",
+  });
+  await t.mutation(api.sessions.claim, { sessionId });
+  await t.mutation(api.sessions.appendMessage, { sessionId, text: "Looking." });
+  await t.mutation(api.sessions.upsertItem, {
+    sessionId,
+    itemId: "call_1",
+    kind: "tool",
+    title: "Read file",
+    status: "inProgress",
+    text: "auth.ts",
+  });
+  await t.mutation(api.sessions.appendMessage, { sessionId, text: "Done." });
+  await t.mutation(api.sessions.upsertItem, {
+    sessionId,
+    itemId: "call_1",
+    kind: "permission",
+    title: "Run command",
+    status: "pending",
+    requestId: "5",
+    options: [
+      { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+      { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+    ],
+  });
+  await t.mutation(api.sessions.resolvePermission, { sessionId, requestId: "5", optionId: "allow-once" });
+  const view = await t.query(api.sessions.get, { sessionId });
+  expect(view?.messages.map((message) => message.kind ?? "message")).toEqual([
+    "message",
+    "message",
+    "tool",
+    "message",
+    "permission",
+  ]);
+  expect(view?.messages.map((message) => message.text)).toEqual([
+    "Edit auth",
+    "Looking.",
+    "auth.ts",
+    "Done.",
+    "",
+  ]);
+  expect(await t.query(api.sessions.getPermission, { sessionId, requestId: "5" })).toEqual({
+    status: "resolved",
+    optionId: "allow-once",
+  });
 });
 
 test("a blank message is rejected", async () => {

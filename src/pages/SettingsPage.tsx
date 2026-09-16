@@ -54,8 +54,7 @@ export function SettingsPage() {
 
 function Readout({ onSelect }: { onSelect: (tab: SettingsTab) => void }) {
   const { connection } = useGitHub();
-  const { server, accessKey } = useServer();
-  const live = useQuery(api.servers.paired, server ? { accessKey } : "skip");
+  const live = useQuery(api.servers.local);
   const projects = useQuery(api.projects.list);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -64,7 +63,7 @@ function Readout({ onSelect }: { onSelect: (tab: SettingsTab) => void }) {
   }, []);
   const github = githubStatus(connection === undefined ? undefined : connection?.login ?? null);
   const machine = machineStatus({
-    name: server === undefined ? undefined : server?.name ?? null,
+    name: live === undefined ? undefined : live?.name ?? null,
     online: !!(live && now - live.lastSeen < MACHINE_ONLINE_MS),
   });
   const projectsState = projectsStatus(projects === undefined ? undefined : projects.length);
@@ -258,7 +257,7 @@ function ProvidersBlock() {
           </details>
         </>
       ) : (
-        <p className="muted">Pair this machine first. Provider keys are encrypted for it.</p>
+        <p className="muted">Start the worker on this machine. Provider keys are encrypted for it.</p>
       )}
     </section>
   );

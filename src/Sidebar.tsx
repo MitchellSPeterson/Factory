@@ -27,6 +27,7 @@ const NAV: { section: string; items: { to: string; label: string; icon: ReactNod
     items: [
       { to: "/dashboard", label: "Dashboard", icon: <IconDashboard /> },
       { to: "/sessions", label: "Sessions", icon: <IconSessions /> },
+      { to: "/devices", label: "Devices", icon: <IconDevices /> },
       { to: "/jobs", label: "Jobs", icon: <IconJobs /> },
     ],
   },
@@ -340,6 +341,15 @@ function IconSessions() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M3.5 4.2h9a1.3 1.3 0 0 1 1.3 1.3v5.2a1.3 1.3 0 0 1-1.3 1.3H7.2L4 13.8V12H3.5A1.3 1.3 0 0 1 2.2 10.7V5.5A1.3 1.3 0 0 1 3.5 4.2Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconDevices() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="4.5" y="1.5" width="7" height="13" rx="1.6" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M7 12.4h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }

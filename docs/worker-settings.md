@@ -1,6 +1,6 @@
 # Managed Projects and environment variables
 
-## Start and pair the worker
+## Start the worker
 
 On this machine, install the Factory dependencies and Git, then start:
 
@@ -10,13 +10,13 @@ bun run worker --url https://YOUR-DEPLOYMENT.convex.cloud
 
 The URL is public deployment configuration. Factory saves it and generates a private worker identity under `.factory/worker.json` (file mode 0600). Subsequent starts need only `bun run worker`. Existing `.env.local` configuration remains compatible.
 
-Run `bun run worker:pair` and enter the resulting key under **Settings → Providers**. Treat the pairing key as an administrator credential. Pairing is kept in browser memory and must be repeated after reloading. The key authorizes configuration and import operations for this machine. No ongoing edits to a server `.env` file are needed.
+The worker registers itself with this Factory. Settings shows whether this machine is online. No pairing key is required.
 
-Back up `.factory/worker.json` securely. It contains the private key needed to decrypt saved values. Do not commit it. Losing it requires pairing again and reentering its variables. Keep this identity outside cloned Project directories. `.factory/` is ignored by Git.
+Back up `.factory/worker.json` securely. It contains the private key needed to decrypt saved values. Do not commit it. Losing it requires reentering saved variables. Keep this identity outside cloned Project directories. `.factory/` is ignored by Git.
 
 ## Add a GitHub Project
 
-1. Connect GitHub and pair this machine.
+1. Connect GitHub and start the worker.
 2. Open **Settings → GitHub** (also available on Projects).
 3. Choose a repository, name, kind, and Workflow. No local path is needed.
 4. Click **Add Project and clone**. Its status progresses from queued to cloning to ready. If the worker is offline, it picks up queued imports after reconnecting.
@@ -43,7 +43,7 @@ Values are encrypted in the browser using AES-GCM with the AES key wrapped by th
 
 Each new Run loads its settings and starts in a separate child process. Project values are injected into that process; cloud Cursor Runs also receive their Project values through the SDK's `envVars`. Active Runs retain their original configuration. No Project `.env` file is generated. Provider settings override startup environment variables; removing an override restores any startup value that already existed.
 
-Environment variables are available to code and agents executing the Run. Factory retains its existing trusted-operator access model for Workflows, Skills, and legacy Jobs; worker pairing is not a replacement for application-wide multi-user authorization. Run only trusted Projects/Workflows on a worker holding secrets. This editor manages worker and Run settings, not Convex deployment secrets or frontend build-time configuration.
+Environment variables are available to code and agents executing the Run. Factory retains its existing trusted-operator access model for Workflows, Skills, and Jobs. Run only trusted Projects/Workflows on a worker holding secrets. This editor manages worker and Run settings, not Convex deployment secrets or frontend build-time configuration.
 
 ## Tests
 

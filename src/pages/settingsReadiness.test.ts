@@ -38,12 +38,12 @@ describe("githubStatus", () => {
 });
 
 describe("machineStatus", () => {
-  test("reports unpaired, offline, and online without mixing those states", () => {
+  test("reports missing worker, offline, and online without mixing those states", () => {
     expect(machineStatus({ name: undefined, online: false }).kind).toBe("unknown");
     expect(machineStatus({ name: null, online: false })).toEqual({
       kind: "blocked",
       label: "This machine",
-      detail: "Not paired",
+      detail: "Start the worker",
     });
     expect(machineStatus({ name: "Factory-MBP", online: false })).toEqual({
       kind: "blocked",

@@ -5,6 +5,11 @@ import { requireProject, requireSession } from "./lib/docs";
 import { requireProjectServer } from "./lib/servers";
 import {
   agentEffort,
+  DEFAULT_PERMISSION_MODE,
+  permissionMode,
+  permissionOption,
+  sessionItemKind,
+  sessionItemStatus,
   sessionMessageRole,
   sessionProvider,
   sessionStatus,
@@ -25,6 +30,7 @@ const sessionDoc = v.object({
   provider: sessionProvider,
   model: v.string(),
   effort: agentEffort,
+  permissionMode: v.optional(permissionMode),
   status: sessionStatus,
   agentId: v.optional(v.string()),
   error: v.optional(v.string()),
@@ -42,6 +48,14 @@ const messageDoc = v.object({
   imageIds: v.optional(v.array(v.id("_storage"))),
   imageUrls: v.array(v.union(v.string(), v.null())),
   createdAt: v.number(),
+  kind: v.optional(sessionItemKind),
+  itemId: v.optional(v.string()),
+  status: v.optional(sessionItemStatus),
+  title: v.optional(v.string()),
+  detail: v.optional(v.string()),
+  requestId: v.optional(v.string()),
+  decision: v.optional(v.string()),
+  options: v.optional(v.array(permissionOption)),
 });
 
 const projectSummary = v.object({
@@ -58,6 +72,7 @@ const sessionLaunch = v.object({
   provider: sessionProvider,
   model: v.string(),
   effort: agentEffort,
+  permissionMode: permissionMode,
   agentId: v.optional(v.string()),
   images: v.array(v.object({ url: v.string() })),
   project: v.object({
@@ -69,6 +84,10 @@ const sessionLaunch = v.object({
     githubRepo: v.string(),
   }),
 });
+
+function isLogMessage(message: { role: string; kind?: string }) {
+  return message.role === "assistant" && (message.kind === undefined || message.kind === "message");
+}
 
 export function titleFrom(text: string, imageCount = 0): string {
   const one = text.trim().replace(/\s+/g, " ");
@@ -187,6 +206,7 @@ export const create = mutation({
     provider: sessionProvider,
     model: v.string(),
     effort: agentEffort,
+    permissionMode: v.optional(permissionMode),
     text: v.string(),
     imageIds: v.optional(v.array(v.id("_storage"))),
   },
@@ -206,6 +226,7 @@ export const create = mutation({
       provider: args.provider,
       model: args.model.trim(),
       effort: args.effort,
+      permissionMode: args.permissionMode ?? DEFAULT_PERMISSION_MODE,
       status: "queued",
     });
     await ctx.db.insert("sessionMessages", {
@@ -231,6 +252,7 @@ export const configure = mutation({
     provider: sessionProvider,
     model: v.string(),
     effort: agentEffort,
+    permissionMode: v.optional(permissionMode),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -242,6 +264,7 @@ export const configure = mutation({
       provider: args.provider,
       model: args.model.trim(),
       effort: args.effort,
+      permissionMode: args.permissionMode ?? session.permissionMode ?? DEFAULT_PERMISSION_MODE,
       ...(providerChanged ? { agentId: undefined } : {}),
     });
     return null;
@@ -350,6 +373,7 @@ export const claim = mutation({
       provider: session.provider,
       model: session.model,
       effort: session.effort,
+      permissionMode: session.permissionMode ?? DEFAULT_PERMISSION_MODE,
       agentId: session.agentId,
       images: imageUrls.flatMap((url) => (url ? [{ url }] : [])),
       project: {
@@ -385,16 +409,121 @@ export const appendMessage = mutation({
       .withIndex("by_session", (q) => q.eq("sessionId", session._id))
       .order("desc")
       .first();
-    if (last?.role === "assistant") {
+    if (last && isLogMessage(last)) {
       await ctx.db.patch(last._id, { text: last.text + args.text });
       return null;
     }
     await ctx.db.insert("sessionMessages", {
       sessionId: session._id,
       role: "assistant",
+      kind: "message",
       text: args.text,
       createdAt: Date.now(),
     });
+    return null;
+  },
+});
+
+export const upsertItem = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    itemId: v.string(),
+    kind: sessionItemKind,
+    title: v.optional(v.string()),
+    detail: v.optional(v.string()),
+    status: v.optional(sessionItemStatus),
+    text: v.optional(v.string()),
+    requestId: v.optional(v.string()),
+    options: v.optional(v.array(permissionOption)),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const session = await requireSession(ctx, args.sessionId);
+    const rows = await ctx.db
+      .query("sessionMessages")
+      .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+      .collect();
+    const existing = rows.find((row) => row.itemId === args.itemId && row.kind === args.kind);
+    const nextText = args.text ?? existing?.text ?? "";
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        title: args.title ?? existing.title,
+        detail: args.detail ?? existing.detail,
+        status: args.status ?? existing.status,
+        text: args.kind === "reasoning" && args.text ? `${existing.text}${args.text}` : nextText,
+        requestId: args.requestId ?? existing.requestId,
+        options: args.options ?? existing.options,
+      });
+      return null;
+    }
+    await ctx.db.insert("sessionMessages", {
+      sessionId: session._id,
+      role: "assistant",
+      kind: args.kind,
+      itemId: args.itemId,
+      title: args.title,
+      detail: args.detail,
+      status: args.status,
+      text: nextText,
+      requestId: args.requestId,
+      options: args.options,
+      createdAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const resolvePermission = mutation({
+  args: {
+    sessionId: v.id("sessions"),
+    requestId: v.string(),
+    optionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const session = await requireSession(ctx, args.sessionId);
+    if (session.status !== "running") throw new Error("This turn is no longer waiting for approval.");
+    const rows = await ctx.db
+      .query("sessionMessages")
+      .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+      .collect();
+    const pending = rows.find(
+      (row) => row.kind === "permission" && row.requestId === args.requestId && row.status === "pending",
+    );
+    if (!pending) throw new Error("That approval is no longer pending.");
+    const allowed = (pending.options ?? []).some((option) => option.optionId === args.optionId);
+    if (!allowed) throw new Error("Unknown approval option.");
+    const selected = pending.options?.find((option) => option.optionId === args.optionId);
+    const denied = selected?.kind === "reject_once" || selected?.kind === "reject_always";
+    await ctx.db.patch(pending._id, {
+      status: denied ? "denied" : "resolved",
+      decision: args.optionId,
+    });
+    return null;
+  },
+});
+
+export const getPermission = query({
+  args: { sessionId: v.id("sessions"), requestId: v.string() },
+  returns: v.union(
+    v.object({
+      status: v.union(v.literal("pending"), v.literal("resolved"), v.literal("denied")),
+      optionId: v.optional(v.string()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const session = await ctx.db.get(args.sessionId);
+    if (!session) return null;
+    const rows = await ctx.db
+      .query("sessionMessages")
+      .withIndex("by_session", (q) => q.eq("sessionId", session._id))
+      .collect();
+    const row = rows.find((message) => message.kind === "permission" && message.requestId === args.requestId);
+    if (!row || row.status === undefined) return null;
+    if (row.status === "pending") return { status: "pending" as const };
+    if (row.status === "denied") return { status: "denied" as const, optionId: row.decision };
+    if (row.status === "resolved") return { status: "resolved" as const, optionId: row.decision };
     return null;
   },
 });

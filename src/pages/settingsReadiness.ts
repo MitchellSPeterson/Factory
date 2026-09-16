@@ -29,7 +29,7 @@ export function machineStatus(args: {
   online: boolean;
 }): ConnectionStatus {
   if (args.name === undefined) return { kind: "unknown", label: "This machine", detail: "Checking…" };
-  if (!args.name) return { kind: "blocked", label: "This machine", detail: "Not paired" };
+  if (!args.name) return { kind: "blocked", label: "This machine", detail: "Start the worker" };
   if (args.online) return { kind: "ready", label: "This machine", detail: "Online" };
   return { kind: "blocked", label: "This machine", detail: "Offline" };
 }

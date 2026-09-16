@@ -44,6 +44,14 @@ export function providerLabel(provider?: AgentProvider) {
   return provider === "codex" ? "Codex" : provider === "cursor" ? "Cursor" : provider === "grok" ? "Grok Build" : provider === "openai" ? "OpenAI-compatible API" : "Worker default";
 }
 
+export const PERMISSION_MODES = ["supervised", "auto-accept-edits", "auto", "full-access"] as const;
+export function permissionModeLabel(mode: (typeof PERMISSION_MODES)[number]) {
+  if (mode === "auto-accept-edits") return "Auto-accept edits";
+  if (mode === "full-access") return "Full access";
+  if (mode === "auto") return "Auto";
+  return "Supervised";
+}
+
 /** Older Agents and unassigned Stages retain the worker's configured provider. */
 export function resolveProvider(provider?: AgentProvider, workerDefault?: string): AgentProvider {
   const resolved = provider ?? workerDefault ?? "cursor";

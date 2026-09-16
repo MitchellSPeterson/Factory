@@ -23,7 +23,7 @@ export function AddGitHubProject() {
   const [created, setCreated] = useState<Id<"projects"> | null>(null);
   const imported = useQuery(api.projects.get, created ? { projectId: created } : "skip");
   return <section className="settings-section"><div className="section-heading"><div><h2>Add from GitHub</h2><p>Choose a repository. Factory clones it on this machine automatically.</p></div></div>
-    {!connection ? <Link className="text-button" to="/settings?tab=github">Connect GitHub first →</Link> : !server ? <p className="muted">Pair a worker in Settings to choose where the repository is cloned.</p> : <form className="project-form" onSubmit={async event => {
+    {!connection ? <Link className="text-button" to="/settings?tab=github">Connect GitHub first →</Link> : !server ? <p className="muted">Start the worker on this machine to choose where the repository is cloned.</p> : <form className="project-form" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setError("");
       try { validateRepository(repo); const id = await create({ accessKey, repo, name: name.trim() || repo.split("/")[1]!, kind, recipeId: recipeId ? recipeId as Id<"recipes"> : undefined, sealedToken: await sealSecret(server.publicKey, connection.token) }); setCreated(id); setRepo(""); setName(""); }
       catch (err) { setError(err instanceof Error ? err.message : "Could not import repository."); } finally { setBusy(false); }
@@ -40,8 +40,8 @@ export function AddGitHubProject() {
   </section>;
 }
 export function RetryClone({ projectId }: { projectId: Id<"projects"> }) {
-  const { connection } = useGitHub(); const { server, accessKey } = useServer();
+  const { connection } = useGitHub(); const { server } = useServer();
   const retry = useMutation(api.servers.retryImport);
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  return <><button className="ghost" disabled={!connection || !server || busy} onClick={async () => { if (!connection || !server) return; setBusy(true); setError(""); try { await retry({ projectId, accessKey, sealedToken: await sealSecret(server.publicKey, connection.token) }); } catch { setError("Unable to retry. Check the worker pairing and GitHub connection."); } finally { setBusy(false); } }}>Retry clone</button>{(!connection || !server) && <p className="muted">Connect GitHub and pair this machine in Settings to retry.</p>}{error && <p className="error" role="alert">{error}</p>}</>;
+  return <><button className="ghost" disabled={!connection || !server || busy} onClick={async () => { if (!connection || !server) return; setBusy(true); setError(""); try { await retry({ projectId, sealedToken: await sealSecret(server.publicKey, connection.token) }); } catch { setError("Unable to retry. Check the worker and GitHub connection."); } finally { setBusy(false); } }}>Retry clone</button>{(!connection || !server) && <p className="muted">Connect GitHub and start the worker to retry.</p>}{error && <p className="error" role="alert">{error}</p>}</>;
 }

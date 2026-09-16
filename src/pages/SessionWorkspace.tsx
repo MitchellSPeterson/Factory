@@ -8,8 +8,11 @@ import {
   AGENT_EFFORTS,
   CODEX_MODELS,
   GROK_MODELS,
+  PERMISSION_MODES,
+  permissionModeLabel,
   providerLabel,
 } from "../../convex/lib/agentModel";
+import { DEFAULT_PERMISSION_MODE, type PermissionMode } from "../../convex/lib/validators";
 import { ContextMeter } from "../ContextViewer";
 import { modelContextWindow } from "../contextSegments";
 import { useProjectScope } from "../projectScope";
@@ -25,28 +28,37 @@ const COMPOSER_KEY = "factory-session-composer";
 
 type Provider = "grok" | "codex";
 type Effort = (typeof AGENT_EFFORTS)[number];
+type ComposerState = { provider: Provider; model: string; effort: Effort; permissionMode: PermissionMode };
 
 function renderableLog(text: string): string {
   const fences = (text.match(/^```/gm) ?? []).length;
   return fences % 2 === 1 ? `${text}\n\`\`\`` : text;
 }
 
-function readComposer(): { provider: Provider; model: string; effort: Effort } {
+function isPermissionMode(value: unknown): value is PermissionMode {
+  return value === "supervised" || value === "auto-accept-edits" || value === "auto" || value === "full-access";
+}
+
+function readPermissionMode(value: unknown): PermissionMode {
+  return isPermissionMode(value) ? value : DEFAULT_PERMISSION_MODE;
+}
+
+function readComposer(): ComposerState {
   try {
     const raw = localStorage.getItem(COMPOSER_KEY);
-    if (!raw) return { provider: "grok", model: GROK_MODELS[0], effort: "medium" };
-    const parsed = JSON.parse(raw) as { provider?: string; model?: string; effort?: string };
+    if (!raw) return { provider: "grok", model: GROK_MODELS[0], effort: "medium", permissionMode: DEFAULT_PERMISSION_MODE };
+    const parsed = JSON.parse(raw) as { provider?: string; model?: string; effort?: string; permissionMode?: string };
     const provider: Provider = parsed.provider === "codex" ? "codex" : "grok";
     const effort = AGENT_EFFORTS.includes(parsed.effort as Effort) ? (parsed.effort as Effort) : "medium";
     const models = provider === "codex" ? CODEX_MODELS : GROK_MODELS;
     const model = parsed.model && parsed.model.trim() !== "" ? parsed.model : models[0];
-    return { provider, model, effort };
+    return { provider, model, effort, permissionMode: readPermissionMode(parsed.permissionMode) };
   } catch {
-    return { provider: "grok", model: GROK_MODELS[0], effort: "medium" };
+    return { provider: "grok", model: GROK_MODELS[0], effort: "medium", permissionMode: DEFAULT_PERMISSION_MODE };
   }
 }
 
-function writeComposer(value: { provider: Provider; model: string; effort: Effort }) {
+function writeComposer(value: ComposerState) {
   try {
     localStorage.setItem(COMPOSER_KEY, JSON.stringify(value));
   } catch {
@@ -54,12 +66,19 @@ function writeComposer(value: { provider: Provider; model: string; effort: Effor
   }
 }
 
-function modelsFor(provider: Provider) {
-  return provider === "codex" ? CODEX_MODELS : GROK_MODELS;
+function modelsFor(provider: Provider, catalog: readonly string[] = []) {
+  if (provider === "codex") return [...CODEX_MODELS];
+  return catalog.length > 0 ? [...catalog] : [...GROK_MODELS];
 }
 
-function isListedModel(provider: Provider, model: string) {
-  return modelsFor(provider).some((item) => item === model);
+function isListedModel(provider: Provider, model: string, catalog: readonly string[] = []) {
+  return modelsFor(provider, catalog).some((item) => item === model);
+}
+
+function fallbackModel(provider: Provider, catalog: readonly string[] = []): string {
+  const first = modelsFor(provider, catalog)[0];
+  if (first !== undefined) return first;
+  return provider === "codex" ? "gpt-5.6-terra" : "grok-4.6";
 }
 
 function isImageFile(file: File) {
@@ -78,14 +97,16 @@ export function SessionWorkspace() {
   const stop = useMutation(api.sessions.stop);
   const remove = useMutation(api.sessions.remove);
   const configure = useMutation(api.sessions.configure);
+  const resolvePermission = useMutation(api.sessions.resolvePermission);
   const generateUploadUrl = useMutation(api.sessions.generateUploadUrl);
   const { projectId: scopedProjectId } = useProjectScope();
-  const { accessKey } = useServer();
+  const { accessKey, server } = useServer();
   const saved = readComposer();
   const [projectId, setProjectId] = useState(scopedProjectId);
   const [provider, setProvider] = useState<Provider>(saved.provider);
   const [model, setModel] = useState(saved.model);
   const [effort, setEffort] = useState<Effort>(saved.effort);
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(saved.permissionMode);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -105,7 +126,9 @@ export function SessionWorkspace() {
   const visible = (sessions ?? []).filter(
     (row) => scopedProjectId === "" || row.session.projectId === scopedProjectId,
   );
-  const models = modelsFor(provider);
+  const grokCatalog = server?.grokCatalog;
+  const grokModelSlugs = (grokCatalog?.models ?? []).map((entry) => entry.slug);
+  const models = modelsFor(provider, grokModelSlugs);
   const selectedProject = projects?.find((project) => project._id === (projectId || scopedProjectId));
   const empty = !id;
 
@@ -118,11 +141,12 @@ export function SessionWorkspace() {
     setProvider(active.provider);
     setModel(active.model);
     setEffort(active.effort);
-  }, [active?._id, active?.provider, active?.model, active?.effort]);
+    setPermissionMode(active.permissionMode ?? DEFAULT_PERMISSION_MODE);
+  }, [active?._id, active?.provider, active?.model, active?.effort, active?.permissionMode]);
 
   useEffect(() => {
-    writeComposer({ provider, model, effort });
-  }, [provider, model, effort]);
+    writeComposer({ provider, model, effort, permissionMode });
+  }, [provider, model, effort, permissionMode]);
 
   useEffect(() => {
     const node = threadRef.current;
@@ -170,7 +194,7 @@ export function SessionWorkspace() {
 
   function changeProvider(next: Provider) {
     setProvider(next);
-    if (!isListedModel(next, model)) setModel(modelsFor(next)[0]);
+    if (!isListedModel(next, model, grokModelSlugs)) setModel(fallbackModel(next, grokModelSlugs));
   }
 
   function addFiles(list: FileList | File[]) {
@@ -224,9 +248,14 @@ export function SessionWorkspace() {
     setImages([]);
   }
 
-  async function applyConfigure(next: { provider: Provider; model: string; effort: Effort }) {
+  async function applyConfigure(next: { provider: Provider; model: string; effort: Effort; permissionMode: PermissionMode }) {
     if (!id || !active || live) return;
-    if (next.provider === active.provider && next.model === active.model && next.effort === active.effort) return;
+    if (
+      next.provider === active.provider
+      && next.model === active.model
+      && next.effort === active.effort
+      && (active.permissionMode ?? DEFAULT_PERMISSION_MODE) === next.permissionMode
+    ) return;
     try {
       await configure({ sessionId: id, ...next });
     } catch (err) {
@@ -254,6 +283,7 @@ export function SessionWorkspace() {
           provider,
           model,
           effort,
+          permissionMode,
           text,
           imageIds: imageIds.length > 0 ? imageIds : undefined,
         });
@@ -387,30 +417,69 @@ export function SessionWorkspace() {
           <div className="session-thread" ref={threadRef}>
             {active?.error ? <p className="job-error">{active.error}</p> : null}
             {messages.map((message) => {
-              const liveMessage = live && message.role === "assistant" && message === last;
+              const liveMessage = live && (message.kind === undefined || message.kind === "message") && message.role === "assistant" && message === last;
               return (
-                <article className={`session-turn ${message.role}`} key={message._id}>
+                <article className={`session-turn ${message.role}${message.kind === "tool" || message.kind === "permission" || message.kind === "reasoning" ? ` ${message.kind}` : ""}`} key={message._id}>
                   {message.role === "assistant" ? (
                     <div className="session-mark" aria-hidden="true">
                       {active?.provider === "codex" ? "C" : "G"}
                     </div>
                   ) : null}
-                  <div className={`session-copy${message.role === "assistant" ? " markdown" : ""}${liveMessage ? " live" : ""}`}>
-                    {message.role === "assistant" ? (
-                      message.text !== "" ? <Markdown>{renderableLog(message.text)}</Markdown> : <p className="muted">{waiting ? "Waiting for this machine…" : "Working…"}</p>
-                    ) : (
-                      <>
-                        {message.imageUrls.length > 0 ? (
-                          <div className="session-thumbs">
-                            {message.imageUrls.map((url, index) =>
-                              url ? <img key={`${message._id}-${index}`} src={url} alt="" /> : null,
-                            )}
-                          </div>
-                        ) : null}
-                        {message.text !== "" ? <p>{message.text}</p> : null}
-                      </>
-                    )}
-                  </div>
+                  {message.kind === "tool" ? (
+                    <div className={`session-item tool ${message.status ?? ""}`}>
+                      <strong>{message.title ?? "Tool"}</strong>
+                      {message.detail ? <span>{message.detail}</span> : null}
+                    </div>
+                  ) : message.kind === "permission" ? (
+                    <div className={`session-item permission ${message.status ?? ""}`}>
+                      <strong>{message.title ?? "Grok needs approval"}</strong>
+                      {message.detail ? <span>{message.detail}</span> : null}
+                      {message.status === "pending" && message.requestId ? (
+                        <div className="session-permission-actions">
+                          {(message.options ?? []).map((option) => (
+                            <button
+                              key={option.optionId}
+                              type="button"
+                              className={option.kind?.startsWith("reject") ? "ghost" : undefined}
+                              disabled={busy}
+                              onClick={() => {
+                                if (!id || !message.requestId) return;
+                                void resolvePermission({ sessionId: id, requestId: message.requestId, optionId: option.optionId }).catch((err) => {
+                                  setError(err instanceof Error ? err.message : "Could not answer.");
+                                });
+                              }}
+                            >
+                              {option.name}
+                            </button>
+                          ))}
+                        </div>
+                      ) : message.decision ? (
+                        <small>{message.status === "denied" ? "Rejected" : "Approved"}</small>
+                      ) : null}
+                    </div>
+                  ) : message.kind === "reasoning" ? (
+                    <div className="session-item reasoning">
+                      <strong>Reasoning</strong>
+                      {message.text !== "" ? <p>{message.text}</p> : null}
+                    </div>
+                  ) : (
+                    <div className={`session-copy${message.role === "assistant" ? " markdown" : ""}${liveMessage ? " live" : ""}`}>
+                      {message.role === "assistant" ? (
+                        message.text !== "" ? <Markdown>{renderableLog(message.text)}</Markdown> : <p className="muted">{waiting ? "Waiting for this machine…" : "Working…"}</p>
+                      ) : (
+                        <>
+                          {message.imageUrls.length > 0 ? (
+                            <div className="session-thumbs">
+                              {message.imageUrls.map((url, index) =>
+                                url ? <img key={`${message._id}-${index}`} src={url} alt="" /> : null,
+                              )}
+                            </div>
+                          ) : null}
+                          {message.text !== "" ? <p>{message.text}</p> : null}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </article>
               );
             })}
@@ -544,7 +613,7 @@ export function SessionWorkspace() {
                   onClick={() => setModelPickerOpen((open) => !open)}
                 >
                   <span>{providerLabel(provider)} · {model}</span>
-                  <small>{effort}</small>
+                  <small>{provider === "grok" ? permissionModeLabel(permissionMode) : effort}</small>
                   <IconChevron />
                 </button>
                 {modelPickerOpen ? (
@@ -556,9 +625,9 @@ export function SessionWorkspace() {
                         aria-label="Provider"
                         onChange={(event) => {
                           const next = event.target.value === "codex" ? "codex" : "grok";
-                          const nextModel = isListedModel(next, model) ? model : modelsFor(next)[0];
+                          const nextModel = isListedModel(next, model, grokModelSlugs) ? model : fallbackModel(next, grokModelSlugs);
                           changeProvider(next);
-                          void applyConfigure({ provider: next, model: nextModel, effort });
+                          void applyConfigure({ provider: next, model: nextModel, effort, permissionMode });
                         }}
                       >
                         <option value="grok">{providerLabel("grok")}</option>
@@ -573,13 +642,29 @@ export function SessionWorkspace() {
                         onChange={(event) => {
                           const next = event.target.value;
                           setModel(next);
-                          void applyConfigure({ provider, model: next, effort });
+                          void applyConfigure({ provider, model: next, effort, permissionMode });
                         }}
                       >
                         {models.map((item) => <option key={item} value={item}>{item}</option>)}
-                        {isListedModel(provider, model) ? null : <option value={model}>{model}</option>}
+                        {isListedModel(provider, model, grokModelSlugs) ? null : <option value={model}>{model}</option>}
                       </select>
                     </label>
+                    {provider === "grok" ? (
+                      <label>
+                        <span>Permissions</span>
+                        <select
+                          value={permissionMode}
+                          aria-label="Permissions"
+                          onChange={(event) => {
+                            const next = readPermissionMode(event.target.value);
+                            setPermissionMode(next);
+                            void applyConfigure({ provider, model, effort, permissionMode: next });
+                          }}
+                        >
+                          {PERMISSION_MODES.map((item) => <option key={item} value={item}>{permissionModeLabel(item)}</option>)}
+                        </select>
+                      </label>
+                    ) : null}
                     <label>
                       <span>Reasoning effort</span>
                       <select
@@ -588,12 +673,13 @@ export function SessionWorkspace() {
                         onChange={(event) => {
                           const next = event.target.value as Effort;
                           setEffort(next);
-                          void applyConfigure({ provider, model, effort: next });
+                          void applyConfigure({ provider, model, effort: next, permissionMode });
                         }}
                       >
                         {AGENT_EFFORTS.map((item) => <option key={item} value={item}>{item}</option>)}
                       </select>
                     </label>
+                    {provider === "grok" && grokCatalog?.message ? <p className="muted">{grokCatalog.message}</p> : null}
                   </div>
                 ) : null}
               </div>

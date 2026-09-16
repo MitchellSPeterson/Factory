@@ -18,6 +18,7 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { SkillsPage } from "./pages/SkillsPage";
 import { SessionsPage } from "./pages/SessionsPage";
 import { SessionPage } from "./pages/SessionPage";
+import { DevicesPage } from "./pages/DevicesPage";
 import { Sidebar } from "./Sidebar";
 
 export function App() {
@@ -39,6 +40,7 @@ export function App() {
           <Route path="/asks" element={<Navigate to="/sessions" replace />} />
           <Route path="/sessions" element={<SessionsPage />} />
           <Route path="/sessions/:sessionId" element={<SessionPage />} />
+          <Route path="/devices" element={<DevicesPage />} />
           <Route path="/jobs" element={<JobsPage onNewJob={() => setNewJobOpen(true)} />} />
           <Route path="/jobs/new" element={<NewJobPage />} />
           <Route path="/jobs/:jobId" element={<JobPage />} />

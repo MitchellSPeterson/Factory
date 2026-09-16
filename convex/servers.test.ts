@@ -21,6 +21,17 @@ test("unpaired callers cannot read or change variables; metadata does not return
   await t.mutation(api.servers.setVariable, { accessKey: key, scope: "server", name: "OPENAI_API_KEY", sealed });
   const paired = await t.query(api.servers.paired, { accessKey: key });
   expect(paired).not.toHaveProperty("accessKey");
+  expect(paired.grokCatalog).toBeUndefined();
+  await t.mutation(api.servers.reportGrokCatalog, {
+    accessKey: key,
+    catalog: {
+      checkedAt: 1,
+      installed: true,
+      authenticated: true,
+      models: [{ slug: "grok-4.6", name: "Grok 4.6", isDefault: true }],
+    },
+  });
+  expect((await t.query(api.servers.paired, { accessKey: key })).grokCatalog?.models[0]?.slug).toBe("grok-4.6");
   const rows = await t.query(api.servers.variables, { accessKey: key, scope: "server" });
   expect(rows).toHaveLength(1); expect(rows[0]).not.toHaveProperty("sealed");
   expect(await t.query(api.servers.readEnvironment, { accessKey: otherKey })).toEqual([]);
@@ -69,6 +80,49 @@ test("managed Projects cannot be modified or removed by another worker", async (
   const { t } = await setup(); const projectId = await add(t);
   await expect(t.mutation(api.projects.remove, { projectId, accessKey: otherKey })).rejects.toThrow();
   await expect(t.mutation(api.projects.update, { projectId, accessKey: key, name: "Repo", localPath: "/escape", githubRepo: "owner/repo", kind: "web", defaultRuntime: "local" })).rejects.toThrow("cannot be changed");
+});
+test("sim hub state and Device commands stay on the paired worker", async () => {
+  const { t } = await setup();
+  expect((await t.query(api.servers.paired, { accessKey: key })).simHub).toBeUndefined();
+  await t.mutation(api.servers.setSimHubWanted, { accessKey: key, wanted: true });
+  await expect(t.mutation(api.servers.setSimHubWanted, { accessKey: "c".repeat(64), wanted: true })).rejects.toThrow();
+  expect((await t.query(api.servers.paired, { accessKey: key })).simHubWanted).toBe(true);
+  await t.mutation(api.servers.reportSimHub, {
+    accessKey: key,
+    hub: {
+      checkedAt: 1,
+      supported: true,
+      running: true,
+      devices: [{ udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE", name: "iPhone 16 Pro", state: "booted", streamUrl: "http://127.0.0.1:3100/stream.mjpeg" }],
+    },
+  });
+  expect((await t.query(api.servers.paired, { accessKey: key })).simHub?.devices[0]?.name).toBe("iPhone 16 Pro");
+  const first = await t.mutation(api.servers.enqueueDeviceCommand, { accessKey: key, command: { kind: "boot", udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" } });
+  const again = await t.mutation(api.servers.enqueueDeviceCommand, { accessKey: key, command: { kind: "boot", udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" } });
+  expect(again).toBe(first);
+  await t.mutation(api.servers.enqueueDeviceCommand, { accessKey: otherKey, command: { kind: "boot", udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" } });
+  expect((await t.mutation(api.servers.claimDeviceCommands, { accessKey: otherKey })).commands).toHaveLength(1);
+  const claimed = await t.mutation(api.servers.claimDeviceCommands, { accessKey: key });
+  expect(claimed.wanted).toBe(true);
+  expect(claimed.commands).toEqual([{ commandId: first, command: { kind: "boot", udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" } }]);
+  expect((await t.mutation(api.servers.claimDeviceCommands, { accessKey: key })).commands).toEqual([]);
+  await t.mutation(api.servers.finishDeviceCommand, { accessKey: key, commandId: first });
+  expect((await t.mutation(api.servers.claimDeviceCommands, { accessKey: key })).commands).toEqual([]);
+});
+test("the UI uses this machine without a pairing key", async () => {
+  const t = convexTest(schema, modules);
+  expect(await t.query(api.servers.local)).toBeNull();
+  await t.mutation(api.servers.register, { accessKey: key, publicKey: "public-only", projectsRoot: "/worker/projects", name: "test-worker" });
+  const local = await t.query(api.servers.local);
+  expect(local?.name).toBe("test-worker");
+  expect(local).not.toHaveProperty("accessKey");
+  await t.mutation(api.servers.setSimHubWanted, { wanted: true });
+  expect((await t.query(api.servers.local))?.simHubWanted).toBe(true);
+  const commandId = await t.mutation(api.servers.enqueueDeviceCommand, { command: { kind: "boot", udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" } });
+  expect(commandId.length).toBeGreaterThan(0);
+  const claimed = await t.mutation(api.servers.claimDeviceCommands, { accessKey: key });
+  expect(claimed.wanted).toBe(true);
+  expect(claimed.commands).toEqual([{ commandId, command: { kind: "boot", udid: "AAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE" } }]);
 });
 test("worker startup accepts the Skill source metadata produced by the loader", async () => {
   const { t } = await setup();
