@@ -686,6 +686,12 @@ export interface DeviceClient {
    */
   reload: () => void;
   /**
+   * Open the Expo / React Native developer menu in the foreground app.
+   * serve-sim injects ⌘D over the helper's key channel; serve-emu injects
+   * KEYCODE_MENU. A no-op if nothing is connected; harmless if the app has no menu.
+   */
+  openDevMenu: () => void;
+  /**
    * Rotate the device. serve-sim sets the next orientation in the
    * counterclockwise cycle over the helper's orientation channel; serve-emu
    * locks the opposite portrait/landscape orientation via `POST

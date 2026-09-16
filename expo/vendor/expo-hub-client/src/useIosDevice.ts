@@ -103,8 +103,10 @@ const WS_MSG_HARDWARE_KEYBOARD = 0x0d;
 const WS_TAG_SCREEN_CONFIG = 0x82;
 const WS_TAG_HARDWARE_KEYBOARD = 0x83;
 
-// HID keyboard usage codes (USB HID Usage Page 0x07) for the R reload chord.
+// HID keyboard usage codes (USB HID Usage Page 0x07) for reload (⌘R) and Expo menu (⌘D).
 const HID_USAGE_R = 0x15; // 'r'
+const HID_USAGE_D = 0x07; // 'd'
+const HID_USAGE_META = 0xe3; // Left ⌘
 
 const PLACEHOLDER_DEVICES: RunningDevice[] = [
   { id: 'ios', name: 'iPhone Simulator', platform: 'ios', current: true },
@@ -520,6 +522,21 @@ export function useIosDeviceClient(options: DeviceConnectionOptions): DeviceClie
     key('down', HID_USAGE_R);
     await new Promise((r) => setTimeout(r, 30));
     key('up', HID_USAGE_R);
+  }, []);
+
+  // Expo / RN developer menu: ⌘D over the helper's key channel, same HID path as reload.
+  const openDevMenu = useCallback(async () => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const key = (type: 'down' | 'up', usage: number) =>
+      ws.send(taggedJson(WS_MSG_KEY, { type, usage }));
+    key('down', HID_USAGE_META);
+    await new Promise((r) => setTimeout(r, 30));
+    key('down', HID_USAGE_D);
+    await new Promise((r) => setTimeout(r, 30));
+    key('up', HID_USAGE_D);
+    await new Promise((r) => setTimeout(r, 30));
+    key('up', HID_USAGE_META);
   }, []);
 
   // Rotate one step counterclockwise from the last known orientation, over the
@@ -1416,6 +1433,7 @@ export function useIosDeviceClient(options: DeviceConnectionOptions): DeviceClie
     sendKey,
     pressButton,
     reload,
+    openDevMenu,
     rotate,
     screenshot,
     appearance,

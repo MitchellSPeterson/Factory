@@ -116,6 +116,7 @@ const STREAM_OPTIONS_POLL_MS = 3000;
 const DEVICE_SETTINGS_POLL_MS = 3000;
 
 const KEYCODE_R = 46;
+const KEYCODE_MENU = 82;
 
 /** Field-wise equality so the poll only publishes state when something changed. */
 function sameForegroundApp(a: ForegroundApp, b: ForegroundApp): boolean {
@@ -395,6 +396,10 @@ export function useAndroidDeviceClient(options: DeviceConnectionOptions): Device
   // into the session; harmless if the foreground app isn't RN.
   const reload = useCallback(() => {
     send({ type: 'key', keycode: KEYCODE_R, record: false });
+  }, [send]);
+
+  const openDevMenu = useCallback(() => {
+    send({ type: 'key', keycode: KEYCODE_MENU, record: false });
   }, [send]);
 
   // Rotate the emulator by locking user rotation to the opposite of the current
@@ -1982,6 +1987,7 @@ export function useAndroidDeviceClient(options: DeviceConnectionOptions): Device
     sendKey,
     pressButton,
     reload,
+    openDevMenu,
     rotate,
     screenshot,
     appearance,

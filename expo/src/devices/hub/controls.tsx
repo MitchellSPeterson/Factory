@@ -1,6 +1,6 @@
+import { BottomSheet, RNHostView } from '@expo/ui';
 import { useState, type ReactNode } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { IconButton } from '@/components/icon-button';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -10,12 +10,19 @@ export function Label({ children, muted = false }: { children: ReactNode; muted?
 }
 export function Sheet({ title, visible, onClose, children, scroll = true }: { title: string; visible: boolean; onClose: () => void; children: ReactNode; scroll?: boolean }) {
   const t = useTheme();
-  return <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: t.background }}>
-      <View style={[styles.sheetHead, { borderColor: t.line }]}><Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text><IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} /></View>
-      {scroll ? <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>{children}</ScrollView> : children}
-    </SafeAreaView>
-  </Modal>;
+  return (
+    <BottomSheet isPresented={visible} onDismiss={onClose} snapPoints={['half', 'full']} contentPadding={0} containerColor={t.background}>
+      <RNHostView>
+        <View style={{ flex: 1, minHeight: 280 }}>
+          <View style={[styles.sheetHead, { borderColor: t.line }]}>
+            <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text>
+            <IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} />
+          </View>
+          {scroll ? <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>{children}</ScrollView> : children}
+        </View>
+      </RNHostView>
+    </BottomSheet>
+  );
 }
 export function Group({ title, children }: { title: string; children: ReactNode }) {
   const t = useTheme();

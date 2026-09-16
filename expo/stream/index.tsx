@@ -8,7 +8,7 @@ const commands = [
   'setDeviceSetting', 'clearCameraImage', 'refreshAccessibility', 'setLocation', 'clearLocation',
   'setPermission', 'resetPermissions', 'refreshPermissions', 'updateStreamSettings',
   'setStreamSource', 'setGrpcImageMode', 'setGrpcEncoder', 'setGrpcInputSource',
-  'setStreamStatsEnabled', 'setWebRtcCodec', 'pressButton', 'reload', 'rotate', 'screenshot',
+  'setStreamStatsEnabled', 'setWebRtcCodec', 'pressButton', 'reload', 'openDevMenu', 'rotate', 'screenshot',
   'setAppearance', 'setHardwareKeyboardConnected', 'toggleSoftwareKeyboard', 'sendKey',
 ] as const;
 function isCommand(value: unknown): value is typeof commands[number] {
