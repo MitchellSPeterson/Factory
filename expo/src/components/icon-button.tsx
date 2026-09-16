@@ -18,6 +18,8 @@ export const IconNames = {
   collapse: { ios: 'arrow.down.right.and.arrow.up.left', android: 'fullscreen_exit', web: 'fullscreen_exit' },
   back: { ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' },
   recents: { ios: 'square.on.square', android: 'filter_none', web: 'filter_none' },
+  menu: { ios: 'ellipsis.circle', android: 'more_horiz', web: 'more_horiz' },
+  add: { ios: 'plus', android: 'add', web: 'add' },
   jobs: { ios: 'list.bullet.rectangle', android: 'view_list', web: 'view_list' },
   sessions: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat', web: 'chat' },
   chevronDown: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },

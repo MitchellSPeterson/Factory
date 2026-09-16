@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  KeyboardAvoidingView,
+  Keyboard,
+  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import Markdown from "react-native-markdown-display";
 import { File } from "expo-file-system";
@@ -31,6 +33,43 @@ type SessionView = NonNullable<FunctionReturnType<typeof api.sessions.get>>;
 type Message = SessionView["messages"][number];
 type Settings = Pick<SessionView["session"], "provider" | "model" | "effort">;
 type Attachment = { id: Id<"_storage">; uri: string; name: string };
+
+// ponytail: pad from keyboard height — Android edge-to-edge doesn't resize. Upgrade to react-native-keyboard-controller for interactive dismiss.
+function useKeyboardHeight() {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const show = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (event) => {
+        if (Platform.OS === "ios") {
+          LayoutAnimation.configureNext({
+            duration: event.duration > 0 ? event.duration : 250,
+            update: { type: LayoutAnimation.Types.keyboard },
+          });
+        }
+        setHeight(event.endCoordinates.height);
+      },
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      (event) => {
+        if (Platform.OS === "ios") {
+          LayoutAnimation.configureNext({
+            duration: event.duration > 0 ? event.duration : 250,
+            update: { type: LayoutAnimation.Types.keyboard },
+          });
+        }
+        setHeight(0);
+      },
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return height;
+}
 
 function MessageRow({
   message,
@@ -189,6 +228,8 @@ export function Conversation({
   onCreated: (id: Id<"sessions">) => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
   const view = useQuery(api.sessions.get, sessionId ? { sessionId } : "skip");
   const create = useMutation(api.sessions.create);
   const send = useMutation(api.sessions.send);
@@ -306,12 +347,13 @@ export function Conversation({
     return (
       <Notice text="This conversation is no longer available. Choose another or start a new one." />
     );
+  const gap = Platform.OS === "ios" ? 16 : 8;
+  const bottomPad =
+    Platform.OS === "web"
+      ? 12
+      : (keyboard > 0 ? keyboard : insets.bottom) + gap;
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={96}
-    >
+    <View style={[styles.root, { paddingBottom: bottomPad }]}>
       <ScrollView
         ref={scroll}
         style={styles.feed}
@@ -536,7 +578,7 @@ export function Conversation({
           )}
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 const styles = StyleSheet.create({
@@ -591,7 +633,6 @@ const styles = StyleSheet.create({
   running: { flexDirection: "row", gap: 10, alignItems: "center" },
   composerWrap: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
     width: "100%",
     maxWidth: 820,
     alignSelf: "center",

@@ -20,6 +20,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { Action } from "@/chats/ui";
 import { Conversation } from "@/chats/Conversation";
 import { ProjectTools } from "@/chats/ProjectTools";
+import { IconButton } from "@/components/icon-button";
 
 export default function ChatsPage() {
   const theme = useTheme();
@@ -60,7 +61,17 @@ export default function ChatsPage() {
   const project = projects?.find((item) => item._id === projectId);
   const showList = wide || !showingConversation;
   useLayoutEffect(() => {
-    navigation.setOptions({ title: selected?.session.title ?? "Chats" });
+    navigation.setOptions({
+      title: selected?.session.title ?? "Chats",
+      headerRight: () => (
+        <IconButton
+          icon="add"
+          accessibilityLabel="New chat"
+          onPress={newChat}
+          style={{ marginRight: 8 }}
+        />
+      ),
+    });
   }, [navigation, selected?.session.title]);
   function open(id: Id<"sessions">) {
     setPanel(null);
@@ -74,7 +85,7 @@ export default function ChatsPage() {
     <View
       style={[
         styles.root,
-        { backgroundColor: theme.background, paddingBottom: insets.bottom },
+        { backgroundColor: theme.background },
       ]}
     >
       {showList && (
@@ -85,13 +96,10 @@ export default function ChatsPage() {
               width: wide ? 290 : "100%",
               borderColor: theme.line,
               backgroundColor: wide ? theme.sidebar : theme.background,
+              paddingBottom: insets.bottom,
             },
           ]}
         >
-          <View style={styles.listHeader}>
-            <Text style={[styles.heading, { color: theme.text }]}>Chats</Text>
-            <Action icon="add" label="New chat" compact onPress={newChat} />
-          </View>
           <TextInput
             accessibilityLabel="Search chats"
             placeholder="Search conversations…"
@@ -300,17 +308,9 @@ export default function ChatsPage() {
 const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: "row", minHeight: 0 },
   listPane: { borderRightWidth: 1 },
-  listHeader: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  heading: { fontSize: 22, fontWeight: "600", letterSpacing: -0.4 },
   search: {
     marginHorizontal: 16,
+    marginTop: 12,
     marginBottom: 16,
     paddingHorizontal: 12,
     height: 42,
