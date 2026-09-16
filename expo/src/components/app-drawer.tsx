@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import {
   DrawerContentScrollView,
@@ -13,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-export function VasaDrawer(props: DrawerContentComponentProps) {
+export function FactoryDrawer(props: DrawerContentComponentProps) {
   const theme = useTheme();
   const pathname = usePathname();
 
@@ -24,9 +23,8 @@ export function VasaDrawer(props: DrawerContentComponentProps) {
       style={{ backgroundColor: theme.sidebar }}>
       <SafeAreaView style={styles.safe} edges={['left', 'right']}>
         <View style={styles.brand}>
-          <Image source={require('@/assets/images/vasa.svg')} style={styles.mark} contentFit="contain" />
-          <ThemedText type="small" themeColor="textSecondary" style={styles.tagline}>
-            Agentic Software Factory
+          <ThemedText type="heading" style={styles.mark}>
+            Factory
           </ThemedText>
         </View>
         <ThemedText type="eyebrow" themeColor="textSecondary" style={styles.navLabel}>
@@ -106,13 +104,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   mark: {
-    width: 108,
-    height: 32,
-  },
-  tagline: {
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: 500,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: 600,
+    letterSpacing: -0.4,
   },
   navLabel: {
     paddingHorizontal: 10,

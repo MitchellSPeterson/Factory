@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { FlatList, Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconButton } from '@/components/icon-button';
 import { useTheme } from '@/hooks/use-theme';
 

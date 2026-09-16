@@ -1,6 +1,6 @@
 ## Learned User Preferences
 
-- Brand the product as VASA with sidebar tagline "Agentic Software Factory"; use `/vasa.svg` as the sidebar mark and the V mark as the tab icon.
+- Brand the product as Factory. Sidebar shows the name Factory; tab icon is the F mark at `/favicon.svg`.
 - Factory UI should follow dark Notara-like sidebar chrome.
 - Implement on the current branch. Do not create a feature branch unless asked.
 

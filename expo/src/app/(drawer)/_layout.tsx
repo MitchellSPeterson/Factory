@@ -1,6 +1,6 @@
 import { Drawer } from 'expo-router/drawer';
 
-import { VasaDrawer } from '@/components/app-drawer';
+import { FactoryDrawer } from '@/components/app-drawer';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function DrawerLayout() {
@@ -8,7 +8,7 @@ export default function DrawerLayout() {
 
   return (
     <Drawer
-      drawerContent={(props) => <VasaDrawer {...props} />}
+      drawerContent={(props) => <FactoryDrawer {...props} />}
       screenOptions={{
         headerTintColor: theme.text,
         headerStyle: { backgroundColor: theme.background },

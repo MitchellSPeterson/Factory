@@ -19,8 +19,8 @@ function developmentOrigins(): string[] {
 export async function connectDeviceHub(): Promise<{ baseUrl: string; devices: HubDevice[] }> {
   const origins = developmentOrigins();
   const advertised = await Promise.any(origins.map(async origin => {
-    const response = await fetch(`${origin}/__vasa/devices`, {
-      method: 'POST', headers: { 'X-Vasa-Device-Request': '1' }, signal: AbortSignal.timeout(20000),
+    const response = await fetch(`${origin}/__factory/devices`, {
+      method: 'POST', headers: { 'X-Factory-Device-Request': '1' }, signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) throw new Error('Preparing Devices');
     const body = record(await response.json());

@@ -3,8 +3,8 @@ const { ensureDeviceHub, superviseDeviceHub, deviceHubAddresses } = require('../
 module.exports = function deviceServiceMiddleware(next) {
   superviseDeviceHub();
   return (request, response, nextMiddleware) => {
-    if (request.url?.split('?')[0] !== '/__vasa/devices') return next(request, response, nextMiddleware);
-    if (request.method !== 'POST' || request.headers['x-vasa-device-request'] !== '1') {
+    if (request.url?.split('?')[0] !== '/__factory/devices') return next(request, response, nextMiddleware);
+    if (request.method !== 'POST' || request.headers['x-factory-device-request'] !== '1') {
       response.writeHead(405); response.end(); return;
     }
     void ensureDeviceHub().then(() => {

@@ -419,7 +419,7 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
   try {
     const initialized = await client.request("initialize", {
       protocolVersion: 1,
-      clientInfo: { name: "vasa", title: "VASA", version: "0.0.1" },
+      clientInfo: { name: "factory", title: "Factory", version: "0.0.1" },
       clientCapabilities: {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,

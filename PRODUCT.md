@@ -12,7 +12,7 @@ web
 
 ## Product Purpose
 
-[Inferred from CONTEXT.md.] VASA is a personal Agentic Software Factory. You sit here. Agents do the work. Success is starting a Job against a Project, watching it move through Lanes, answering Asks, and getting a pull request.
+[Inferred from CONTEXT.md.] Factory is a personal control plane for running agents across product repos. You sit here. Agents do the work. Success is starting a Job against a Project, watching it move through Lanes, answering Asks, and getting a pull request.
 
 ## Positioning
 
@@ -38,8 +38,7 @@ Undecided: whether Projects should stay duplicated between `/projects` and Setti
 
 Confirmed from project rules:
 
-- Brand as VASA with sidebar tagline "Agentic Software Factory".
-- Sidebar mark is `/vasa.svg`; tab icon is the V mark.
+- Brand as Factory. Sidebar shows the name Factory; tab icon is the F mark.
 - Factory UI follows dark Notara-like sidebar chrome.
 - System sans (`-apple-system`, Segoe UI, Noto Sans) and a restrained dark palette with a violet accent (`#8b7cf6`).
 
@@ -57,4 +56,4 @@ Confirmed from project rules:
 2. Setup has an order: GitHub, this machine, then a Project. The UI should make that order obvious.
 3. Speak Factory language. Prefer "this machine" over "providers" when the task is the local worker.
 4. Appearance is a preference, not the first job of Settings.
-5. Keep the VASA chrome. Settings should feel like the rest of the Factory, just clearer.
+5. Keep the Factory chrome. Settings should feel like the rest of the product, just clearer.

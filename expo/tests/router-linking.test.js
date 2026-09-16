@@ -16,7 +16,7 @@ function renderLinking(getInitialURL) {
     },
     'expo-linking': {},
     'react-native': {},
-    './extractPathFromURL': { extractExpoPathFromURL: (_prefixes, url) => url.replace('vasa://', '/') },
+    './extractPathFromURL': { extractExpoPathFromURL: (_prefixes, url) => url.replace('factory://', '/') },
     '../react-navigation/native': {
       useNavigationIndependentTree: () => false,
       getStateFromPath: (path) => ({ path }),
@@ -35,7 +35,7 @@ function renderLinking(getInitialURL) {
     },
   );
   const hook = exports.useLinking({ current: null }, {
-    prefixes: ['vasa://'],
+    prefixes: ['factory://'],
     getInitialURL,
     subscribe: () => () => {},
   }, (path) => reported.push(path));
@@ -50,7 +50,7 @@ function renderLinking(getInitialURL) {
 }
 
 test('initial URL resolving before commit queues its state update until mount', async () => {
-  const hook = renderLinking(() => Promise.resolve('vasa://devices'));
+  const hook = renderLinking(() => Promise.resolve('factory://devices'));
   expect(await hook.getInitialState()).toEqual({ path: '/devices' });
   expect(hook.reported).toEqual([]);
   const unmount = hook.commit();
@@ -59,7 +59,7 @@ test('initial URL resolving before commit queues its state update until mount', 
 });
 
 test('synchronous initial URLs also wait for commit', async () => {
-  const hook = renderLinking(() => 'vasa://devices');
+  const hook = renderLinking(() => 'factory://devices');
   expect(await hook.getInitialState()).toEqual({ path: '/devices' });
   expect(hook.reported).toEqual([]);
   const unmount = hook.commit();
@@ -73,7 +73,7 @@ test('an initial URL resolving after unmount cannot update state', async () => {
   const state = hook.getInitialState();
   const unmount = hook.commit();
   unmount();
-  url.resolve('vasa://devices');
+  url.resolve('factory://devices');
   await state;
   expect(hook.reported).toEqual([]);
 });
@@ -83,7 +83,7 @@ test('an initial URL resolving after mount still reports the deep link', async (
   const hook = renderLinking(() => url.promise);
   const state = hook.getInitialState();
   const unmount = hook.commit();
-  url.resolve('vasa://devices');
+  url.resolve('factory://devices');
   expect(await state).toEqual({ path: '/devices' });
   expect(hook.reported).toEqual(['/devices']);
   unmount();

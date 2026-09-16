@@ -10,7 +10,7 @@ import { ConvexClientProvider } from '@/lib/convex';
 
 SplashScreen.preventAutoHideAsync();
 
-const vasaDark: Theme = {
+const factoryDark: Theme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
@@ -23,7 +23,7 @@ const vasaDark: Theme = {
   },
 };
 
-const vasaLight: Theme = {
+const factoryLight: Theme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
@@ -46,7 +46,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ConvexClientProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? vasaDark : vasaLight}>
+        <ThemeProvider value={colorScheme === 'dark' ? factoryDark : factoryLight}>
           <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           <Stack screenOptions={{ headerShown: false }} />
         </ThemeProvider>

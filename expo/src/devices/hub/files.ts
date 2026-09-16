@@ -5,7 +5,7 @@ import { isAvailableAsync, shareAsync } from 'expo-sharing';
 export async function shareScreenshot(data: string) {
   if (!data.startsWith('data:image/png;base64,')) throw new Error('Screenshot was not a PNG image.');
   if (!(await isAvailableAsync())) throw new Error('Sharing is unavailable on this device.');
-  const file = new File(Paths.cache, `vasa-device-${Date.now()}.png`);
+  const file = new File(Paths.cache, `factory-device-${Date.now()}.png`);
   const bytes = Uint8Array.from(atob(data.slice(data.indexOf(',') + 1)), char => char.charCodeAt(0));
   file.write(bytes);
   try { await shareAsync(file.uri, { mimeType: 'image/png', dialogTitle: 'Device screenshot' }); }

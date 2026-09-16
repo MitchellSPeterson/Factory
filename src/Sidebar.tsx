@@ -200,7 +200,7 @@ export function Sidebar({ projects, projectId, onProjectIdChange }: SidebarProps
         <NavLink to="/dashboard" className="mobile-bar-brand">
           <img className="mobile-bar-mark" src="/favicon.svg" alt="" />
           <span className="mobile-bar-copy">
-            <strong>VASA</strong>
+            <strong>Factory</strong>
             <span>{scopeLabel}</span>
           </span>
         </NavLink>
@@ -214,10 +214,9 @@ export function Sidebar({ projects, projectId, onProjectIdChange }: SidebarProps
         inert={phone && !drawerOpen}
       >
         <div className="sidebar-head">
-          <NavLink to="/dashboard" className="brand" data-tip="VASA" title={railCollapsed ? "VASA" : undefined}>
-            <img className="brand-mark" src="/vasa.svg" alt="VASA" />
-            <img className="brand-compact" src="/favicon.svg" alt="VASA" />
-            <span className="brand-tagline">Agentic Software Factory</span>
+          <NavLink to="/dashboard" className="brand" data-tip="Factory" title={railCollapsed ? "Factory" : undefined}>
+            <span className="brand-mark">Factory</span>
+            <img className="brand-compact" src="/favicon.svg" alt="" />
           </NavLink>
           {phone ? (
             <button type="button" className="chrome-btn sidebar-close" aria-label="Close navigation" onClick={() => setDrawerOpen(false)}>

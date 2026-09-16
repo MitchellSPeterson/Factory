@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.FACTORY_DEVICE_HUB_PORT || 3400);
-const lock = path.join(tmpdir(), `vasa-hub-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`);
+const lock = path.join(tmpdir(), `factory-hub-${createHash('sha256').update(root).digest('hex').slice(0, 12)}`);
 let pending;
 let child;
 let nextAttempt = 0;

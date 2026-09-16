@@ -12,7 +12,7 @@ describe("prompt context", () => {
     const input = {
       stageKey: "plan",
       request: "Ship dark mode",
-      projectName: "VASA",
+      projectName: "Widget",
       projectKind: "web",
       acceptedSpec: "Toggle in settings",
       skills: [

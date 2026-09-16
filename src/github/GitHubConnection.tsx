@@ -54,7 +54,7 @@ export function GitHubConnection() {
     } catch (err) { setError(err instanceof Error ? err.message : "Sign-in failed."); } finally { setBusy(false); }
   }
   return <section id="github" className="settings-block github-connection">
-    <div className="section-heading"><div><h2>GitHub</h2>{connection ? null : <p>Connect GitHub to import repositories into VASA.</p>}</div>{connection && <span className="github-badge">Connected</span>}</div>
+    <div className="section-heading"><div><h2>GitHub</h2>{connection ? null : <p>Connect GitHub to import repositories into Factory.</p>}</div>{connection && <span className="github-badge">Connected</span>}</div>
     {connection ? <div className="settings-option"><div><strong>@{connection.login}</strong><span>Saved on this Factory. Other devices use the same connection.</span></div><button type="button" className="ghost" onClick={disconnect}>Disconnect</button></div> : <>
       <form className="stack settings-panel" onSubmit={event => { event.preventDefault(); void tokenConnect(); }}>
         <p className="muted">Needs a fine-grained token with Contents read.</p>
@@ -64,7 +64,7 @@ export function GitHubConnection() {
         <button disabled={!token.trim() || busy || !!device} type="submit">{busy ? "Connecting…" : "Connect GitHub"}</button>
       </form>
       <details className="github-app-setup"><summary>Connect with a GitHub App</summary><div className="stack">
-        <p>Register a GitHub App, enable Device Flow, and grant read access to Contents. Install it on the repositories you want VASA to access, then enter its public client ID.</p>
+        <p>Register a GitHub App, enable Device Flow, and grant read access to Contents. Install it on the repositories you want Factory to access, then enter its public client ID.</p>
         <a className="text-button" href="https://github.com/settings/apps/new" target="_blank" rel="noreferrer">Register a GitHub App ↗</a>
         <label>GitHub App client ID<input value={clientId} onChange={event => setClientId(event.target.value)} placeholder="Iv…" disabled={!!device || busy} /></label>
         {device ? <div className="github-device" role="status"><p>Enter this code on GitHub:</p><strong>{device.userCode}</strong><a className="button" href="https://github.com/login/device" target="_blank" rel="noreferrer">Open GitHub ↗</a><p>Waiting for authorization…</p><button className="ghost" onClick={() => setDevice(null)}>Cancel</button></div> : <button type="button" disabled={!clientId.trim() || busy} onClick={() => void appConnect()}>Sign in with GitHub App</button>}

@@ -229,31 +229,20 @@ label {
 
 .sidebar .brand-mark {
   display: block;
-  width: 108px;
-  max-width: 100%;
-  height: auto;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
 }
 
 .sidebar .brand-compact {
   display: none;
-  width: 28px;
+  width: 18px;
   height: auto;
-}
-
-.sidebar .brand-tagline {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.35;
-  letter-spacing: 0.01em;
 }
 
 .sidebar .brand:hover {
   color: var(--ink);
-}
-
-.sidebar .brand:hover .brand-tagline {
-  color: var(--muted);
 }
 
 .project-switcher {
@@ -486,7 +475,6 @@ button.chrome-btn:hover {
   display: none;
 }
 
-:root[data-theme="light"] .brand-mark,
 :root[data-theme="light"] .brand-compact,
 :root[data-theme="light"] .mobile-bar-mark {
   filter: invert(1);
@@ -509,7 +497,6 @@ button.chrome-btn:hover {
 }
 
 :root[data-sidebar="collapsed"] .brand-mark,
-:root[data-sidebar="collapsed"] .brand-tagline,
 :root[data-sidebar="collapsed"] .nav-label {
   display: none;
 }

@@ -39,7 +39,7 @@ type GrokEvent = {
 
 export function grokRules(root: string) {
   const bridge = path.join(root, "worker/grokBridge.ts");
-  return `You are running as a VASA Factory Agent. Complete the requested Stage in the current Project. Use the normal file and terminal tools for project work. Factory lifecycle tools are terminal commands of the form: bun ${JSON.stringify(bridge)} <tool> '<json>'. Available tools: ask_human {"kind":"grill"|"generic","questions":[{"id","title","body","recommend"}]}; submit_artifact {"kind":"plan_verdict"|"spec"|"pr_url","body":"..."}; finish_stage {"status":"finished"|"failed","error":"optional"}. You MUST call finish_stage exactly once. Planning Stages must submit their required verdict and spec first; PR Stages must submit the PR URL. Use ask_human when the Stage requires user input.`;
+  return `You are running as a Factory Agent. Complete the requested Stage in the current Project. Use the normal file and terminal tools for project work. Factory lifecycle tools are terminal commands of the form: bun ${JSON.stringify(bridge)} <tool> '<json>'. Available tools: ask_human {"kind":"grill"|"generic","questions":[{"id","title","body","recommend"}]}; submit_artifact {"kind":"plan_verdict"|"spec"|"pr_url","body":"..."}; finish_stage {"status":"finished"|"failed","error":"optional"}. You MUST call finish_stage exactly once. Planning Stages must submit their required verdict and spec first; PR Stages must submit the PR URL. Use ask_human when the Stage requires user input.`;
 }
 
 export function parseGrokEvent(line: string): GrokEvent | null {

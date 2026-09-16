@@ -1,6 +1,6 @@
-# VASA
+# Factory
 
-Agentic Software Factory. A personal control plane for running Cursor agents across your product repos. You sit here. Agents do the work.
+A personal control plane for running Cursor agents across your product repos. You sit here. Agents do the work.
 
 ## Language
 
