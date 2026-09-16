@@ -1,8 +1,11 @@
 import { useQuery } from "convex/react";
+import { DrawerToggleButton } from "expo-router/drawer";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useLayoutEffect, useMemo, useState } from "react";
+import { SymbolView } from "expo-symbols";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,7 +23,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { Action } from "@/chats/ui";
 import { Conversation } from "@/chats/Conversation";
 import { ProjectTools } from "@/chats/ProjectTools";
-import { IconButton } from "@/components/icon-button";
+import { IconButton, IconNames } from "@/components/icon-button";
 
 export default function ChatsPage() {
   const theme = useTheme();
@@ -56,23 +59,11 @@ export default function ChatsPage() {
   const selected = scoped.find((row) => row.session._id === params.session);
   const creating = params.new === "1";
   const showingConversation = !!selected || creating;
+  const inChat = showingConversation && !wide;
   const projectId =
     selected?.session.projectId ?? currentProject?._id ?? draftProject;
   const project = projects?.find((item) => item._id === projectId);
   const showList = wide || !showingConversation;
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: selected?.session.title ?? "Chats",
-      headerRight: () => (
-        <IconButton
-          icon="add"
-          accessibilityLabel="New chat"
-          onPress={newChat}
-          style={{ marginRight: 8 }}
-        />
-      ),
-    });
-  }, [navigation, selected?.session.title]);
   function open(id: Id<"sessions">) {
     setPanel(null);
     router.setParams({ session: id, new: undefined });
@@ -81,6 +72,73 @@ export default function ChatsPage() {
     setPanel(null);
     router.setParams({ session: undefined, new: "1" });
   }
+  function closeChat() {
+    setPanel(null);
+    router.setParams({ session: undefined, new: undefined });
+  }
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: selected?.session.title ?? (creating ? "New chat" : "Chats"),
+      headerLeft: inChat
+        ? () => (
+            <IconButton
+              icon="back"
+              accessibilityLabel="All chats"
+              onPress={closeChat}
+              style={{ backgroundColor: "transparent" }}
+            />
+          )
+        : () => <DrawerToggleButton tintColor={theme.text} />,
+      headerRight:
+        wide || showingConversation
+          ? () => (
+              <View style={styles.headerRight}>
+                <IconButton
+                  icon="git"
+                  accessibilityLabel="Changes"
+                  disabled={!project}
+                  onPress={() => togglePanel("git")}
+                  style={
+                    panel === "git"
+                      ? { backgroundColor: theme.backgroundSelected }
+                      : undefined
+                  }
+                />
+                <IconButton
+                  icon="terminal"
+                  accessibilityLabel="Terminal"
+                  disabled={!project}
+                  onPress={() => togglePanel("terminal")}
+                  style={
+                    panel === "terminal"
+                      ? { backgroundColor: theme.backgroundSelected }
+                      : undefined
+                  }
+                />
+              </View>
+            )
+          : () => null,
+    });
+  }, [
+    inChat,
+    navigation,
+    panel,
+    project,
+    creating,
+    selected?.session.title,
+    showingConversation,
+    theme.backgroundSelected,
+    theme.text,
+    wide,
+  ]);
+  useEffect(() => {
+    if (!inChat) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      closeChat();
+      return true;
+    });
+    return () => sub.remove();
+  }, [inChat]);
   return (
     <View
       style={[
@@ -134,14 +192,6 @@ export default function ChatsPage() {
                     ? "No conversations match your search."
                     : "Start a conversation to work with an agent in a Project."}
                 </Text>
-                {!search && (
-                  <Action
-                    icon="add"
-                    label="New chat"
-                    selected
-                    onPress={newChat}
-                  />
-                )}
               </View>
             ) : (
               filtered.map((row) => (
@@ -202,54 +252,29 @@ export default function ChatsPage() {
               ))
             )}
           </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+            onPress={newChat}
+            style={({ pressed }) => [
+              styles.fab,
+              {
+                backgroundColor: theme.text,
+                bottom: insets.bottom + 16,
+              },
+              pressed && styles.fabPressed,
+            ]}
+          >
+            <SymbolView
+              name={IconNames.compose}
+              size={22}
+              tintColor={theme.sidebar}
+            />
+          </Pressable>
         </View>
       )}
       {(wide || showingConversation) && (
         <View style={styles.main}>
-          <View style={[styles.topbar, { borderColor: theme.line }]}>
-            {!wide && (
-              <Action
-                icon="back"
-                label="All chats"
-                compact
-                onPress={() => {
-                  setPanel(null);
-                  router.setParams({ session: undefined, new: undefined });
-                }}
-              />
-            )}
-            <View style={styles.projectLabel}>
-              <Text
-                numberOfLines={1}
-                style={{ color: theme.text, fontSize: 16, fontWeight: "600", letterSpacing: -0.3 }}
-              >
-                {project?.name ?? "New conversation"}
-              </Text>
-              <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                {selected?.session.status === "running"
-                  ? "Agent working"
-                  : selected
-                    ? selected.session.model
-                    : "Local Project"}
-              </Text>
-            </View>
-            <Action
-              icon="git"
-              label="Changes"
-              compact
-              selected={panel === "git"}
-              disabled={!project}
-              onPress={() => togglePanel("git")}
-            />
-            <Action
-              icon="terminal"
-              label="Terminal"
-              compact
-              selected={panel === "terminal"}
-              disabled={!project}
-              onPress={() => togglePanel("terminal")}
-            />
-          </View>
           {!selected && !currentProject && (
             <ScrollView
               horizontal
@@ -322,23 +347,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     fontSize: 13,
   },
-  list: { paddingHorizontal: 8, paddingBottom: 24, gap: 4 },
-  listEmpty: { padding: 16, gap: 18 },
+  list: { paddingHorizontal: 8, paddingBottom: 88, gap: 4 },
+  listEmpty: { padding: 16, gap: 8 },
   row: { padding: 14, borderRadius: 12, gap: 8 },
   rowHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
   dot: { width: 5, height: 5, borderRadius: 3 },
   rowTitle: { fontSize: 14, fontWeight: "500", flex: 1, lineHeight: 20 },
   metadata: { fontSize: 11, paddingLeft: 13 },
   main: { flex: 1, minWidth: 0 },
-  topbar: {
+  headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 2,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    marginRight: 8,
   },
-  projectLabel: { flex: 1, gap: 3, paddingLeft: 4, minWidth: 0 },
+  fab: {
+    position: "absolute",
+    right: 16,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  fabPressed: { transform: [{ scale: 0.97 }] },
   work: { flex: 1, flexDirection: "row", minHeight: 0 },
   tools: { borderLeftWidth: 1 },
   projects: { flexGrow: 0, maxHeight: 64 },
