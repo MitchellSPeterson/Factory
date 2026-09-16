@@ -1,6 +1,7 @@
 import { useFocusEffect, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AppState, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '@/components/action-button';
 import { IconButton } from '@/components/icon-button';
 import { useTheme } from '@/hooks/use-theme';
@@ -14,6 +15,7 @@ import { numeric, text, type HubMessage, type StreamSelection } from '@/devices/
 
 export default function DevicesPage() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const endpoint = useRef<string | null>(null);
@@ -96,16 +98,18 @@ export default function DevicesPage() {
     </View>
     {error ? <View style={{ padding: 12 }}><Label>{error}</Label></View> : null}
     {!fullscreen && <View style={{ paddingHorizontal: 16, paddingTop: 8 }}><Label muted>{text(state.status, online ? 'Ready' : 'Connecting')} · {Math.round(numeric(state.fps))} FPS · {mode.toUpperCase()}</Label></View>}
-    <View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: 12, paddingBottom: 20, gap: 8 }}>
+    <View style={{ paddingBottom: insets.bottom + 20 }}><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, gap: 12, alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', padding: 4, gap: 2, borderRadius: 18, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.subtleHover }}>
+        <IconButton icon="screenshot" accessibilityLabel="Take screenshot" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'screenshot', args: [] } })} />
+        <IconButton icon="appearance" accessibilityLabel="Toggle device light and dark mode" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'setAppearance', args: [state.appearance === 'dark' ? 'light' : 'dark'] } })} />
+        <IconButton icon="home" accessibilityLabel="Home" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['home'] } })} />
+        <IconButton icon="reload" accessibilityLabel="Reload app" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'reload', args: [] } })} />
+      </View>
+      <IconButton icon="rotate" accessibilityLabel="Rotate device" style={{ width: 52, height: 52, borderRadius: 18, borderWidth: 1, borderColor: theme.line }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'rotate', args: [] } })} />
       <IconButton icon={paused ? 'play' : 'stop'} accessibilityLabel={paused ? 'Resume preview' : 'Pause preview'} onPress={() => setPaused(value => !value)} />
-      <IconButton icon="home" accessibilityLabel="Home" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['home'] } })} />
-      <ActionButton label="Rotate" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'rotate', args: [] } })} />
-      <ActionButton label="Screenshot" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'screenshot', args: [] } })} />
-      <ActionButton label="Reload" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'reload', args: [] } })} />
-      <ActionButton label={fullscreen ? 'Exit full screen' : 'Full screen'} variant="ghost" onPress={() => setFullscreen(value => !value)} />
-      <ActionButton label="Inspector" variant="ghost" onPress={() => setInspector(true)} />
-      <ActionButton label="Devices" variant="ghost" onPress={() => setDeviceList(true)} />
-      {selected?.platform === 'android' && <><ActionButton label="Back" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['back'] } })} /><ActionButton label="Recents" variant="ghost" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['recents'] } })} /></>}
+      <IconButton icon={fullscreen ? 'collapse' : 'expand'} accessibilityLabel={fullscreen ? 'Exit full screen' : 'Full screen'} onPress={() => setFullscreen(value => !value)} />
+      {fullscreen && <><IconButton icon="settings" accessibilityLabel="Inspector" onPress={() => setInspector(true)} /><IconButton icon="devices" accessibilityLabel="Devices" onPress={() => setDeviceList(true)} /></>}
+      {selected?.platform === 'android' && <><IconButton icon="back" accessibilityLabel="Back" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['back'] } })} /><IconButton icon="recents" accessibilityLabel="Recent apps" disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['recents'] } })} /></>}
     </ScrollView></View>
     {baseUrl && <DeviceList visible={deviceList} onClose={() => setDeviceList(false)} devices={devices} selected={selected?.id} onSelect={device => { setSelectedId(device.id); setPaused(false); }} baseUrl={baseUrl} refresh={refresh} />}
     <Inspector key={selected?.id} visible={inspector} onClose={() => setInspector(false)} state={state} send={send} mode={mode} setMode={setMode} onError={setError} />

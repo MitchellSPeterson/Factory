@@ -85,9 +85,20 @@ function Renderer() {
   const height = client.screen?.height ?? 19.5;
   const landscape = client.screen?.orientation?.startsWith('landscape');
   const ratio = landscape ? height / width : width / height;
-  return <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000' }}>
-    <div style={{ position: 'relative', aspectRatio: ratio, width: `min(100vw, ${ratio * 100}vh)`, maxHeight: '100%' }}>
-      <DeviceScreen client={client} />
+  return <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'transparent' }}>
+    <div style={{
+      position: 'relative', flexShrink: 0,
+      width: `min(calc(100vw - 64px), calc(${ratio * 100}vh - ${ratio * 64}px))`,
+      boxSizing: 'content-box', padding: 6, border: '2px solid #777a80',
+      borderRadius: 38, background: '#08090b',
+      boxShadow: '0 12px 24px #0006, inset 0 0 0 1px #25272c',
+    }}>
+      <div aria-hidden style={{ position: 'absolute', left: -5, top: '17%', width: 3, height: '5%', borderRadius: '2px 0 0 2px', background: '#777a80', pointerEvents: 'none' }} />
+      <div aria-hidden style={{ position: 'absolute', left: -5, top: '26%', width: 3, height: '8%', borderRadius: '2px 0 0 2px', background: '#777a80', pointerEvents: 'none' }} />
+      <div aria-hidden style={{ position: 'absolute', right: -5, top: '27%', width: 3, height: '12%', borderRadius: '0 2px 2px 0', background: '#777a80', pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', width: '100%', aspectRatio: ratio, borderRadius: 30, overflow: 'hidden', background: '#000' }}>
+        <DeviceScreen client={client} />
+      </div>
     </div>
   </div>;
 }
