@@ -128,7 +128,11 @@ export const unchangedReason = v.union(
   v.literal("superseded"),
 );
 
-export const sessionProvider = v.union(v.literal("grok"), v.literal("codex"));
+export const sessionProvider = v.union(
+  v.literal("grok"),
+  v.literal("codex"),
+  v.literal("cursor"),
+);
 
 export const sessionStatus = v.union(
   v.literal("idle"),

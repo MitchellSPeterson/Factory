@@ -20,14 +20,17 @@ import Markdown from "react-native-markdown-display";
 import { File } from "expo-file-system";
 import { api } from "@/lib/api";
 import { useTheme } from "@/hooks/use-theme";
-import { Fonts } from "@/constants/theme";
+import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "../../../convex/_generated/dataModel";
-import {
-  AGENT_EFFORTS,
-  CODEX_MODELS,
-  GROK_MODELS,
-} from "../../../convex/lib/agentModel";
+import { CODEX_MODELS } from "../../../convex/lib/agentModel";
 import { Action, Notice } from "./ui";
+import {
+  EffortMenu,
+  ModelMenu,
+  PickerChip,
+  effortLabel,
+  modelTitle,
+} from "./model-picker";
 
 type SessionView = NonNullable<FunctionReturnType<typeof api.sessions.get>>;
 type Message = SessionView["messages"][number];
@@ -86,7 +89,7 @@ function MessageRow({
   const activity = message.kind && message.kind !== "message";
   if (activity)
     return (
-      <View style={[styles.activity, { borderColor: theme.line }]}>
+      <View style={styles.activity}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded }}
@@ -99,7 +102,8 @@ function MessageRow({
                 message.status === "failed"
                   ? theme.danger
                   : theme.textSecondary,
-              fontSize: 13,
+              fontSize: 12,
+              lineHeight: 18,
               flex: 1,
             }}
           >
@@ -109,9 +113,6 @@ function MessageRow({
                 : message.kind === "permission"
                   ? "Approval requested"
                   : "Tool activity")}
-          </Text>
-          <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-            {message.status}
           </Text>
           <Action
             icon="down"
@@ -153,15 +154,14 @@ function MessageRow({
       </View>
     );
   const user = message.role === "user";
+  const dark = theme.background === Colors.dark.background;
   return (
     <View
       style={[
         styles.message,
         user && styles.userMessage,
         user && {
-          backgroundColor: theme.backgroundElement,
-          borderColor: theme.line,
-          borderWidth: 1,
+          backgroundColor: dark ? "#2f2f2f" : "#ececee",
         },
       ]}
     >
@@ -172,7 +172,7 @@ function MessageRow({
       ) : (
         <Markdown
           style={{
-            body: { color: theme.text, fontSize: 15, lineHeight: 25 },
+            body: { color: theme.text, fontSize: 16, lineHeight: 26 },
             code_inline: {
               backgroundColor: theme.backgroundElement,
               color: theme.text,
@@ -241,7 +241,7 @@ export function Conversation({
   const [pending, setPending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [picker, setPicker] = useState<null | "model" | "effort">(null);
   const [settings, setSettings] = useState<Settings>({
     provider: "codex",
     model: CODEX_MODELS[0],
@@ -261,17 +261,20 @@ export function Conversation({
       });
   }, [view?.session.provider, view?.session.model, view?.session.effort]);
   async function changeSettings(next: Settings) {
+    const previous = settings;
     setError("");
+    setSettings(next);
     try {
       if (sessionId) await configure({ sessionId, ...next });
-      setSettings(next);
     } catch (e) {
+      setSettings(previous);
       setError(e instanceof Error ? e.message : "Could not update model.");
     }
   }
   async function submit() {
     if ((!text.trim() && !attachments.length) || pending || busy || !projectId)
       return;
+    setPicker(null);
     setPending(true);
     setError("");
     try {
@@ -391,8 +394,8 @@ export function Conversation({
             </Text>
             <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
               {projectId
-                ? `Work with an agent in ${projectName}. Review changes and run commands without leaving the conversation.`
-                : "Choose a Project to start a conversation."}
+                ? `Ask ${projectName} anything.`
+                : "Choose a Project to start."}
             </Text>
           </View>
         )}
@@ -424,68 +427,41 @@ export function Conversation({
           />
         </View>
       )}
-      <View style={styles.composerWrap}>
+      {picker ? (
+        <Pressable
+          accessibilityLabel="Dismiss picker"
+          onPress={() => setPicker(null)}
+          style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
+        />
+      ) : null}
+      <View style={[styles.composerWrap, { zIndex: 2 }]}>
         {error ? <Notice text={error} error /> : null}
-        {settingsOpen && (
-          <View
-            style={[
-              styles.settings,
-              {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.line,
-              },
-            ]}
-          >
-            <View style={styles.controls}>
-              {(["codex", "grok"] as const).map((provider) => (
-                <Action
-                  key={provider}
-                  label={provider === "codex" ? "Codex" : "Grok"}
-                  selected={settings.provider === provider}
-                  disabled={busy}
-                  onPress={() =>
-                    void changeSettings({
-                      ...settings,
-                      provider,
-                      model:
-                        provider === "codex" ? CODEX_MODELS[0] : GROK_MODELS[0],
-                    })
-                  }
-                />
-              ))}
-            </View>
-            <ScrollView horizontal>
-              {(settings.provider === "codex" ? CODEX_MODELS : GROK_MODELS).map(
-                (model) => (
-                  <Action
-                    key={model}
-                    label={model}
-                    selected={settings.model === model}
-                    disabled={busy}
-                    onPress={() => void changeSettings({ ...settings, model })}
-                  />
-                ),
-              )}
-            </ScrollView>
-            <View style={styles.controls}>
-              {AGENT_EFFORTS.map((effort) => (
-                <Action
-                  key={effort}
-                  label={effort}
-                  selected={settings.effort === effort}
-                  disabled={busy}
-                  onPress={() => void changeSettings({ ...settings, effort })}
-                />
-              ))}
-            </View>
-          </View>
-        )}
+        <ModelMenu
+          visible={picker === "model"}
+          current={settings}
+          disabled={busy}
+          onSelect={(next) => {
+            void changeSettings({ ...settings, ...next });
+            setPicker(null);
+          }}
+        />
+        <EffortMenu
+          visible={picker === "effort"}
+          current={settings.effort}
+          disabled={busy}
+          onSelect={(effort) => {
+            void changeSettings({ ...settings, effort });
+            setPicker(null);
+          }}
+        />
         <View
           style={[
             styles.composer,
             {
-              backgroundColor: theme.backgroundElement,
-              borderColor: theme.lineStrong,
+              backgroundColor: theme.background === Colors.dark.background
+                ? "#2f2f2f"
+                : theme.backgroundElement,
+              borderColor: theme.line,
             },
           ]}
         >
@@ -530,11 +506,27 @@ export function Conversation({
               onPress={() => void attach()}
               disabled={uploading || attachments.length >= 4}
             />
-            <Action
-              icon="down"
-              label={settings.model}
-              onPress={() => setSettingsOpen(!settingsOpen)}
-              selected={settingsOpen}
+            <PickerChip
+              label={modelTitle(settings.model)}
+              icon={settings.provider}
+              open={picker === "model"}
+              disabled={busy}
+              onPress={() => setPicker(picker === "model" ? null : "model")}
+            />
+            <View
+              style={{
+                width: StyleSheet.hairlineWidth,
+                height: 14,
+                backgroundColor: theme.lineStrong,
+                marginHorizontal: 2,
+              }}
+            />
+            <PickerChip
+              label={effortLabel(settings.effort)}
+              open={picker === "effort"}
+              filled
+              disabled={busy}
+              onPress={() => setPicker(picker === "effort" ? null : "effort")}
             />
             <View style={{ flex: 1 }} />
             {uploading || pending ? (
@@ -545,7 +537,7 @@ export function Conversation({
                 icon="stop"
                 label="Stop agent"
                 compact
-                selected
+                emphasis
                 onPress={() =>
                   void stop({ sessionId }).catch((e) => setError(String(e)))
                 }
@@ -555,7 +547,7 @@ export function Conversation({
                 icon="send"
                 label="Send message"
                 compact
-                selected
+                emphasis
                 disabled={
                   pending ||
                   uploading ||
@@ -567,16 +559,6 @@ export function Conversation({
             )}
           </View>
         </View>
-        <View style={styles.footer}>
-          <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-            {projectName || "No Project selected"} · {settings.effort} effort
-          </Text>
-          {view?.session.usage && (
-            <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-              {view.session.usage.totalTokens.toLocaleString()} tokens
-            </Text>
-          )}
-        </View>
       </View>
     </View>
   );
@@ -586,11 +568,12 @@ const styles = StyleSheet.create({
   feed: { flex: 1 },
   feedContent: {
     width: "100%",
-    maxWidth: 820,
+    maxWidth: 768,
     alignSelf: "center",
-    padding: 20,
-    paddingBottom: 32,
-    gap: 20,
+    paddingHorizontal: 20,
+    paddingTop: 28,
+    paddingBottom: 24,
+    gap: 24,
   },
   emptyFeed: { flexGrow: 1 },
   empty: {
@@ -598,69 +581,82 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
-    gap: 12,
+    gap: 10,
   },
   emptyTitle: {
-    fontSize: 26,
+    fontSize: 32,
     fontWeight: "600",
-    letterSpacing: -0.7,
+    letterSpacing: -0.5,
+    lineHeight: 38,
     textAlign: "center",
   },
   emptyBody: {
-    fontSize: 14,
-    lineHeight: 23,
-    maxWidth: 340,
+    fontSize: 15,
+    lineHeight: 22,
+    maxWidth: 320,
     textAlign: "center",
   },
-  message: { gap: 10 },
+  message: { gap: 10, maxWidth: "100%" },
   userMessage: {
     alignSelf: "flex-end",
-    maxWidth: "90%",
-    borderRadius: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    maxWidth: "78%",
+    borderRadius: 22,
+    borderCurve: "continuous",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  prose: { fontSize: 15, lineHeight: 24 },
-  activity: { borderBottomWidth: 1, paddingBottom: 6 },
-  activityTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
+  prose: { fontSize: 16, lineHeight: 24 },
+  activity: { paddingVertical: 4, paddingHorizontal: 4 },
+  activityTitle: { flexDirection: "row", alignItems: "center", gap: 8 },
   code: {
     fontFamily: Fonts.mono,
     fontSize: 12,
     lineHeight: 20,
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   image: { width: 240, height: 180, maxWidth: "100%", borderRadius: 12 },
-  running: { flexDirection: "row", gap: 10, alignItems: "center" },
+  running: { flexDirection: "row", gap: 10, alignItems: "center", paddingHorizontal: 4 },
   composerWrap: {
     paddingHorizontal: 16,
     width: "100%",
-    maxWidth: 820,
+    maxWidth: 768,
     alignSelf: "center",
   },
-  composer: { borderRadius: 20, borderWidth: 1, padding: 8 },
+  composer: {
+    borderRadius: 28,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.18,
+        shadowRadius: 24,
+      },
+      android: { elevation: 4 },
+      web: { boxShadow: "0 12px 40px rgba(0,0,0,0.28)" },
+      default: {},
+    }),
+  },
   editor: {
-    minHeight: 66,
+    minHeight: 44,
     maxHeight: 180,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
-    lineHeight: 23,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    lineHeight: 22,
     textAlignVertical: "top",
   },
   toolbar: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
     gap: 2,
+    paddingHorizontal: 4,
+    paddingBottom: 2,
   },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-    paddingTop: 10,
-  },
-  settings: { borderRadius: 16, borderWidth: 1, padding: 8, marginBottom: 8 },
-  controls: { flexDirection: "row", flexWrap: "wrap" },
   thumbnail: { width: 60, height: 60, borderRadius: 8 },
-  jump: { position: "absolute", bottom: 190, alignSelf: "center" },
+  jump: { position: "absolute", bottom: 112, alignSelf: "center" },
 });

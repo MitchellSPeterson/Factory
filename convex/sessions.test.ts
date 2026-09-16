@@ -112,6 +112,20 @@ test("configure can change provider on an idle Session and drops the stored thre
   expect(view?.session.agentId).toBeUndefined();
 });
 
+test("creating a Session with Cursor stores that provider", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "cursor",
+    model: "composer-2.5",
+    effort: "medium",
+    text: "What should I change?",
+  });
+  const view = await t.query(api.sessions.get, { sessionId });
+  expect(view?.session.provider).toBe("cursor");
+  expect(view?.session.model).toBe("composer-2.5");
+});
+
 test("follow-up messages wait until the current turn is idle", async () => {
   const { t, projectId } = await setup();
   const sessionId = await t.mutation(api.sessions.create, {

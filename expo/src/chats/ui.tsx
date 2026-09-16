@@ -26,6 +26,7 @@ export function Action({
   disabled,
   selected,
   compact,
+  emphasis,
 }: {
   icon?: keyof typeof icons;
   label: string;
@@ -33,8 +34,16 @@ export function Action({
   disabled?: boolean;
   selected?: boolean;
   compact?: boolean;
+  emphasis?: boolean;
 }) {
   const theme = useTheme();
+  const fill = emphasis
+    ? disabled
+      ? theme.lineStrong
+      : theme.text
+    : selected
+      ? theme.backgroundSelected
+      : "transparent";
   return (
     <Pressable
       accessibilityRole="button"
@@ -44,21 +53,28 @@ export function Action({
       onPress={onPress}
       style={({ pressed }) => [
         styles.action,
+        emphasis && styles.emphasis,
         {
-          backgroundColor: selected
-            ? theme.backgroundSelected
-            : pressed
-              ? theme.subtleHover
-              : "transparent",
-          opacity: disabled ? 0.4 : 1,
+          backgroundColor:
+            !emphasis && pressed && !disabled ? theme.subtleHover : fill,
+          opacity: disabled && !emphasis ? 0.4 : 1,
+          transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
         },
       ]}
     >
       {icon && (
         <SymbolView
           name={icons[icon]}
-          size={18}
-          tintColor={selected ? theme.accent : theme.text}
+          size={emphasis ? 16 : 18}
+          tintColor={
+            emphasis
+              ? disabled
+                ? theme.textSecondary
+                : theme.background
+              : selected
+                ? theme.accent
+                : theme.text
+          }
         />
       )}
       {!compact && (
@@ -105,10 +121,19 @@ const styles = StyleSheet.create({
     minWidth: 44,
     paddingHorizontal: 12,
     borderRadius: 12,
+    borderCurve: "continuous",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
+  },
+  emphasis: {
+    width: 36,
+    height: 36,
+    minHeight: 36,
+    minWidth: 36,
+    paddingHorizontal: 0,
+    borderRadius: 18,
   },
   notice: { paddingHorizontal: 16, paddingVertical: 10 },
 });

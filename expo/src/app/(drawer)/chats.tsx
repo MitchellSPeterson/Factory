@@ -191,8 +191,12 @@ export default function ChatsPage() {
                     style={[styles.metadata, { color: theme.textSecondary }]}
                   >
                     {row.projectName} ·{" "}
-                    {row.session.provider === "codex" ? "Codex" : "Grok"} ·{" "}
-                    {row.session.status}
+                    {row.session.provider === "codex"
+                      ? "Codex"
+                      : row.session.provider === "cursor"
+                        ? "Cursor"
+                        : "Grok"}{" "}
+                    · {row.session.status}
                   </Text>
                 </Pressable>
               ))
@@ -217,7 +221,7 @@ export default function ChatsPage() {
             <View style={styles.projectLabel}>
               <Text
                 numberOfLines={1}
-                style={{ color: theme.text, fontSize: 14, fontWeight: "600" }}
+                style={{ color: theme.text, fontSize: 16, fontWeight: "600", letterSpacing: -0.3 }}
               >
                 {project?.name ?? "New conversation"}
               </Text>
@@ -232,7 +236,7 @@ export default function ChatsPage() {
             <Action
               icon="git"
               label="Changes"
-              compact={width < 460}
+              compact
               selected={panel === "git"}
               disabled={!project}
               onPress={() => togglePanel("git")}
@@ -240,7 +244,7 @@ export default function ChatsPage() {
             <Action
               icon="terminal"
               label="Terminal"
-              compact={width < 460}
+              compact
               selected={panel === "terminal"}
               disabled={!project}
               onPress={() => togglePanel("terminal")}
@@ -329,10 +333,10 @@ const styles = StyleSheet.create({
   topbar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 4,
-    borderBottomWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   projectLabel: { flex: 1, gap: 3, paddingLeft: 4, minWidth: 0 },
   work: { flex: 1, flexDirection: "row", minHeight: 0 },

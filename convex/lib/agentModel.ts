@@ -38,6 +38,7 @@ export function toModelSelection(model: string, effort: string) {
 
 export const CODEX_MODELS = ["gpt-5.6-terra", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"] as const;
 export const GROK_MODELS = ["grok-4.6", "grok-4.5", "grok-build-0.1"] as const;
+export const CURSOR_MODELS = AGENT_MODELS;
 export const AGENT_PROVIDERS = ["cursor", "codex", "grok", "openai"] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 export function providerLabel(provider?: AgentProvider) {

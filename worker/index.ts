@@ -66,7 +66,7 @@ type Launch = {
 type SessionLaunch = {
   sessionId: Id<"sessions">;
   prompt: string;
-  provider: "grok" | "codex";
+  provider: "grok" | "codex" | "cursor";
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
   permissionMode: "supervised" | "auto-accept-edits" | "auto" | "full-access";
@@ -518,9 +518,63 @@ async function runSessionCodex(client: ConvexHttpClient, launch: SessionLaunch) 
   }
 }
 
+async function runSessionCursor(client: ConvexHttpClient, launch: SessionLaunch) {
+  if (!process.env.CURSOR_API_KEY) {
+    throw new Error("Set CURSOR_API_KEY in Settings → Worker environment before starting a chat.");
+  }
+  const apiKey = requireEnv("CURSOR_API_KEY");
+  const model = toModelSelection(launch.model, launch.effort);
+  const local = { cwd: launch.project.localPath };
+  const agent = launch.agentId
+    ? await Agent.resume(launch.agentId, { apiKey, model, local })
+    : await Agent.create({ apiKey, model, local });
+  await client.mutation(api.sessions.bindAgent, {
+    sessionId: launch.sessionId,
+    agentId: agent.agentId,
+  });
+  const log = createLiveLog((text) =>
+    client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }),
+  );
+  let live = false;
+  let usage = ZERO_USAGE;
+  // ponytail: Cursor session send is text-only. Attachments stay in the transcript; upgrade to SDKUserMessage images.
+  const run = await agent.send(launch.prompt, {
+    model,
+    onDelta: ({ update }) => {
+      if (update.type === "text-delta" || update.type === "thinking-delta") {
+        live = true;
+        log.push(update.text);
+      }
+    },
+  });
+  try {
+    for await (const event of run.stream()) {
+      if (event.type === "usage") {
+        const next = fromCursorUsage(event.usage);
+        if (next) usage = next;
+      }
+      if (live) continue;
+      if (event.type === "assistant") {
+        for (const block of event.message.content) {
+          if (block.type === "text" && block.text.trim() !== "") log.push(block.text);
+        }
+      }
+      if (event.type === "thinking" && event.text.trim() !== "") log.push(event.text);
+    }
+    const result = await run.wait();
+    await reportSessionUsage(client, launch.sessionId, fromCursorUsage(result.usage) ?? usage);
+    if (result.status === "error") throw new Error("Cursor chat failed");
+    await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });
+  } finally {
+    await log.close();
+    await agent[Symbol.asyncDispose]();
+  }
+}
+
 async function executeSession(client: ConvexHttpClient, launch: SessionLaunch) {
   if (process.env.FACTORY_MOCK === "1") await mockSession(client, launch);
   else if (launch.provider === "grok") await runSessionGrok(client, launch);
+  else if (launch.provider === "cursor") await runSessionCursor(client, launch);
   else await runSessionCodex(client, launch);
 }
 
