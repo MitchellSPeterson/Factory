@@ -7,11 +7,13 @@ import { ThemedText } from '@/components/themed-text';
 import { api } from '@/lib/api';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useProjectScope } from '@/lib/project-scope-context';
 
 export default function SettingsPage() {
   const theme = useTheme();
   const navigation = useNavigation();
   const live = useQuery(api.servers.local);
+  const { scope, currentProject, label } = useProjectScope();
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: 'Settings' });
@@ -54,6 +56,31 @@ export default function SettingsPage() {
           <ThemedText type="small" themeColor="textSecondary">
             Start the worker on this machine. It registers itself with this Factory.
           </ThemedText>
+        )}
+      </View>
+      <View style={styles.block}>
+        <View style={styles.sectionHeading}>
+          <ThemedText type="section">Project scope</ThemedText>
+          <ThemedText type="small" themeColor="textSecondary">
+            {scope.kind === 'project'
+              ? 'The Project selected in the drawer.'
+              : 'Choose a Project in the drawer to focus Chats on one repository.'}
+          </ThemedText>
+        </View>
+        {scope.kind === 'project' && currentProject ? (
+          <View style={[styles.option, { borderColor: theme.line }]}>
+            <ThemedText type="smallBold">{currentProject.name}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {currentProject.githubRepo || currentProject.localPath}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={[styles.option, { borderColor: theme.line }]}>
+            <ThemedText type="smallBold">{label}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Chats currently include every Project.
+            </ThemedText>
+          </View>
         )}
       </View>
     </ScrollView>

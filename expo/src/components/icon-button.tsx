@@ -18,6 +18,11 @@ export const IconNames = {
   collapse: { ios: 'arrow.down.right.and.arrow.up.left', android: 'fullscreen_exit', web: 'fullscreen_exit' },
   back: { ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' },
   recents: { ios: 'square.on.square', android: 'filter_none', web: 'filter_none' },
+  jobs: { ios: 'list.bullet.rectangle', android: 'view_list', web: 'view_list' },
+  sessions: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat', web: 'chat' },
+  chevronDown: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
+  check: { ios: 'checkmark', android: 'check', web: 'check' },
+  layers: { ios: 'square.stack.3d.up.fill', android: 'layers', web: 'layers' },
 } as const;
 
 export type IconName = keyof typeof IconNames;

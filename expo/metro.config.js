@@ -6,10 +6,7 @@ const workspaceRoot = path.resolve(projectRoot, '..');
 
 const config = getDefaultConfig(projectRoot);
 
-config.watchFolders = [
-  path.resolve(workspaceRoot, 'convex'),
-  path.resolve(workspaceRoot, 'src/devices'),
-];
+config.watchFolders = [path.resolve(workspaceRoot, 'convex')];
 config.resolver.nodeModulesPaths = [path.resolve(projectRoot, 'node_modules')];
 config.resolver.disableHierarchicalLookup = true;
 

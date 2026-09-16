@@ -14,7 +14,7 @@ import {
   encodeButton,
   encodeTouch,
   type TouchPhase,
-} from '../../../src/devices/touch';
+} from '@/devices/touch';
 
 type DeviceScreenProps = {
   name: string;

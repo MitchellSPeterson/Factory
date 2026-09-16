@@ -32,7 +32,14 @@ import {
 } from "./lib/validators";
 import { v } from "convex/values";
 
+import { projectOperation, operationResult, operationState } from "./lib/projectOperations";
+
 export default defineSchema({
+  projectOperations: defineTable({
+    projectId: v.id("projects"), serverId: v.id("servers"), operation: projectOperation,
+    state: operationState, output: v.string(), result: v.optional(operationResult),
+    startedAt: v.optional(v.number()), error: v.optional(v.string()),
+  }).index("by_serverId_and_state", ["serverId", "state"]).index("by_projectId", ["projectId"]),
   agents: defineTable({
     provider: v.optional(agentProvider),
     name: v.string(), description: v.string(), model: v.string(), effort: agentEffort,

@@ -19,7 +19,9 @@ export default function DrawerLayout() {
         sceneStyle: { backgroundColor: theme.background },
         drawerType: 'front',
         title: 'Devices',
-      }}
-    />
+      }}>
+      <Drawer.Screen name="jobs" options={{ drawerItemStyle: { display: 'none' } }} />
+      <Drawer.Screen name="sessions" options={{ drawerItemStyle: { display: 'none' } }} />
+    </Drawer>
   );
 }

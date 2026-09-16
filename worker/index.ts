@@ -17,6 +17,7 @@ import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { defaultSimRunner, reconcileSimHub } from "./simHub";
+import { startProjectOperations } from "./projectOperations";
 import { startDeviceHub } from "./deviceHub";
 import { factoryTools } from "./tools";
 import { fromCursorUsage, type TokenUsage } from "./usage";
@@ -626,6 +627,7 @@ async function main() {
   const heartbeat = setInterval(() => { void client.mutation(api.servers.heartbeat, { accessKey: identity.accessKey }).catch(() => {}); }, 15_000);
   async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
   void imports();
+  const stopProjectOperations = startProjectOperations(client, identity);
   let lastGrokProbe = 0;
   let lastSimHub = 0;
   let lastSimRunning = false;
@@ -656,7 +658,7 @@ async function main() {
     }
   }
   try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
-  finally { clearInterval(heartbeat); stopDeviceHub(); }
+  finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); }
 }
 
 void main().catch(() => { console.error("Worker startup failed. Check the deployment connection and worker identity, then restart."); process.exitCode = 1; });

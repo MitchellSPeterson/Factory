@@ -8,6 +8,7 @@ import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { IconNames, type IconName } from '@/components/icon-button';
+import { ProjectSwitcher } from '@/components/project-switcher';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -27,9 +28,19 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
             Factory
           </ThemedText>
         </View>
+        <ProjectSwitcher />
         <ThemedText type="eyebrow" themeColor="textSecondary" style={styles.navLabel}>
           Work
         </ThemedText>
+        <DrawerLink
+          icon="sessions"
+          label="Chats"
+          focused={pathname === '/chats'}
+          onPress={() => {
+            router.push('/chats');
+            props.navigation.closeDrawer();
+          }}
+        />
         <DrawerLink
           icon="devices"
           label="Devices"
