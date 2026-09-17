@@ -3,7 +3,7 @@ import { FlatList, Image, Pressable, ScrollView, View } from 'react-native';
 import { ActionButton } from '@/components/action-button';
 import { useTheme } from '@/hooks/use-theme';
 import type { DeviceSettingKey, DeviceStreamEncoderSettings } from '../../../vendor/expo-hub-client/src/types';
-import { Choice, Field, Group, Label, Row, Sheet, Toggle, options } from './controls';
+import { Choice, Field, Group, Label, Row, Sheet, Toggle, options, styles } from './controls';
 import { items, numeric, record, text, type ClientCommand, type HubMessage, type StreamSelection } from './protocol';
 import { chooseCameraPng } from './files';
 
@@ -34,7 +34,7 @@ export function Inspector({ visible, onClose, state, send, mode, setMode, onErro
     : null;
   return <Sheet title="Settings" visible={visible} onClose={onClose} scroll={false}>
     <View><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ padding: 12, gap: 8 }}>{tabs.map(item => <Pressable key={item} accessibilityRole="tab" accessibilityState={{ selected: tab === item }} onPress={() => setTab(item)} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 12, backgroundColor: tab === item ? t.backgroundSelected : t.backgroundElement }}><Label>{item}</Label></Pressable>)}</ScrollView></View>
-    {tab === 'Logs' || tab === 'Events' ? <Output kind={tab} state={state} command={command} /> : <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>{body}</ScrollView>}
+    {tab === 'Logs' || tab === 'Events' ? <Output kind={tab} state={state} command={command} /> : <ScrollView style={styles.sheetFill} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>{body}</ScrollView>}
   </Sheet>;
 }
 function Details({ data }: { data: Record<string, unknown> }) {
@@ -143,5 +143,5 @@ function Output({ kind, state, command }: { kind: 'Logs' | 'Events'; state: Reco
   const logs = kind === 'Logs';
   const enabled = logs ? state.logsEnabled : state.eventsEnabled;
   const rows = items(logs ? state.logs : state.events).map(record).filter(row => `${text(row.message)} ${text(row.source)}`.toLowerCase().includes(search.toLowerCase()));
-  return <View style={{ flex: 1, padding: 16, gap: 12 }}><Toggle label={`Collect ${kind.toLowerCase()}`} value={enabled === true} onChange={value => command({ method: logs ? value ? 'attachLogs' : 'detachLogs' : value ? 'attachEvents' : 'detachEvents', args: [] })} /><Field label="Filter" value={search} onChange={setSearch} /><ActionButton label="Clear" variant="ghost" onPress={() => command({ method: logs ? 'clearLogs' : 'clearEvents', args: [] })} /><FlatList data={rows} keyExtractor={(row, index) => text(row.id, String(index))} ListEmptyComponent={<Label muted>{enabled ? 'Waiting for output…' : 'Collection is paused.'}</Label>} renderItem={({ item }) => <View style={{ paddingVertical: 8, gap: 4 }}><Label muted>{text(item.timestamp)} {text(item.source)}</Label><Label>{text(item.message)}</Label></View>} /></View>;
+  return <View style={{ flex: 1, minHeight: 0, padding: 16, gap: 12 }}><Toggle label={`Collect ${kind.toLowerCase()}`} value={enabled === true} onChange={value => command({ method: logs ? value ? 'attachLogs' : 'detachLogs' : value ? 'attachEvents' : 'detachEvents', args: [] })} /><Field label="Filter" value={search} onChange={setSearch} /><ActionButton label="Clear" variant="ghost" onPress={() => command({ method: logs ? 'clearLogs' : 'clearEvents', args: [] })} /><FlatList style={{ flex: 1 }} nestedScrollEnabled keyboardShouldPersistTaps="handled" data={rows} keyExtractor={(row, index) => text(row.id, String(index))} ListEmptyComponent={<Label muted>{enabled ? 'Waiting for output…' : 'Collection is paused.'}</Label>} renderItem={({ item }) => <View style={{ paddingVertical: 8, gap: 4 }}><Label muted>{text(item.timestamp)} {text(item.source)}</Label><Label>{text(item.message)}</Label></View>} /></View>;
 }

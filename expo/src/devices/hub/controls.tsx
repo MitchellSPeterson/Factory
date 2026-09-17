@@ -1,8 +1,19 @@
 import { BottomSheet, RNHostView } from '@expo/ui';
-import { useState, type ReactNode } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useState, type Context, type ReactNode } from 'react';
+import { FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, VirtualizedList } from 'react-native';
 import { IconButton } from '@/components/icon-button';
 import { useTheme } from '@/hooks/use-theme';
+import { sheetBodyLayout, sheetFillLayout } from './sheetLayout';
+
+const VirtualizedListContext = (VirtualizedList as unknown as { contextType?: Context<unknown> }).contextType;
+const ScrollViewContext = (ScrollView as unknown as { Context?: Context<unknown> }).Context;
+
+function SheetScrollContextReset({ children }: { children: ReactNode }) {
+  let node: ReactNode = children;
+  if (ScrollViewContext) node = <ScrollViewContext.Provider value={null}>{node}</ScrollViewContext.Provider>;
+  if (VirtualizedListContext) node = <VirtualizedListContext.Provider value={null}>{node}</VirtualizedListContext.Provider>;
+  return node;
+}
 
 export function Label({ children, muted = false }: { children: ReactNode; muted?: boolean }) {
   const t = useTheme();
@@ -13,12 +24,16 @@ export function Sheet({ title, visible, onClose, children, scroll = true }: { ti
   return (
     <BottomSheet isPresented={visible} onDismiss={onClose} snapPoints={['half', 'full']} contentPadding={0} containerColor={t.background}>
       <RNHostView>
-        <View style={{ flex: 1, minHeight: 280 }}>
+        <View style={styles.sheetBody}>
           <View style={[styles.sheetHead, { borderColor: t.line }]}>
             <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text>
             <IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} />
           </View>
-          {scroll ? <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>{children}</ScrollView> : children}
+          <SheetScrollContextReset>
+            {scroll
+              ? <ScrollView style={styles.sheetFill} keyboardShouldPersistTaps="handled" nestedScrollEnabled contentContainerStyle={styles.content}>{children}</ScrollView>
+              : <View style={styles.sheetFill}>{children}</View>}
+          </SheetScrollContextReset>
         </View>
       </RNHostView>
     </BottomSheet>
@@ -39,7 +54,7 @@ export function Choice({ label, value, options, onChange, disabled }: { label: s
   const [open, setOpen] = useState(false);
   const t = useTheme();
   return <><Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${options.find(o => o.value === value)?.label ?? value}`} disabled={disabled} onPress={() => setOpen(true)} style={[styles.row, { minHeight: 44, opacity: disabled ? .5 : 1 }]}><Label>{label}</Label><Text style={{ color: t.textSecondary, flexShrink: 1, textAlign: 'right' }}>{(options.find(o => o.value === value)?.label ?? value) || 'Choose'}  ›</Text></Pressable>
-    <Sheet visible={open} title={label} onClose={() => setOpen(false)} scroll={false}><FlatList data={options} keyExtractor={o => o.value} renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: item.value === value }} onPress={() => { onChange(item.value); setOpen(false); }} style={[styles.option, { borderColor: t.line }]}><Label>{item.label}</Label><Label>{item.value === value ? '✓' : ''}</Label></Pressable>} /></Sheet>
+    <Sheet visible={open} title={label} onClose={() => setOpen(false)} scroll={false}><FlatList style={styles.sheetFill} nestedScrollEnabled keyboardShouldPersistTaps="handled" data={options} keyExtractor={o => o.value} renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: item.value === value }} onPress={() => { onChange(item.value); setOpen(false); }} style={[styles.option, { borderColor: t.line }]}><Label>{item.label}</Label><Label>{item.value === value ? '✓' : ''}</Label></Pressable>} /></Sheet>
   </>;
 }
 export function Field({ label, value, onChange, numeric = false, placeholder }: { label: string; value: string; onChange: (value: string) => void; numeric?: boolean; placeholder?: string }) {
@@ -49,6 +64,8 @@ export function Field({ label, value, onChange, numeric = false, placeholder }: 
 export function options(values: readonly string[]): Option[] { return values.map(value => ({ value, label: value.replaceAll('-', ' ') })); }
 export const styles = StyleSheet.create({
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  sheetBody: sheetBodyLayout,
+  sheetFill: sheetFillLayout,
   content: { padding: 16, paddingBottom: 36 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 36 },
   option: { minHeight: 52, padding: 16, flexDirection: 'row', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
