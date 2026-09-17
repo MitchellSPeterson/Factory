@@ -2,6 +2,7 @@ import { BottomSheet, RNHostView } from '@expo/ui';
 import { useState, type Context, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, VirtualizedList } from 'react-native';
 import { IconButton } from '@/components/icon-button';
+import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useTheme } from '@/hooks/use-theme';
 import { sheetBodyLayout, sheetFillLayout } from './sheetLayout';
 
@@ -21,10 +22,11 @@ export function Label({ children, muted = false }: { children: ReactNode; muted?
 }
 export function Sheet({ title, visible, onClose, children, scroll = true }: { title: string; visible: boolean; onClose: () => void; children: ReactNode; scroll?: boolean }) {
   const t = useTheme();
+  const keyboard = useKeyboardHeight();
   return (
     <BottomSheet isPresented={visible} onDismiss={onClose} snapPoints={['half', 'full']} contentPadding={0} containerColor={t.background}>
       <RNHostView>
-        <View style={styles.sheetBody}>
+        <View style={[styles.sheetBody, keyboard > 0 ? { paddingBottom: keyboard } : null]}>
           <View style={[styles.sheetHead, { borderColor: t.line }]}>
             <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text>
             <IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} />

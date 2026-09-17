@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Keyboard,
-  LayoutAnimation,
   Platform,
   Pressable,
   ScrollView,
@@ -19,6 +17,8 @@ import * as DocumentPicker from "expo-document-picker";
 import Markdown from "react-native-markdown-display";
 import { File } from "expo-file-system";
 import { api } from "@/lib/api";
+import { dockedBottomPad } from "@/lib/keyboardInset";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
 import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -36,43 +36,6 @@ type SessionView = NonNullable<FunctionReturnType<typeof api.sessions.get>>;
 type Message = SessionView["messages"][number];
 type Settings = Pick<SessionView["session"], "provider" | "model" | "effort">;
 type Attachment = { id: Id<"_storage">; uri: string; name: string };
-
-// ponytail: pad from keyboard height — Android edge-to-edge doesn't resize. Upgrade to react-native-keyboard-controller for interactive dismiss.
-function useKeyboardHeight() {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const show = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (event) => {
-        if (Platform.OS === "ios") {
-          LayoutAnimation.configureNext({
-            duration: event.duration > 0 ? event.duration : 250,
-            update: { type: LayoutAnimation.Types.keyboard },
-          });
-        }
-        setHeight(event.endCoordinates.height);
-      },
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      (event) => {
-        if (Platform.OS === "ios") {
-          LayoutAnimation.configureNext({
-            duration: event.duration > 0 ? event.duration : 250,
-            update: { type: LayoutAnimation.Types.keyboard },
-          });
-        }
-        setHeight(0);
-      },
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
-}
 
 function MessageRow({
   message,
@@ -350,11 +313,13 @@ export function Conversation({
     return (
       <Notice text="This conversation is no longer available. Choose another or start a new one." />
     );
-  const gap = Platform.OS === "ios" ? 16 : 8;
-  const bottomPad =
-    Platform.OS === "web"
-      ? 12
-      : (keyboard > 0 ? keyboard : insets.bottom) + gap;
+  const bottomPad = dockedBottomPad({
+    keyboardHeight: keyboard,
+    insetBottom: insets.bottom,
+    platform: Platform.OS,
+    gap: Platform.OS === "ios" ? 16 : 8,
+    webPad: 12,
+  });
   return (
     <View style={[styles.root, { paddingBottom: bottomPad }]}>
       <ScrollView

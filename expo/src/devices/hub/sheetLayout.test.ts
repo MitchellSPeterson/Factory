@@ -16,6 +16,12 @@ test('Sheet scroll views opt into Android nested scrolling', async () => {
   expect(source).toContain('sheetFillLayout');
 });
 
+test('Sheet shrinks by the visible keyboard inset so fields stay above the IME', async () => {
+  const source = await Bun.file(new URL('./controls.tsx', import.meta.url)).text();
+  expect(source).toContain('useKeyboardHeight');
+  expect(source).toContain('paddingBottom: keyboard');
+});
+
 test('lists inside sheets fill the sheet and nest-scroll on Android', async () => {
   const inspector = await Bun.file(new URL('./Inspector.tsx', import.meta.url)).text();
   const devices = await Bun.file(new URL('./DeviceList.tsx', import.meta.url)).text();

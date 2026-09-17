@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,9 +10,12 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "@/lib/api";
+import { dockedBottomPad } from "@/lib/keyboardInset";
 import { Fonts } from "@/constants/theme";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
 import { Action, Notice } from "./ui";
 
@@ -29,6 +33,8 @@ export function ProjectTools({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
   const rows = useQuery(api.projectOperations.list, { projectId });
   const enqueue = useMutation(api.projectOperations.enqueue);
   const cancel = useMutation(api.projectOperations.cancel);
@@ -126,8 +132,19 @@ export function ProjectTools({
       borderColor: theme.line,
     },
   ];
+  const bottomPad = dockedBottomPad({
+    keyboardHeight: keyboard,
+    insetBottom: insets.bottom,
+    platform: Platform.OS,
+    gap: Platform.OS === "ios" ? 16 : 8,
+  });
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: theme.background, paddingBottom: bottomPad },
+      ]}
+    >
       <View style={[styles.header, { borderColor: theme.line }]}>
         {file && panel === "git" ? (
           <Action
