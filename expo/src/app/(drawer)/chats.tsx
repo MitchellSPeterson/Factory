@@ -23,6 +23,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { Action } from "@/chats/ui";
 import { Conversation } from "@/chats/Conversation";
 import { ProjectTools } from "@/chats/ProjectTools";
+import { TerminalPanel } from "@/chats/TerminalPanel";
 import { IconButton, IconNames } from "@/components/icon-button";
 
 export default function ChatsPage() {
@@ -76,15 +77,46 @@ export default function ChatsPage() {
     setPanel(null);
     router.setParams({ session: undefined, new: undefined });
   }
+  function onBack() {
+    if (panel) {
+      setPanel(null);
+      return;
+    }
+    closeChat();
+  }
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: selected?.session.title ?? (creating ? "New chat" : "Chats"),
+      title: panel === "terminal" ? "Terminal" : selected?.session.title ?? (creating ? "New chat" : "Chats"),
+      headerTitle:
+        panel === "terminal"
+          ? () => (
+              <View style={styles.terminalTitle}>
+                <Text style={[styles.terminalHeading, { color: theme.text }]}>
+                  Terminal
+                </Text>
+                {project?.name ? (
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.terminalSub, { color: theme.textSecondary }]}
+                  >
+                    {project.name}
+                  </Text>
+                ) : null}
+              </View>
+            )
+          : undefined,
       headerLeft: inChat
         ? () => (
             <IconButton
               icon="back"
-              accessibilityLabel="All chats"
-              onPress={closeChat}
+              accessibilityLabel={
+                panel === "terminal"
+                  ? "Close terminal"
+                  : panel === "git"
+                    ? "Close changes"
+                    : "All chats"
+              }
+              onPress={onBack}
               style={{ backgroundColor: "transparent" }}
             />
           )
@@ -126,19 +158,21 @@ export default function ChatsPage() {
     project,
     creating,
     selected?.session.title,
+    project?.name,
     showingConversation,
     theme.backgroundSelected,
     theme.text,
+    theme.textSecondary,
     wide,
   ]);
   useEffect(() => {
     if (!inChat) return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      closeChat();
+      onBack();
       return true;
     });
     return () => sub.remove();
-  }, [inChat]);
+  }, [inChat, panel]);
   return (
     <View
       style={[
@@ -313,19 +347,27 @@ export default function ChatsPage() {
                   styles.tools,
                   {
                     width: sideBySide ? 400 : "100%",
+                    flexShrink: 0,
                     display: panel ? "flex" : "none",
                     borderColor: theme.line,
                   },
                 ]}
               >
-                <ProjectTools
-                  key={project._id}
-                  projectId={project._id}
-                  localPath={project.localPath}
-                  panel={lastPanel}
-                  visible={panel !== null}
-                  onClose={() => setPanel(null)}
-                />
+                {lastPanel === "git" ? (
+                  <ProjectTools
+                    key={project._id}
+                    projectId={project._id}
+                    visible={panel !== null}
+                    onClose={() => setPanel(null)}
+                  />
+                ) : (
+                  <TerminalPanel
+                    key={project._id}
+                    projectId={project._id}
+                    projectName={project.name}
+                    visible={panel === "terminal"}
+                  />
+                )}
               </View>
             )}
           </View>
@@ -382,4 +424,7 @@ const styles = StyleSheet.create({
   tools: { borderLeftWidth: 1 },
   projects: { flexGrow: 0, maxHeight: 64 },
   projectOptions: { padding: 8, gap: 4 },
+  terminalTitle: { alignItems: "center" },
+  terminalHeading: { fontSize: 17, fontWeight: "600" },
+  terminalSub: { fontSize: 12, marginTop: 1 },
 });

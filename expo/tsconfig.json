@@ -20,6 +20,7 @@
   "exclude": [
     "**/*.test.ts",
     "vendor",
-    "stream"
+    "stream",
+    "terminal"
   ]
 }
