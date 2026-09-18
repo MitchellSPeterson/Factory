@@ -1,94 +1,88 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
-  useColorScheme,
+  useWindowDimensions,
 } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { usePathname } from 'expo-router';
-import { MenuView, type MenuAction } from '@expo/ui/community/menu';
+import Animated, {
+  Easing,
+  ReduceMotion,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { IconNames } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
+import { Colors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useProjectScope } from '@/lib/project-scope-context';
 import type { ProjectScope } from '@/lib/project-scope';
 
-const VIEW_ALL = 'viewAll';
+const MENU_MS = 180;
+const MENU_EASE = Easing.bezier(0.23, 1, 0.32, 1);
+
+function menuEntering() {
+  'worklet';
+  return {
+    initialValues: {
+      opacity: 0,
+      transform: [{ scale: 0.95 }],
+    },
+    animations: {
+      opacity: withTiming(1, { duration: MENU_MS, easing: MENU_EASE }),
+      transform: [{ scale: withTiming(1, { duration: MENU_MS, easing: MENU_EASE }) }],
+    },
+  };
+}
 
 export function ProjectSwitcher() {
   const theme = useTheme();
   const pathname = usePathname();
-  const colorScheme = useColorScheme() === 'light' ? 'light' : 'dark';
+  const reduced = useReducedMotion();
+  const { height: windowHeight } = useWindowDimensions();
   const { scope, setScope, projects, currentProject, label } = useProjectScope();
   const [open, setOpen] = useState(false);
   const [width, setWidth] = useState(0);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0, w: 0 });
   const triggerRef = useRef<View>(null);
-  const nativeMenu = process.env.EXPO_OS === 'ios' || process.env.EXPO_OS === 'android';
+  const dark = theme.background === Colors.dark.background;
 
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!open || Platform.OS !== 'web') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   function choose(next: ProjectScope) {
     setScope(next);
     setOpen(false);
   }
 
-  function chooseFromId(id: string) {
-    if (id === VIEW_ALL) {
-      choose({ kind: 'viewAll' });
+  function toggle() {
+    if (open) {
+      setOpen(false);
       return;
     }
-    const project = (projects ?? []).find((item) => item._id === id);
-    if (project) choose({ kind: 'project', projectId: project._id });
+    triggerRef.current?.measureInWindow((x, y, w, h) => {
+      setMenuPos({ x, y: y + h, w });
+      setOpen(true);
+    });
   }
-
-  const actions = useMemo<MenuAction[]>(
-    () => [
-      {
-        id: VIEW_ALL,
-        title: 'View all',
-        state: menuState(scope.kind === 'viewAll'),
-        image: IconNames.layers.ios,
-      },
-      ...(projects ?? []).map((project) => ({
-        id: project._id,
-        title: project.name,
-        state: menuState(scope.kind === 'project' && scope.projectId === project._id),
-      })),
-    ],
-    [projects, scope],
-  );
-
-  const trigger = (
-    <View
-      style={[
-        styles.trigger,
-        { backgroundColor: theme.background, borderColor: theme.line },
-        width > 0 ? { width } : styles.stretch,
-      ]}>
-      {currentProject?.name[0] ? (
-        <View style={[styles.glyph, { backgroundColor: theme.subtleHover }]}>
-          <ThemedText type="smallBold" style={styles.glyphLetter}>
-            {currentProject.name[0].toUpperCase()}
-          </ThemedText>
-        </View>
-      ) : (
-        <SymbolView name={IconNames.layers} size={16} tintColor={theme.textSecondary} />
-      )}
-      <ThemedText type="small" numberOfLines={1} style={styles.name}>
-        {label}
-      </ThemedText>
-      <View style={{ transform: [{ rotate: open && !nativeMenu ? '180deg' : '0deg' }] }}>
-        <SymbolView name={IconNames.chevronDown} size={12} tintColor={theme.textSecondary} />
-      </View>
-    </View>
-  );
 
   return (
     <View style={styles.wrap}>
@@ -96,87 +90,114 @@ export function ProjectSwitcher() {
         Working on
       </ThemedText>
       <View
+        collapsable={false}
         style={styles.stretch}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-        {nativeMenu ? (
-          <MenuView
-            title="Project"
-            actions={actions}
-            colorScheme={colorScheme}
-            onPressAction={(event) => chooseFromId(event.nativeEvent.event)}
-            style={width > 0 ? { width } : styles.stretch}>
-            {trigger}
-          </MenuView>
-        ) : (
-          <View style={styles.anchor}>
-            <Pressable
-              ref={triggerRef}
-              accessibilityRole="button"
-              accessibilityLabel={`Project scope, ${label}`}
-              accessibilityState={{ expanded: open }}
-              onPress={() => {
-                if (open) {
-                  setOpen(false);
-                  return;
-                }
-                triggerRef.current?.measureInWindow((x, y, w, h) => {
-                  setMenuPos({ x, y: y + h, w });
-                  setOpen(true);
-                });
-              }}
-              style={({ pressed }) => pressed && { opacity: 0.7 }}>
-              {trigger}
-            </Pressable>
-            <Modal
-              visible={open}
-              transparent
-              animationType="fade"
-              onRequestClose={() => setOpen(false)}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss project menu"
-                style={StyleSheet.absoluteFill}
-                onPress={() => setOpen(false)}
+        <Pressable
+          ref={triggerRef}
+          accessibilityRole="button"
+          accessibilityLabel={`Project scope, ${label}`}
+          accessibilityState={{ expanded: open }}
+          onPress={toggle}
+          style={({ pressed }) => [
+            styles.trigger,
+            width > 0 ? { width } : styles.stretch,
+            {
+              backgroundColor: open || pressed ? theme.subtleHover : theme.background,
+              borderColor: theme.line,
+              transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
+            },
+          ]}>
+          {currentProject?.name[0] ? (
+            <View style={[styles.glyph, { backgroundColor: theme.subtleHover }]}>
+              <ThemedText type="smallBold" style={styles.glyphLetter}>
+                {currentProject.name[0].toUpperCase()}
+              </ThemedText>
+            </View>
+          ) : (
+            <SymbolView name={IconNames.layers} size={16} tintColor={theme.textSecondary} />
+          )}
+          <ThemedText type="small" numberOfLines={1} style={styles.name}>
+            {label}
+          </ThemedText>
+          <Chevron open={open} color={theme.textSecondary} />
+        </Pressable>
+        <Modal
+          visible={open}
+          transparent
+          animationType="none"
+          presentationStyle="overFullScreen"
+          statusBarTranslucent
+          onRequestClose={() => setOpen(false)}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss project menu"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setOpen(false)}
+          />
+          <Animated.View
+            entering={reduced ? undefined : menuEntering}
+            style={[
+              styles.menu,
+              {
+                top: menuPos.y + 4,
+                left: menuPos.x,
+                width: menuPos.w,
+                maxHeight: Math.min(280, Math.max(120, windowHeight - menuPos.y - 16)),
+                backgroundColor: dark ? '#2c2c2c' : '#ffffff',
+                borderColor: theme.line,
+              },
+            ]}>
+            <ScrollView
+              accessibilityRole="menu"
+              accessibilityLabel="Project scope"
+              contentContainerStyle={styles.menuContent}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled">
+              <ScopeOption
+                label="View all"
+                selected={scope.kind === 'viewAll'}
+                onPress={() => choose({ kind: 'viewAll' })}
               />
-              <ScrollView
-                accessibilityRole="menu"
-                accessibilityLabel="Project scope"
-                style={[
-                  styles.menu,
-                  {
-                    top: menuPos.y + 4,
-                    left: menuPos.x,
-                    width: menuPos.w,
-                    backgroundColor: theme.background,
-                    borderColor: theme.lineStrong,
-                  },
-                ]}
-                contentContainerStyle={styles.menuContent}
-                nestedScrollEnabled>
+              {(projects ?? []).map((project) => (
                 <ScopeOption
-                  label="View all"
-                  selected={scope.kind === 'viewAll'}
-                  onPress={() => choose({ kind: 'viewAll' })}
+                  key={project._id}
+                  label={project.name}
+                  selected={scope.kind === 'project' && scope.projectId === project._id}
+                  onPress={() => choose({ kind: 'project', projectId: project._id })}
                 />
-                {(projects ?? []).map((project) => (
-                  <ScopeOption
-                    key={project._id}
-                    label={project.name}
-                    selected={scope.kind === 'project' && scope.projectId === project._id}
-                    onPress={() => choose({ kind: 'project', projectId: project._id })}
-                  />
-                ))}
-              </ScrollView>
-            </Modal>
-          </View>
-        )}
+              ))}
+            </ScrollView>
+          </Animated.View>
+        </Modal>
       </View>
     </View>
   );
 }
 
-function menuState(selected: boolean): MenuAction['state'] {
-  return selected ? 'on' : 'off';
+function Chevron({ open, color }: { open: boolean; color: string }) {
+  const rotation = useSharedValue(open ? 180 : 0);
+  useLayoutEffect(() => {
+    rotation.set(
+      withTiming(open ? 180 : 0, {
+        duration: MENU_MS,
+        easing: MENU_EASE,
+        reduceMotion: ReduceMotion.System,
+      }),
+    );
+  }, [open, rotation]);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.get()}deg` }],
+  }));
+  return (
+    <Animated.View
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+      pointerEvents="none"
+      style={style}>
+      <SymbolView name={IconNames.chevronDown} size={12} tintColor={color} />
+    </Animated.View>
+  );
 }
 
 function ScopeOption({
@@ -189,6 +210,7 @@ function ScopeOption({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const reduced = useReducedMotion();
   return (
     <Pressable
       accessibilityRole="menuitem"
@@ -196,8 +218,11 @@ function ScopeOption({
       onPress={onPress}
       style={({ pressed }) => [
         styles.option,
-        selected && { backgroundColor: theme.backgroundSelected },
-        pressed && { opacity: 0.7 },
+        {
+          backgroundColor:
+            selected || pressed ? theme.backgroundSelected : 'transparent',
+          transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
+        },
       ]}>
       <ThemedText type="small" numberOfLines={1} style={styles.optionLabel}>
         {label}
@@ -207,22 +232,26 @@ function ScopeOption({
   );
 }
 
+const pressMotion = Platform.select({
+  web: {
+    cursor: 'pointer' as const,
+    transitionProperty: 'transform',
+    transitionDuration: '140ms',
+    transitionTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+  },
+  default: {},
+});
+
 const styles = StyleSheet.create({
   wrap: {
     gap: 6,
     paddingHorizontal: 4,
-    zIndex: 20,
-    overflow: 'visible',
   },
   eyebrow: {
     paddingHorizontal: 8,
   },
   stretch: {
     alignSelf: 'stretch',
-  },
-  anchor: {
-    zIndex: 21,
-    overflow: 'visible',
   },
   trigger: {
     minHeight: 44,
@@ -234,6 +263,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     borderCurve: 'continuous',
+    ...pressMotion,
   },
   glyph: {
     width: 22,
@@ -252,12 +282,22 @@ const styles = StyleSheet.create({
   },
   menu: {
     position: 'absolute',
-    zIndex: 30,
-    maxHeight: 240,
-    borderWidth: 1,
-    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
     borderCurve: 'continuous',
-    boxShadow: '0 10px 28px rgba(0, 0, 0, 0.22)',
+    transformOrigin: 'top center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.18,
+        shadowRadius: 24,
+      },
+      android: { elevation: 8 },
+      web: { boxShadow: '0 12px 40px rgba(0,0,0,0.22)' },
+      default: {},
+    }),
   },
   menuContent: {
     padding: 6,
@@ -271,8 +311,9 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 7,
+    borderRadius: 8,
     borderCurve: 'continuous',
+    ...pressMotion,
   },
   optionLabel: {
     flex: 1,
