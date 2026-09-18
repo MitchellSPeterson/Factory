@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useColorScheme,
+} from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { usePathname } from 'expo-router';
+import { MenuView, type MenuAction } from '@expo/ui/community/menu';
 
 import { IconNames } from '@/components/icon-button';
 import { ThemedText } from '@/components/themed-text';
@@ -9,12 +17,18 @@ import { useTheme } from '@/hooks/use-theme';
 import { useProjectScope } from '@/lib/project-scope-context';
 import type { ProjectScope } from '@/lib/project-scope';
 
+const VIEW_ALL = 'viewAll';
+
 export function ProjectSwitcher() {
   const theme = useTheme();
   const pathname = usePathname();
+  const colorScheme = useColorScheme() === 'light' ? 'light' : 'dark';
   const { scope, setScope, projects, currentProject, label } = useProjectScope();
   const [open, setOpen] = useState(false);
-  const letter = currentProject?.name[0]?.toUpperCase();
+  const [width, setWidth] = useState(0);
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0, w: 0 });
+  const triggerRef = useRef<View>(null);
+  const nativeMenu = process.env.EXPO_OS === 'ios' || process.env.EXPO_OS === 'android';
 
   useEffect(() => {
     setOpen(false);
@@ -25,61 +39,144 @@ export function ProjectSwitcher() {
     setOpen(false);
   }
 
+  function chooseFromId(id: string) {
+    if (id === VIEW_ALL) {
+      choose({ kind: 'viewAll' });
+      return;
+    }
+    const project = (projects ?? []).find((item) => item._id === id);
+    if (project) choose({ kind: 'project', projectId: project._id });
+  }
+
+  const actions = useMemo<MenuAction[]>(
+    () => [
+      {
+        id: VIEW_ALL,
+        title: 'View all',
+        state: menuState(scope.kind === 'viewAll'),
+        image: IconNames.layers.ios,
+      },
+      ...(projects ?? []).map((project) => ({
+        id: project._id,
+        title: project.name,
+        state: menuState(scope.kind === 'project' && scope.projectId === project._id),
+      })),
+    ],
+    [projects, scope],
+  );
+
+  const trigger = (
+    <View
+      style={[
+        styles.trigger,
+        { backgroundColor: theme.background, borderColor: theme.line },
+        width > 0 ? { width } : styles.stretch,
+      ]}>
+      {currentProject?.name[0] ? (
+        <View style={[styles.glyph, { backgroundColor: theme.subtleHover }]}>
+          <ThemedText type="smallBold" style={styles.glyphLetter}>
+            {currentProject.name[0].toUpperCase()}
+          </ThemedText>
+        </View>
+      ) : (
+        <SymbolView name={IconNames.layers} size={16} tintColor={theme.textSecondary} />
+      )}
+      <ThemedText type="small" numberOfLines={1} style={styles.name}>
+        {label}
+      </ThemedText>
+      <View style={{ transform: [{ rotate: open && !nativeMenu ? '180deg' : '0deg' }] }}>
+        <SymbolView name={IconNames.chevronDown} size={12} tintColor={theme.textSecondary} />
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.wrap}>
       <ThemedText type="eyebrow" themeColor="textSecondary" style={styles.eyebrow}>
         Working on
       </ThemedText>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Project scope, ${label}`}
-        accessibilityState={{ expanded: open }}
-        onPress={() => setOpen((value) => !value)}
-        style={({ pressed }) => [
-          styles.trigger,
-          { backgroundColor: theme.background, borderColor: theme.line },
-          pressed && { opacity: 0.7 },
-        ]}>
-        {letter ? (
-          <View style={[styles.glyph, { backgroundColor: theme.subtleHover }]}>
-            <ThemedText type="smallBold" style={styles.glyphLetter}>
-              {letter}
-            </ThemedText>
-          </View>
+      <View
+        style={styles.stretch}
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+        {nativeMenu ? (
+          <MenuView
+            title="Project"
+            actions={actions}
+            colorScheme={colorScheme}
+            onPressAction={(event) => chooseFromId(event.nativeEvent.event)}
+            style={width > 0 ? { width } : styles.stretch}>
+            {trigger}
+          </MenuView>
         ) : (
-          <SymbolView name={IconNames.layers} size={16} tintColor={theme.textSecondary} />
+          <View style={styles.anchor}>
+            <Pressable
+              ref={triggerRef}
+              accessibilityRole="button"
+              accessibilityLabel={`Project scope, ${label}`}
+              accessibilityState={{ expanded: open }}
+              onPress={() => {
+                if (open) {
+                  setOpen(false);
+                  return;
+                }
+                triggerRef.current?.measureInWindow((x, y, w, h) => {
+                  setMenuPos({ x, y: y + h, w });
+                  setOpen(true);
+                });
+              }}
+              style={({ pressed }) => pressed && { opacity: 0.7 }}>
+              {trigger}
+            </Pressable>
+            <Modal
+              visible={open}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setOpen(false)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss project menu"
+                style={StyleSheet.absoluteFill}
+                onPress={() => setOpen(false)}
+              />
+              <ScrollView
+                accessibilityRole="menu"
+                accessibilityLabel="Project scope"
+                style={[
+                  styles.menu,
+                  {
+                    top: menuPos.y + 4,
+                    left: menuPos.x,
+                    width: menuPos.w,
+                    backgroundColor: theme.background,
+                    borderColor: theme.lineStrong,
+                  },
+                ]}
+                contentContainerStyle={styles.menuContent}
+                nestedScrollEnabled>
+                <ScopeOption
+                  label="View all"
+                  selected={scope.kind === 'viewAll'}
+                  onPress={() => choose({ kind: 'viewAll' })}
+                />
+                {(projects ?? []).map((project) => (
+                  <ScopeOption
+                    key={project._id}
+                    label={project.name}
+                    selected={scope.kind === 'project' && scope.projectId === project._id}
+                    onPress={() => choose({ kind: 'project', projectId: project._id })}
+                  />
+                ))}
+              </ScrollView>
+            </Modal>
+          </View>
         )}
-        <ThemedText type="small" numberOfLines={1} style={styles.name}>
-          {label}
-        </ThemedText>
-        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
-          <SymbolView name={IconNames.chevronDown} size={12} tintColor={theme.textSecondary} />
-        </View>
-      </Pressable>
-      {open ? (
-        <ScrollView
-          accessibilityRole="menu"
-          accessibilityLabel="Project scope"
-          style={[styles.menu, { backgroundColor: theme.background, borderColor: theme.lineStrong }]}
-          contentContainerStyle={styles.menuContent}
-          nestedScrollEnabled>
-          <ScopeOption
-            label="View all"
-            selected={scope.kind === 'viewAll'}
-            onPress={() => choose({ kind: 'viewAll' })}
-          />
-          {(projects ?? []).map((project) => (
-            <ScopeOption
-              key={project._id}
-              label={project.name}
-              selected={scope.kind === 'project' && scope.projectId === project._id}
-              onPress={() => choose({ kind: 'project', projectId: project._id })}
-            />
-          ))}
-        </ScrollView>
-      ) : null}
+      </View>
     </View>
   );
+}
+
+function menuState(selected: boolean): MenuAction['state'] {
+  return selected ? 'on' : 'off';
 }
 
 function ScopeOption({
@@ -114,9 +211,18 @@ const styles = StyleSheet.create({
   wrap: {
     gap: 6,
     paddingHorizontal: 4,
+    zIndex: 20,
+    overflow: 'visible',
   },
   eyebrow: {
     paddingHorizontal: 8,
+  },
+  stretch: {
+    alignSelf: 'stretch',
+  },
+  anchor: {
+    zIndex: 21,
+    overflow: 'visible',
   },
   trigger: {
     minHeight: 44,
@@ -145,10 +251,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menu: {
+    position: 'absolute',
+    zIndex: 30,
     maxHeight: 240,
     borderWidth: 1,
     borderRadius: 10,
     borderCurve: 'continuous',
+    boxShadow: '0 10px 28px rgba(0, 0, 0, 0.22)',
   },
   menuContent: {
     padding: 6,
