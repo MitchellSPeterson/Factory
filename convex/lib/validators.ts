@@ -190,6 +190,13 @@ export const grokCatalog = v.object({
   models: v.array(grokCatalogModel),
 });
 
+const usageWindow = v.object({
+  name: v.string(),
+  percentUsed: v.number(),
+  resetsAt: v.optional(v.number()),
+  windowSeconds: v.optional(v.number()),
+});
+
 const providerMeterAmounts = {
   provider: agentProvider,
   checkedAt: v.number(),
@@ -200,6 +207,7 @@ const providerMeterAmounts = {
   percentUsed: v.optional(v.number()),
   resetsAt: v.optional(v.number()),
   display: v.optional(v.string()),
+  windows: v.optional(v.array(usageWindow)),
 };
 
 export const providerMeter = v.union(

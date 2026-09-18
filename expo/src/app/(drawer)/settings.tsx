@@ -16,6 +16,7 @@ import {
   formatReset,
   formatTokens,
   formatUsdCents,
+  usageFillColor,
 } from '@/settings/format';
 
 type ProviderMeter = NonNullable<Doc<'servers'>['providerUsage']>['meters'][number];
@@ -92,7 +93,7 @@ export default function SettingsPage() {
             <View style={styles.sectionHeading}>
               <ThemedText type="section">Usage</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                Remaining allowance from Cursor, Codex, Grok Build, and the OpenAI-compatible API.
+                Live limits from providers already signed in on this machine.
               </ThemedText>
             </View>
             {!live ? (
@@ -102,6 +103,10 @@ export default function SettingsPage() {
             ) : !live.providerUsage ? (
               <ThemedText type="small" themeColor="textSecondary">
                 Waiting for the first usage check…
+              </ThemedText>
+            ) : live.providerUsage.meters.length === 0 ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Sign in with Codex or Grok on this machine. Factory reads those logins on its own.
               </ThemedText>
             ) : (
               <>
@@ -219,11 +224,11 @@ function UsageMeter({
       </View>
     );
   }
+  const windows = meter.windows ?? [];
   const remaining = meter.remainingCents;
   const limit = meter.limitCents;
   const used = meter.usedCents ?? (remaining !== undefined && limit !== undefined ? limit - remaining : undefined);
   const percent = meter.percentUsed ?? (used !== undefined && limit ? (used / limit) * 100 : undefined);
-  const low = percent !== undefined && percent >= 85;
   return (
     <View style={[styles.meter, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
       <View style={styles.meterHead}>
@@ -234,45 +239,91 @@ function UsageMeter({
           </ThemedText>
         ) : null}
       </View>
-      {remaining !== undefined ? (
-        <ThemedText type="default" style={styles.tabular}>
-          {formatUsdCents(remaining)} left
-        </ThemedText>
-      ) : used !== undefined ? (
-        <ThemedText type="default" style={styles.tabular}>
-          {formatUsdCents(used)} used
-        </ThemedText>
-      ) : null}
-      {used !== undefined && limit !== undefined ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.tabular}>
-          {formatUsdCents(used)} of {formatUsdCents(limit)}
-          {percent !== undefined ? ` · ${formatPercent(percent)}` : ''}
-        </ThemedText>
-      ) : null}
-      {percent !== undefined ? (
-        <View
-          accessible
-          accessibilityLabel={`${title} ${formatPercent(percent)} used`}
-          style={[styles.track, { backgroundColor: theme.line }]}>
-          <View
-            style={[
-              styles.fill,
-              {
-                width: `${Math.max(0, Math.min(100, percent))}%`,
-                backgroundColor: low ? theme.danger : theme.accent,
-              },
-            ]}
-          />
-        </View>
-      ) : null}
+      {windows.length > 0
+        ? windows.map((window) => (
+            <UsageBar
+              key={window.name}
+              label={window.name}
+              percent={window.percentUsed}
+              now={now}
+              resetsAt={window.resetsAt}
+              windowSeconds={window.windowSeconds}
+            />
+          ))
+        : percent !== undefined
+          ? (
+              <UsageBar
+                label={remaining !== undefined ? `${formatUsdCents(remaining)} left` : used !== undefined ? `${formatUsdCents(used)} used` : title}
+                percent={percent}
+                now={now}
+                resetsAt={meter.resetsAt}
+                detail={used !== undefined && limit !== undefined ? `${formatUsdCents(used)} of ${formatUsdCents(limit)}` : undefined}
+              />
+            )
+          : remaining !== undefined
+            ? (
+                <ThemedText type="default" style={styles.tabular}>
+                  {formatUsdCents(remaining)} left
+                </ThemedText>
+              )
+            : used !== undefined
+              ? (
+                  <ThemedText type="default" style={styles.tabular}>
+                    {formatUsdCents(used)} used
+                  </ThemedText>
+                )
+              : null}
       {meter.display ? (
         <ThemedText type="small" themeColor="textSecondary">
           {meter.display}
         </ThemedText>
       ) : null}
-      {meter.resetsAt ? (
+    </View>
+  );
+}
+
+function UsageBar({
+  label,
+  percent,
+  now,
+  resetsAt,
+  windowSeconds,
+  detail,
+}: {
+  label: string;
+  percent: number;
+  now: number;
+  resetsAt?: number;
+  windowSeconds?: number;
+  detail?: string;
+}) {
+  const theme = useTheme();
+  const fill = usageFillColor(percent, now, resetsAt, windowSeconds);
+  const width = Math.max(0, Math.min(100, percent));
+  return (
+    <View style={styles.window}>
+      <View style={styles.meterHead}>
         <ThemedText type="small" themeColor="textSecondary">
-          {formatReset(meter.resetsAt, now)}
+          {label}
+        </ThemedText>
+        <ThemedText type="smallBold" style={styles.tabular}>
+          {formatPercent(percent)}
+        </ThemedText>
+      </View>
+      <View
+        accessible
+        accessibilityLabel={`${label} ${formatPercent(percent)} used`}
+        style={[styles.track, { backgroundColor: theme.line }]}>
+        <View style={[styles.fill, { width: `${width}%`, backgroundColor: fill }]} />
+      </View>
+      {detail ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.tabular}>
+          {detail}
+        </ThemedText>
+      ) : null}
+      {resetsAt ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {formatReset(resetsAt, now)}
         </ThemedText>
       ) : null}
     </View>
@@ -383,13 +434,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  window: {
+    gap: 6,
+  },
   track: {
-    height: 4,
-    borderRadius: 2,
+    height: 8,
+    borderRadius: 4,
     overflow: 'hidden',
   },
   fill: {
-    height: 4,
+    height: 8,
+    borderRadius: 4,
   },
   tabular: {
     fontVariant: ['tabular-nums'],

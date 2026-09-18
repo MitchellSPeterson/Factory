@@ -60,10 +60,9 @@ export default defineSchema({
     accessKey: v.string(), name: v.string(), publicKey: v.string(), projectsRoot: v.string(), lastSeen: v.number(),
     grokCatalog: v.optional(grokCatalog),
     providerUsage: v.optional(providerUsage),
-    pty: v.optional(v.object({ checkedAt: v.number(), os: v.string(), url: v.string() })),
+    pty: v.optional(v.object({ checkedAt: v.number(), os: v.optional(v.string()), url: v.string() })),
     simHubWanted: v.optional(v.boolean()),
     simHub: v.optional(simHub),
-    pty: v.optional(v.object({ url: v.string(), os: v.optional(v.string()), checkedAt: v.number() })),
   }).index("by_accessKey", ["accessKey"]).index("by_lastSeen", ["lastSeen"]),
   ptyTickets: defineTable({
     token: v.string(),

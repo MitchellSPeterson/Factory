@@ -14,14 +14,9 @@
     "check": "bun test worker/terminals.test.ts worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/grokAcp.test.ts worker/mcpStdio.test.ts worker/providerUsage.test.ts expo/src/settings/format.test.ts expo/src/chats/activity.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "verify": "bun scripts/verify-factory.ts",
     "build:device-stream": "bun scripts/build-device-stream.ts",
-<<<<<<< HEAD
     "dev:device-hub": "expo-device-hub --host 0.0.0.0 --port 3400 --transport webrtc --video-fps 60 --video-bitrate 8000000 --max-dimension 1080",
     "build:terminal": "bun scripts/build-terminal.ts",
     "postinstall": "node scripts/prepare-terminal.cjs"
-=======
-    "build:terminal": "bun scripts/build-terminal.ts",
-    "dev:device-hub": "expo-device-hub --host 0.0.0.0 --port 3400 --transport webrtc --video-fps 60 --video-bitrate 8000000 --max-dimension 1080"
->>>>>>> 7ab3869e5c6910ec4f56fd7f967f3c674180989a
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.0",

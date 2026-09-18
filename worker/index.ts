@@ -20,7 +20,6 @@ import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { defaultSimRunner, reconcileSimHub } from "./simHub";
 import { startProjectOperations } from "./projectOperations";
-import { startPtyHub } from "./pty";
 import { startDeviceHub } from "./deviceHub";
 import { factoryTools } from "./tools";
 import { fromCursorUsage, type TokenUsage } from "./usage";
@@ -685,18 +684,7 @@ async function main() {
   async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
   void imports();
   const stopProjectOperations = startProjectOperations(client, identity);
-<<<<<<< HEAD
   const stopTerminals = startTerminals(client, identity);
-=======
-  const stopPtyHub = (() => {
-    try {
-      return startPtyHub(client, identity);
-    } catch (error: unknown) {
-      console.error("PTY hub could not start:", error instanceof Error ? error.message : String(error));
-      return () => {};
-    }
-  })();
->>>>>>> 7ab3869e5c6910ec4f56fd7f967f3c674180989a
   let lastGrokProbe = 0;
   let lastSimHub = 0;
   let lastSimRunning = false;
@@ -713,10 +701,14 @@ async function main() {
     try {
       const catalog = await probeGrokCatalog(env);
       await client.mutation(api.servers.reportGrokCatalog, { accessKey: identity.accessKey, catalog });
-      const usage = await collectProviderUsage({ env, grokCatalog: catalog });
-      await client.mutation(api.servers.reportProviderUsage, { accessKey: identity.accessKey, usage });
     } catch {
-      console.error("Provider usage probe failed; retrying.");
+      console.error("Grok catalog probe failed; retrying.");
+    }
+    try {
+      const usage = await collectProviderUsage({ env });
+      await client.mutation(api.servers.reportProviderUsage, { accessKey: identity.accessKey, usage });
+    } catch (error) {
+      console.error("Provider usage probe failed:", error instanceof Error ? error.message : error);
     }
   }
   async function simHubTick() {
@@ -736,11 +728,7 @@ async function main() {
     }
   }
   try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
-<<<<<<< HEAD
   finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); }
-=======
-  finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopPtyHub(); }
->>>>>>> 7ab3869e5c6910ec4f56fd7f967f3c674180989a
 }
 
 void main().catch(() => { console.error("Worker startup failed. Check the deployment connection and worker identity, then restart."); process.exitCode = 1; });

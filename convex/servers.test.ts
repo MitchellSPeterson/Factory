@@ -38,7 +38,14 @@ test("unpaired callers cannot read or change variables; metadata does not return
       checkedAt: 2,
       meters: [
         { provider: "cursor", status: "ok", checkedAt: 2, remainingCents: 4500, limitCents: 7000, percentUsed: 36 },
-        { provider: "codex", status: "unconfigured", checkedAt: 2, message: "Set CODEX_API_KEY." },
+        {
+          provider: "codex",
+          status: "ok",
+          checkedAt: 2,
+          plan: "Plus",
+          percentUsed: 30,
+          windows: [{ name: "Session (5h)", percentUsed: 30, windowSeconds: 18000, resetsAt: 3 }],
+        },
       ],
     },
   });
