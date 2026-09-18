@@ -113,18 +113,19 @@ describe("toModelSelection", () => {
     });
   });
 
-  test("auto-smart uses optimize_for", () => {
-    expect(toModelSelection("auto-smart", "low")).toEqual({
-      id: "auto-smart",
-      params: [{ id: "optimize_for", value: "speed" }],
+  test("Auto aliases to catalog default", () => {
+    expect(toModelSelection("auto-smart", "low")).toEqual({ id: "default" });
+    expect(toModelSelection("auto-smart", "medium")).toEqual({ id: "default" });
+    expect(toModelSelection("auto-smart", "high")).toEqual({ id: "default" });
+    expect(toModelSelection("default", "medium")).toEqual({ id: "default" });
+  });
+
+  test("retired Cursor ids alias to catalog ids", () => {
+    expect(toModelSelection("claude-opus-5-thinking-high", "medium")).toEqual({
+      id: "claude-opus-5",
     });
-    expect(toModelSelection("auto-smart", "medium")).toEqual({
-      id: "auto-smart",
-      params: [{ id: "optimize_for", value: "balanced" }],
-    });
-    expect(toModelSelection("auto-smart", "high")).toEqual({
-      id: "auto-smart",
-      params: [{ id: "optimize_for", value: "quality" }],
+    expect(toModelSelection("gpt-5.6-sol-medium", "medium")).toEqual({
+      id: "gpt-5.6-sol",
     });
   });
 

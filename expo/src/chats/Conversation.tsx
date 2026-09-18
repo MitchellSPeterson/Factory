@@ -31,6 +31,7 @@ import {
 } from "./activity";
 import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
 import type { ChatSettings } from "./lastSettings";
+import { canonicalCursorModel } from "../../../convex/lib/agentModel";
 import { ModelMenu, PickerChip, effortLabel, modelTitle } from "./model-picker";
 import { SlashMenu } from "./SlashMenu";
 import { isCompactDraft, slashItems, slashQuery, type SlashItem } from "./composerSlash";
@@ -232,7 +233,10 @@ export function Conversation({
     if (view)
       setSettings({
         provider: view.session.provider,
-        model: view.session.model,
+        model:
+          view.session.provider === "cursor"
+            ? canonicalCursorModel(view.session.model)
+            : view.session.model,
         effort: view.session.effort,
         permissionMode: view.session.permissionMode ?? DEFAULT_PERMISSION_MODE,
         serviceTier: view.session.serviceTier ?? DEFAULT_SERVICE_TIER,

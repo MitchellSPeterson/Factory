@@ -653,7 +653,12 @@ async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
           break;
         }
       }
-      if (await exited !== 0) throw new Error("Session failed. Check the worker environment, provider credentials, and Project configuration.");
+      if (await exited !== 0) {
+        const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
+        if (status !== "failed" && status !== "stopped") {
+          throw new Error("Session failed. Check the worker environment, provider credentials, and Project configuration.");
+        }
+      }
     } catch {
       await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: "Session failed. Check worker environment settings and provider credentials." });
     }
@@ -669,7 +674,18 @@ async function main() {
   if (process.argv.includes("--execute-session")) {
     const payload = JSON.parse(await Bun.stdin.text()) as { launch: SessionLaunch; convexUrl: string };
     const client = new ConvexHttpClient(payload.convexUrl);
-    try { await executeSession(client, payload.launch); } catch { process.exitCode = 1; }
+    try {
+      await executeSession(client, payload.launch);
+    } catch (error) {
+      process.exitCode = 1;
+      const raw = error instanceof Error ? error.message.trim() : "";
+      const message = raw === "" ? "Session failed. Check worker environment settings and provider credentials." : raw.slice(0, 280);
+      try {
+        await client.mutation(api.sessions.fail, { sessionId: payload.launch.sessionId, error: message });
+      } catch {
+        // tick reports the generic failure if this mutation does not land
+      }
+    }
     return;
   }
   const urlIndex = process.argv.indexOf("--url");

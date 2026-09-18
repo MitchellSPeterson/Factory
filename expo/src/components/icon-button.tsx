@@ -25,6 +25,7 @@ export const IconNames = {
   chevronDown: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
   check: { ios: 'checkmark', android: 'check', web: 'check' },
   layers: { ios: 'square.stack.3d.up.fill', android: 'layers', web: 'layers' },
+  trash: { ios: 'trash', android: 'delete', web: 'delete' },
 } as const;
 
 export type IconName = keyof typeof IconNames;

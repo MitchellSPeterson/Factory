@@ -1,10 +1,11 @@
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   BackHandler,
   Platform,
   Pressable,
@@ -15,6 +16,9 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import Swipeable, {
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "@/lib/api";
@@ -28,17 +32,107 @@ import { ProjectTools } from "@/chats/ProjectTools";
 import { TerminalPanel } from "@/chats/TerminalPanel";
 import { IconButton, IconNames } from "@/components/icon-button";
 
+function ChatRow({
+  title,
+  metadata,
+  selected,
+  statusColor,
+  onOpen,
+  onDelete,
+  onSwipeStart,
+  swipeRef,
+}: {
+  title: string;
+  metadata: string;
+  selected: boolean;
+  statusColor: string;
+  onOpen: () => void;
+  onDelete: () => void;
+  onSwipeStart: () => void;
+  swipeRef: (methods: SwipeableMethods | null) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Swipeable
+      ref={swipeRef}
+      friction={1}
+      overshootFriction={8}
+      enableTrackpadTwoFingerGesture
+      containerStyle={styles.swipe}
+      onSwipeableOpenStartDrag={onSwipeStart}
+      renderRightActions={() => (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Delete ${title}`}
+          onPress={onDelete}
+          style={({ pressed }) => [
+            styles.delete,
+            { backgroundColor: theme.danger, opacity: pressed ? 0.85 : 1 },
+          ]}
+        >
+          <Text style={styles.deleteLabel}>Delete</Text>
+        </Pressable>
+      )}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityHint="Swipe left to delete"
+        accessibilityActions={[{ name: "delete", label: "Delete" }]}
+        accessibilityState={{ selected }}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === "delete") onDelete();
+        }}
+        onPress={onOpen}
+        style={({ pressed }) => [
+          styles.row,
+          {
+            backgroundColor: selected
+              ? theme.backgroundSelected
+              : pressed
+                ? theme.subtleHover
+                : "transparent",
+          },
+        ]}
+      >
+        <View style={styles.rowHeading}>
+          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+          <Text
+            numberOfLines={2}
+            style={[styles.rowTitle, { color: theme.text }]}
+          >
+            {title}
+          </Text>
+        </View>
+        <Text
+          numberOfLines={1}
+          style={[styles.metadata, { color: theme.textSecondary }]}
+        >
+          {metadata}
+        </Text>
+      </Pressable>
+    </Swipeable>
+  );
+}
+
 export default function ChatsPage() {
   const theme = useTheme();
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams<{ session?: string; new?: string }>();
   const sessions = useQuery(api.sessions.list);
+  const removeSession = useMutation(api.sessions.remove);
   const { scope, projects, currentProject } = useProjectScope();
   const [search, setSearch] = useState("");
   const [draftProject, setDraftProject] = useState<Id<"projects"> | null>(null);
   const [panel, setPanel] = useState<"git" | "terminal" | null>(null);
   const [lastPanel, setLastPanel] = useState<"git" | "terminal" | null>(null);
+  const swipeRefs = useRef(new Map<string, SwipeableMethods>());
+  function closeSwipes(except?: string) {
+    for (const [id, methods] of swipeRefs.current) {
+      if (id !== except) methods.close();
+    }
+  }
   function togglePanel(next: "git" | "terminal") {
     setLastPanel(next);
     setPanel(panel === next ? null : next);
@@ -68,16 +162,43 @@ export default function ChatsPage() {
   const project = projects?.find((item) => item._id === projectId);
   const showList = wide || !showingConversation;
   function open(id: Id<"sessions">) {
+    closeSwipes(id);
     setPanel(null);
     router.setParams({ session: id, new: undefined });
   }
   function newChat() {
+    closeSwipes();
     setPanel(null);
     router.setParams({ session: undefined, new: "1" });
   }
   function closeChat() {
     setPanel(null);
     router.setParams({ session: undefined, new: undefined });
+  }
+  async function deleteChat(id: Id<"sessions">) {
+    try {
+      await removeSession({ sessionId: id });
+      if (params.session === id) closeChat();
+    } catch (e) {
+      Alert.alert(
+        "Could not delete chat",
+        e instanceof Error ? e.message : "Try again.",
+      );
+    }
+  }
+  function confirmDelete(id: Id<"sessions">, title: string) {
+    Alert.alert(
+      `Delete ${title}?`,
+      "This deletes the conversation and its messages.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void deleteChat(id),
+        },
+      ],
+    );
   }
   function onBack() {
     if (panel) {
@@ -87,11 +208,12 @@ export default function ChatsPage() {
     closeChat();
   }
   const hasHeaderActions = wide || showingConversation;
+  const trailingActionCount = hasHeaderActions ? (selected ? 3 : 2) : 0;
   const titleMaxWidth = chatHeaderTitleMaxWidth({
     windowWidth: width,
     insetStart: insets.left,
     insetEnd: insets.right,
-    hasRightActions: hasHeaderActions,
+    trailingActionCount,
     centered: process.env.EXPO_OS === "ios",
   });
   const chatTitle =
@@ -158,6 +280,19 @@ export default function ChatsPage() {
         hasHeaderActions
           ? () => (
               <View style={styles.headerRight}>
+                {selected ? (
+                  <IconButton
+                    icon="trash"
+                    accessibilityLabel="Delete chat"
+                    onPress={() =>
+                      confirmDelete(
+                        selected.session._id,
+                        selected.session.title,
+                      )
+                    }
+                    style={{ backgroundColor: "transparent" }}
+                  />
+                ) : null}
                 <IconButton
                   icon="git"
                   accessibilityLabel="Changes"
@@ -190,6 +325,7 @@ export default function ChatsPage() {
     navigation,
     panel,
     project,
+    selected,
     chatTitle,
     creating,
     selected?.session.title,
@@ -265,60 +401,35 @@ export default function ChatsPage() {
               </View>
             ) : (
               filtered.map((row) => (
-                <Pressable
+                <ChatRow
                   key={row.session._id}
-                  accessibilityRole="button"
-                  accessibilityState={{
-                    selected: row.session._id === selected?.session._id,
-                  }}
-                  onPress={() => open(row.session._id)}
-                  style={({ pressed }) => [
-                    styles.row,
-                    {
-                      backgroundColor:
-                        row.session._id === selected?.session._id
-                          ? theme.backgroundSelected
-                          : pressed
-                            ? theme.subtleHover
-                            : "transparent",
-                    },
-                  ]}
-                >
-                  <View style={styles.rowHeading}>
-                    <View
-                      style={[
-                        styles.dot,
-                        {
-                          backgroundColor:
-                            row.session.status === "running" ||
-                            row.session.status === "queued"
-                              ? theme.accent
-                              : row.session.status === "failed"
-                                ? theme.danger
-                                : theme.textSecondary,
-                        },
-                      ]}
-                    />
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.rowTitle, { color: theme.text }]}
-                    >
-                      {row.session.title}
-                    </Text>
-                  </View>
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.metadata, { color: theme.textSecondary }]}
-                  >
-                    {row.projectName} ·{" "}
-                    {row.session.provider === "codex"
+                  title={row.session.title}
+                  metadata={`${row.projectName} · ${
+                    row.session.provider === "codex"
                       ? "Codex"
                       : row.session.provider === "cursor"
                         ? "Cursor"
-                        : "Grok"}{" "}
-                    · {row.session.status}
-                  </Text>
-                </Pressable>
+                        : "Grok"
+                  } · ${row.session.status}`}
+                  selected={row.session._id === selected?.session._id}
+                  statusColor={
+                    row.session.status === "running" ||
+                    row.session.status === "queued"
+                      ? theme.accent
+                      : row.session.status === "failed"
+                        ? theme.danger
+                        : theme.textSecondary
+                  }
+                  onOpen={() => open(row.session._id)}
+                  onDelete={() =>
+                    confirmDelete(row.session._id, row.session.title)
+                  }
+                  onSwipeStart={() => closeSwipes(row.session._id)}
+                  swipeRef={(methods) => {
+                    if (methods) swipeRefs.current.set(row.session._id, methods);
+                    else swipeRefs.current.delete(row.session._id);
+                  }}
+                />
               ))
             )}
           </ScrollView>
@@ -427,7 +538,10 @@ const styles = StyleSheet.create({
   },
   list: { paddingHorizontal: 8, paddingBottom: 88, gap: 4 },
   listEmpty: { padding: 16, gap: 8 },
-  row: { padding: 14, borderRadius: 12, gap: 8 },
+  swipe: { borderRadius: 12, borderCurve: "continuous" },
+  delete: { width: 80, justifyContent: "center", alignItems: "center" },
+  deleteLabel: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  row: { padding: 14, gap: 8 },
   rowHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
   dot: { width: 5, height: 5, borderRadius: 3 },
   rowTitle: { fontSize: 14, fontWeight: "500", flex: 1, lineHeight: 20 },

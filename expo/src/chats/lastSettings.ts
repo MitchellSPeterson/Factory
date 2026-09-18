@@ -5,6 +5,7 @@ import {
   GROK_MODELS,
   PERMISSION_MODES,
   SERVICE_TIERS,
+  canonicalCursorModel,
 } from "../../../convex/lib/agentModel";
 import {
   DEFAULT_PERMISSION_MODE,
@@ -58,10 +59,11 @@ export function parseLastSettings(raw: string): ChatSettings {
     if (!("provider" in parsed) || !("model" in parsed) || !("effort" in parsed)) {
       return DEFAULT_CHAT_SETTINGS;
     }
-    const { provider, model, effort } = parsed;
-    if (!isProvider(provider) || typeof model !== "string" || !isEffort(effort)) {
+    const { provider, model: rawModel, effort } = parsed;
+    if (!isProvider(provider) || typeof rawModel !== "string" || !isEffort(effort)) {
       return DEFAULT_CHAT_SETTINGS;
     }
+    const model = provider === "cursor" ? canonicalCursorModel(rawModel) : rawModel;
     if (!MODELS[provider].includes(model)) return DEFAULT_CHAT_SETTINGS;
     const permissionMode =
       "permissionMode" in parsed && isPermissionMode(parsed.permissionMode)

@@ -33,6 +33,34 @@ test("parseLastSettings returns the stored model", () => {
   });
 });
 
+test("parseLastSettings aliases retired Cursor model ids", () => {
+  expect(
+    parseLastSettings(
+      JSON.stringify({ provider: "cursor", model: "auto-smart", effort: "medium" }),
+    ),
+  ).toEqual({
+    provider: "cursor",
+    model: "default",
+    effort: "medium",
+    permissionMode: "supervised",
+    serviceTier: "standard",
+  });
+  expect(
+    parseLastSettings(
+      JSON.stringify({
+        provider: "cursor",
+        model: "claude-opus-5-thinking-high",
+        effort: "high",
+      }),
+    ),
+  ).toMatchObject({ provider: "cursor", model: "claude-opus-5", effort: "high" });
+  expect(
+    parseLastSettings(
+      JSON.stringify({ provider: "cursor", model: "gpt-5.6-sol-medium", effort: "low" }),
+    ),
+  ).toMatchObject({ provider: "cursor", model: "gpt-5.6-sol", effort: "low" });
+});
+
 test("parseLastSettings keeps Grok and Cursor picks", () => {
   expect(
     parseLastSettings(

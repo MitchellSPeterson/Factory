@@ -66,7 +66,7 @@ const STAR = "#e8a317";
 
 export function modelTitle(id: string) {
   if (id === "grok-build-0.1") return "Grok Build";
-  if (id === "auto-smart") return "Auto";
+  if (id === "auto-smart" || id === "auto" || id === "default") return "Auto";
   if (id.startsWith("composer-")) return "Composer " + id.slice("composer-".length);
   if (id.startsWith("claude-opus-5")) return "Claude Opus 5";
   if (id.startsWith("gpt-")) {

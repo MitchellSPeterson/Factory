@@ -4,12 +4,23 @@ export const DEFAULT_AGENT_EFFORT = "medium";
 export const AGENT_MODELS = [
   "composer-2.5",
   "composer-2",
-  "auto-smart",
+  "default",
   "grok-4.6",
   "grok-4.5",
-  "claude-opus-5-thinking-high",
-  "gpt-5.6-sol-medium",
+  "claude-opus-5",
+  "gpt-5.6-sol",
 ] as const;
+
+const CURSOR_MODEL_ALIASES: Record<string, string> = {
+  "auto-smart": "default",
+  auto: "default",
+  "claude-opus-5-thinking-high": "claude-opus-5",
+  "gpt-5.6-sol-medium": "gpt-5.6-sol",
+};
+
+export function canonicalCursorModel(model: string) {
+  return CURSOR_MODEL_ALIASES[model] ?? model;
+}
 
 export const AGENT_EFFORTS = ["low", "medium", "high", "xhigh", "max", "ultra"] as const;
 
@@ -24,16 +35,12 @@ export function recipeEffort(effort?: string) {
 }
 
 export function toModelSelection(model: string, effort: string) {
-  if (model === "auto-smart") {
-    const value =
-      effort === "low" ? "speed" : ["high", "xhigh", "max", "ultra"].includes(effort)
-        ? "quality"
-        : "balanced";
-    return { id: model, params: [{ id: "optimize_for", value }] };
-  }
-  if (effort === "medium") return { id: model };
-  if (effort === "low") return { id: model, params: [{ id: "fast", value: "true" }] };
-  return { id: model, params: [{ id: "reasoning_effort", value: effort }] };
+  const id = canonicalCursorModel(model);
+  // ponytail: personal Cursor catalogs expose Auto as `default`, not Router `auto-smart`.
+  if (id === "default") return { id };
+  if (effort === "medium") return { id };
+  if (effort === "low") return { id, params: [{ id: "fast", value: "true" }] };
+  return { id, params: [{ id: "reasoning_effort", value: effort }] };
 }
 
 export const CODEX_MODELS = ["gpt-5.6-terra", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"] as const;
