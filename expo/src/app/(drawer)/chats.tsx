@@ -18,6 +18,11 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, {
+  css,
+  cubicBezier,
+  useReducedMotion,
+} from "react-native-reanimated";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "@/lib/api";
 import { inProjectScope } from "@/lib/project-scope";
@@ -30,6 +35,32 @@ import { ProviderMark } from "@/chats/model-picker";
 import { ProjectTools } from "@/chats/ProjectTools";
 import { TerminalPanel } from "@/chats/TerminalPanel";
 import { IconButton, IconNames } from "@/components/icon-button";
+
+const pulse = css.keyframes({
+  "0%, 100%": { opacity: 1 },
+  "50%": { opacity: 0.55 },
+});
+const motion = css.create({
+  pulse: {
+    animationName: pulse,
+    animationDuration: "1.6s",
+    animationTimingFunction: cubicBezier(0.77, 0, 0.175, 1),
+    animationIterationCount: "infinite",
+  },
+});
+
+function StatusDot({ color, running }: { color: string; running: boolean }) {
+  const reduced = useReducedMotion();
+  return (
+    <Animated.View
+      style={[
+        styles.dot,
+        { backgroundColor: color },
+        running && !reduced ? motion.pulse : null,
+      ]}
+    />
+  );
+}
 
 function ChatRow({
   title,
@@ -92,7 +123,7 @@ function ChatRow({
             </Text>
           ) : null}
         </View>
-        <View style={[styles.dot, { backgroundColor: statusColor }]} />
+        <StatusDot color={statusColor} running={status === "running"} />
       </View>
     </Pressable>
   );
