@@ -32,6 +32,6 @@ A Job can still record a GitHub issue URL, milestone, and tags from the New Job 
 
 ## Verification
 
-Run `bun run check` and `bun run build`. The GitHub tests cover credential destination, cancellation propagation, access/rate-limit errors, and storing the connection on the Factory instance. Complete a live sign-in and import a selected private repository after supplying your own token or registering the App.
+Run `bun run check`. The GitHub tests cover storing the connection on the Factory instance. Complete a live sign-in and import a selected private repository after supplying your own token or registering the App.
 
 For automatic cloning and environment settings, see [worker settings](worker-settings.md).

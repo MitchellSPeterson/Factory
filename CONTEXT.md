@@ -20,7 +20,7 @@ A named phase of a Workflow. Each Stage has a key, title, Bindings, optional mod
 _Avoid_: Step, phase, task
 
 **Skill**:
-A `SKILL.md` in the Project or on this machine (`~/.agents/skills` and the same for Claude, Codex, and Grok). Chat can mention it; the agent loads it from disk. Factory does not keep its own Skill catalog in the app.
+A `SKILL.md` in the Project or installed on this machine (`~/.agents/skills`, `~/.grok/skills`, Grok's bundled catalog, and the same for Claude, Codex, and Cursor). Chat can mention it; the agent loads it from disk. Factory does not keep its own Skill catalog in the app.
 _Avoid_: Prompt, instruction, rule, cursor skill
 
 **Binding**:

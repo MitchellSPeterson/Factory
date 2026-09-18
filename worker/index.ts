@@ -16,7 +16,7 @@ import { probeGrokCatalog, runGrokAcpSession } from "./grokAcp";
 import { collectProviderUsage } from "./providerUsage";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
-import { listRepoSkills, userSkillDirs } from "./repoSkills";
+import { globalSkillDirs, listRepoSkills } from "./repoSkills";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { defaultSimRunner, reconcileSimHub } from "./simHub";
@@ -720,7 +720,7 @@ async function main() {
   async function skillsTick() {
     if (Date.now() - lastSkillsScan < 30_000) return;
     lastSkillsScan = Date.now();
-    const extras = userSkillDirs();
+    const extras = globalSkillDirs();
     try {
       const projects = await client.query(api.projects.list, {});
       for (const project of projects) {

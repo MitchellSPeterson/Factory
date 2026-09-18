@@ -29,7 +29,7 @@ bun install
 bun --cwd expo install
 ```
 
-Log into Convex and start the backend. Leave this running.
+Log into Convex and start the backend once so it writes `.env.local`.
 
 ```sh
 bunx convex login
@@ -64,13 +64,13 @@ bun run worker --url https://YOUR-DEPLOYMENT.convex.cloud
 
 You should see `Factory worker ready.` The worker writes `.factory/worker.json` (mode 0600). Back that file up. Do not commit it. Losing it means re-entering saved secrets.
 
-Start the app:
+After that first `--url` run, one command starts Convex, the worker, and Expo on the web:
 
 ```sh
-bun run dev:expo
+bun run dev
 ```
 
-That is Expo on the web. For a phone or simulator, `bun --cwd expo start`, then open iOS or Android from the Expo menu.
+For a phone or simulator, `bun --cwd expo start`, then open iOS or Android from the Expo menu. `bun run dev:expo` is web-only if you already have the backend and worker running.
 
 Settings should show this machine as Online. If it says Offline, the worker is not running or it registered against a different Convex deployment.
 
@@ -90,7 +90,7 @@ bunx convex run projects:create '{
 
 `kind` is `web`, `expo`, or `mixed`. `githubRepo` can stay empty for a local checkout. `defaultRuntime` should be `local` unless you are running a Cursor cloud Job.
 
-The drawer lists Projects under Working on. **View all** shows every Chat and Job. Choosing a Project scopes the lists to that repo.
+The drawer lists Projects under Working on. **View all** shows every Chat. Choosing a Project scopes the list to that repo.
 
 The worker also seeds Factory Skills and a Feature Workflow on first start. You do not create those by hand.
 
@@ -121,11 +121,9 @@ This needs macOS with Xcode. An offline worker or a machine without Simulator su
 
 ## Jobs and Workflows
 
-A Job is one request against one Project, executed through a Workflow of Stages (plan, implement, verify, PR). Lanes on the board are Queued, Needs Grilling, Planning, Plan Review, Building, Code Review, and PR. When a Stage needs you, it opens an Ask in Factory and waits.
+A Job is one request against one Project, executed through a Workflow of Stages (plan, implement, verify, PR). The Expo app has no Jobs board, Agent editor, or Workflow editor. Chats do not create Jobs. The Convex APIs and the worker are still there: the worker claims Jobs and runs Cursor, Codex, Grok, or an OpenAI-compatible API, depending on the Agent and `FACTORY_PROVIDER`. Cloud Jobs are Cursor only.
 
-Chats do not create Jobs. The worker still claims Jobs and runs them with Cursor, Codex, Grok, or an OpenAI-compatible API, depending on the Agent and `FACTORY_PROVIDER`. Cloud Jobs are Cursor only.
-
-To start a Job from the command line:
+Start a Job from the command line:
 
 ```sh
 bunx convex run jobs:create '{
@@ -149,7 +147,7 @@ Factory language for all of this is in [CONTEXT.md](CONTEXT.md).
 
 Local models are the OpenAI-compatible provider (`FACTORY_PROVIDER=openai` plus `OPENAI_BASE_URL`), not a stand-in for Convex.
 
-Managed GitHub clone and encrypted worker environment used to live in Settings. Those Convex APIs are still there; the forms are not in the Expo app yet. For a local Project, `.env.local` plus `projects:create` is enough. The older flow is in [docs/github.md](docs/github.md) and [docs/worker-settings.md](docs/worker-settings.md).
+Settings shows this machine and provider usage. GitHub connect, repository import, and encrypted worker environment lived in Settings on the old web app. Those Convex APIs are still there. The Expo app has no forms for them. For a local Project, `.env.local` plus `projects:create` is enough. The older flow is in [docs/github.md](docs/github.md) and [docs/worker-settings.md](docs/worker-settings.md).
 
 ## Layout
 
@@ -167,7 +165,6 @@ docs/       Chats, GitHub, worker environment
 
 ```sh
 bun run check
-bun --cwd expo start --web
 ```
 
-`bun run check` is the worker, Convex, and web type tests. It does not replace clicking through Chats with the worker online.
+`bun run check` runs the worker and Convex tests, then typechecks Expo, Convex, and the worker. `bun run build` is that typecheck. It does not replace clicking through Chats with the worker online.

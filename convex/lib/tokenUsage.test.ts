@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { addUsage, isZeroUsage, subUsage, withTotal, ZERO_USAGE } from "./tokenUsage";
 
 describe("tokenUsage", () => {

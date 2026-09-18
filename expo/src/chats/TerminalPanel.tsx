@@ -2,19 +2,11 @@ import { useMutation } from "convex/react";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Keyboard,
-  LayoutAnimation,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { api } from "@/lib/api";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
 import { lanHostFromManifest, rewriteLoopbackUrl } from "@/devices/streamUrl";
 import renderer from "./terminal.generated.json";
@@ -49,42 +41,6 @@ function stringField(value: object | null | undefined, key: string): string | un
   if (!value || !(key in value)) return undefined;
   const field = (value as Record<string, unknown>)[key];
   return typeof field === "string" ? field : undefined;
-}
-
-function useKeyboardHeight() {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const show = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
-      (event) => {
-        if (Platform.OS === "ios") {
-          LayoutAnimation.configureNext({
-            duration: event.duration > 0 ? event.duration : 250,
-            update: { type: LayoutAnimation.Types.keyboard },
-          });
-        }
-        setHeight(event.endCoordinates.height);
-      },
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
-      (event) => {
-        if (Platform.OS === "ios") {
-          LayoutAnimation.configureNext({
-            duration: event.duration > 0 ? event.duration : 250,
-            update: { type: LayoutAnimation.Types.keyboard },
-          });
-        }
-        setHeight(0);
-      },
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
-  return height;
 }
 
 function parseServer(raw: string): {

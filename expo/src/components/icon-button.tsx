@@ -14,8 +14,6 @@ export const IconNames = {
   appearance: { ios: 'circle.lefthalf.filled', android: 'contrast', web: 'contrast' },
   reload: { ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' },
   rotate: { ios: 'rotate.right', android: 'screen_rotation', web: 'screen_rotation' },
-  expand: { ios: 'arrow.up.left.and.arrow.down.right', android: 'fullscreen', web: 'fullscreen' },
-  collapse: { ios: 'arrow.down.right.and.arrow.up.left', android: 'fullscreen_exit', web: 'fullscreen_exit' },
   back: { ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' },
   recents: { ios: 'square.on.square', android: 'filter_none', web: 'filter_none' },
   menu: { ios: 'ellipsis.circle', android: 'more_horiz', web: 'more_horiz' },

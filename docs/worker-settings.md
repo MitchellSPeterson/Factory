@@ -47,7 +47,7 @@ Environment variables are available to code and agents executing the Run. Factor
 
 ## Tests
 
-`bun run check` includes backend authorization/scope/import lifecycle tests, real local Git clone tests, encryption roundtrips, destination/tampering rejection, frontend/backend/worker type checks, and the existing worker suite. `bun run build` verifies the frontend build.
+`bun run check` includes backend authorization/scope/import lifecycle tests, real local Git clone tests, encryption roundtrips, destination/tampering rejection, Expo/backend/worker type checks, and the existing worker suite.
 
 ## Codex Agents
 

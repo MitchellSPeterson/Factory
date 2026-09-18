@@ -17,14 +17,26 @@ const PROJECT_SKILL_DIRS = [
   "skills",
 ];
 
-export function userSkillDirs(home = os.homedir()): string[] {
+export function grokHome(home = os.homedir(), env = process.env): string {
+  const fromEnv = env.GROK_HOME?.trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return path.join(home, ".grok");
+}
+
+/** User- and system-installed Skills on this machine, outside the Project. */
+export function globalSkillDirs(home = os.homedir(), env = process.env): string[] {
+  const grok = grokHome(home, env);
   return [
     path.join(home, ".agents/skills"),
     path.join(home, ".claude/skills"),
     path.join(home, ".codex/skills"),
-    path.join(home, ".grok/skills"),
+    path.join(home, ".cursor/skills"),
+    path.join(grok, "skills"),
+    path.join(grok, "bundled/skills"),
   ];
 }
+
+export const userSkillDirs = globalSkillDirs;
 
 export function parseSkillFile(body: string, folder: string): { slug: string; title: string; description: string } {
   const slug = folder.trim() || "skill";
@@ -47,9 +59,32 @@ export function parseSkillFile(body: string, folder: string): { slug: string; ti
 }
 
 function field(block: string, key: string): string {
-  const match = block.match(new RegExp(`^${key}:\\s*(.+)$`, "m"));
-  if (!match?.[1]) return "";
-  return match[1].trim().replace(/^['"]|['"]$/g, "");
+  const lines = block.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const match = lines[i]?.match(new RegExp(`^${key}:\\s*(.*)$`));
+    if (!match) continue;
+    let value = (match[1] ?? "").trim();
+    if (value === ">" || value === ">-" || value === ">+" || value === "|" || value === "|-" || value === "|+") {
+      const parts = [];
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const row = lines[j] ?? "";
+        if (row.trim() === "") continue;
+        if (!/^\s+/.test(row)) break;
+        parts.push(row.trim());
+      }
+      value = parts.join(" ");
+    } else {
+      const parts = [value.replace(/^['"]|['"]$/g, "")];
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const row = lines[j] ?? "";
+        if (!/^\s+\S/.test(row) || /^\s+[\w-]+:\s*/.test(row)) break;
+        parts.push(row.trim());
+      }
+      value = parts.join(" ");
+    }
+    return value.replace(/^['"]|['"]$/g, "");
+  }
+  return "";
 }
 
 export async function listRepoSkills(
