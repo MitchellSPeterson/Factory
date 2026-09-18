@@ -37,19 +37,39 @@ const PROVIDER_ICONS = {
   grok: require("../../assets/providerIcons/grok-ai-icon.webp"),
 } as const;
 
+// Fraction of the layout box the drawn glyph should occupy.
+// Grok's asset is edge-to-edge; others already have padding in the file.
+const PROVIDER_ICON_FIT: Record<Provider, number> = {
+  codex: 1,
+  cursor: 1,
+  grok: 0.82,
+};
+
 export function ProviderMark({ provider, size }: { provider: Provider; size: number }) {
   const theme = useTheme();
+  const fit = PROVIDER_ICON_FIT[provider];
+  const dim = size * fit;
   return (
-    <Image
-      source={PROVIDER_ICONS[provider]}
-      accessibilityIgnoresInvertColors
-      resizeMode="contain"
+    <View
       style={{
         width: size,
         height: size,
-        tintColor: provider === "cursor" ? undefined : theme.text,
+        flexShrink: 0,
+        alignItems: "center",
+        justifyContent: "center",
       }}
-    />
+    >
+      <Image
+        source={PROVIDER_ICONS[provider]}
+        accessibilityIgnoresInvertColors
+        resizeMode="contain"
+        style={{
+          width: dim,
+          height: dim,
+          tintColor: provider === "cursor" ? undefined : theme.text,
+        }}
+      />
+    </View>
   );
 }
 
@@ -222,7 +242,7 @@ export function ModelMenu({
     theme.background === Colors.dark.background
       ? "rgba(255,255,255,0.08)"
       : "#f0f0f2";
-  const maxHeight = Math.min(460, Math.round(height * 0.58));
+  const maxHeight = Math.min(560, Math.round(height * 0.68));
   if (page !== "models") {
     const spec = pickerChoices(page);
     return (
@@ -348,114 +368,118 @@ export function ModelMenu({
             <ProviderMark provider="grok" size={18} />
           </RailButton>
         </View>
-        <ScrollView
-          style={styles.list}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.listContent}
-        >
-          {rows.length === 0 ? (
-            <Text style={[styles.empty, { color: theme.textSecondary }]}>
-              {rail === "favorites" && !query.trim()
-                ? "Star a model to pin it here."
-                : "No matching models."}
-            </Text>
-          ) : (
-            rows.map((row) => {
-              const id = favoriteId(row.provider, row.model);
-              const selected =
-                current.provider === row.provider && current.model === row.model;
-              const favored = ids.includes(id);
-              return (
-                <View
-                  key={id}
-                  style={[
-                    styles.row,
-                    selected && { backgroundColor: selectedFill },
-                  ]}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={row.title}
-                    accessibilityState={{ selected, disabled: !!disabled }}
-                    disabled={disabled}
-                    onPress={() =>
-                      onChange({ ...current, provider: row.provider, model: row.model })
-                    }
-                    style={({ pressed }) => [
-                      styles.rowMain,
-                      {
-                        opacity: disabled ? 0.4 : 1,
-                        transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
-                      },
-                    ]}
-                  >
-                    <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
-                      {row.title}
-                    </Text>
-                    <View style={styles.subtitle}>
-                      <ProviderMark provider={row.provider} size={12} />
-                      <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-                        {providerName(row.provider)}
-                      </Text>
-                    </View>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      favored ? `Unfavorite ${row.title}` : `Favorite ${row.title}`
-                    }
-                    onPress={() => toggle(id)}
-                    hitSlop={8}
-                    style={({ pressed }) => [
-                      styles.star,
-                      { transform: [{ scale: pressed ? 0.97 : 1 }] },
-                    ]}
-                  >
-                    <SymbolView
-                      name={favored ? icons.starFill : icons.star}
-                      size={18}
-                      tintColor={favored ? STAR : theme.textSecondary}
-                    />
-                  </Pressable>
-                </View>
-              );
-            })
-          )}
-        </ScrollView>
-      </View>
-      <View style={[styles.options, { borderTopColor: theme.lineStrong }]}>
-        <Text style={[styles.section, { color: theme.textSecondary }]}>Options</Text>
-        {optionRows.map((row, index) => (
-          <Pressable
-            key={row.id}
-            accessibilityRole="button"
-            accessibilityLabel={`${row.label}, ${row.valueLabel}`}
-            disabled={disabled}
-            onPress={() => setPage(row.id)}
-            style={({ pressed }) => [
-              styles.optionRow,
-              {
-                opacity: disabled ? 0.4 : 1,
-                backgroundColor: pressed ? selectedFill : "transparent",
-                borderBottomColor: theme.line,
-                borderBottomWidth:
-                  index === optionRows.length - 1 ? 0 : StyleSheet.hairlineWidth,
-              },
-            ]}
+        <View style={styles.main}>
+          <ScrollView
+            style={styles.list}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.listContent}
           >
-            <Text style={{ color: theme.text, fontSize: 15, fontWeight: "500" }}>
-              {row.label}
-            </Text>
-            <View style={styles.optionValue}>
-              <Text style={{ color: theme.textSecondary, fontSize: 15 }}>{row.valueLabel}</Text>
-              <SymbolView
-                name={icons.chevronRight}
-                size={12}
-                tintColor={theme.textSecondary}
-              />
-            </View>
-          </Pressable>
-        ))}
+            {rows.length === 0 ? (
+              <Text style={[styles.empty, { color: theme.textSecondary }]}>
+                {rail === "favorites" && !query.trim()
+                  ? "Star a model to pin it here."
+                  : "No matching models."}
+              </Text>
+            ) : (
+              rows.map((row) => {
+                const id = favoriteId(row.provider, row.model);
+                const selected =
+                  current.provider === row.provider && current.model === row.model;
+                const favored = ids.includes(id);
+                return (
+                  <View
+                    key={id}
+                    style={[
+                      styles.row,
+                      selected && { backgroundColor: selectedFill },
+                    ]}
+                  >
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={row.title}
+                      accessibilityState={{ selected, disabled: !!disabled }}
+                      disabled={disabled}
+                      onPress={() =>
+                        onChange({ ...current, provider: row.provider, model: row.model })
+                      }
+                      style={({ pressed }) => [
+                        styles.rowMain,
+                        {
+                          opacity: disabled ? 0.4 : 1,
+                          transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+                        {row.title}
+                      </Text>
+                      <View style={styles.subtitle}>
+                        <ProviderMark provider={row.provider} size={12} />
+                        <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                          {providerName(row.provider)}
+                        </Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        favored ? `Unfavorite ${row.title}` : `Favorite ${row.title}`
+                      }
+                      onPress={() => toggle(id)}
+                      hitSlop={8}
+                      style={({ pressed }) => [
+                        styles.star,
+                        { transform: [{ scale: pressed ? 0.97 : 1 }] },
+                      ]}
+                    >
+                      <SymbolView
+                        name={favored ? icons.starFill : icons.star}
+                        size={18}
+                        tintColor={favored ? STAR : theme.textSecondary}
+                      />
+                    </Pressable>
+                  </View>
+                );
+              })
+            )}
+          </ScrollView>
+          <View style={[styles.options, { borderTopColor: theme.lineStrong }]}>
+            <Text style={[styles.section, { color: theme.textSecondary }]}>Options</Text>
+            {optionRows.map((row, index) => (
+              <Pressable
+                key={row.id}
+                accessibilityRole="button"
+                accessibilityLabel={`${row.label}, ${row.valueLabel}`}
+                disabled={disabled}
+                onPress={() => setPage(row.id)}
+                style={({ pressed }) => [
+                  styles.optionRow,
+                  {
+                    opacity: disabled ? 0.4 : 1,
+                    backgroundColor: pressed ? selectedFill : "transparent",
+                    borderBottomColor: theme.line,
+                    borderBottomWidth:
+                      index === optionRows.length - 1 ? 0 : StyleSheet.hairlineWidth,
+                  },
+                ]}
+              >
+                <Text style={{ color: theme.text, fontSize: 15, fontWeight: "500" }}>
+                  {row.label}
+                </Text>
+                <View style={styles.optionValue}>
+                  <Text style={{ color: theme.textSecondary, fontSize: 15 }}>
+                    {row.valueLabel}
+                  </Text>
+                  <SymbolView
+                    name={icons.chevronRight}
+                    size={12}
+                    tintColor={theme.textSecondary}
+                  />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </View>
       </View>
     </MenuCard>
   );
@@ -532,7 +556,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 8 },
-  body: { flexDirection: "row", flex: 1, minHeight: 148 },
+  // List min (~3 rows) + options footer; rail fits inside this.
+  body: { flexDirection: "row", flex: 1, minHeight: 310 },
   rail: {
     width: 48,
     borderRightWidth: StyleSheet.hairlineWidth,
@@ -540,6 +565,7 @@ const styles = StyleSheet.create({
     gap: 4,
     alignItems: "center",
   },
+  main: { flex: 1, minWidth: 0 },
   railBtn: {
     width: 36,
     height: 36,
@@ -556,7 +582,7 @@ const styles = StyleSheet.create({
     width: 2,
     borderRadius: 1,
   },
-  list: { flex: 1 },
+  list: { flex: 1, minHeight: 180 },
   listContent: { padding: 6, paddingBottom: 10 },
   row: {
     flexDirection: "row",
@@ -580,6 +606,7 @@ const styles = StyleSheet.create({
   options: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingBottom: 6,
+    flexShrink: 0,
   },
   optionRow: {
     flexDirection: "row",

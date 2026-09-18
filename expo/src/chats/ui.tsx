@@ -18,6 +18,7 @@ const icons = {
   attach: { ios: "paperclip", android: "attach_file", web: "attach_file" },
   stop: { ios: "stop.fill", android: "stop", web: "stop" },
   down: { ios: "chevron.down", android: "expand_more", web: "expand_more" },
+  copy: { ios: "doc.on.doc", android: "content_copy", web: "content_copy" },
 } as const;
 export function Action({
   icon,

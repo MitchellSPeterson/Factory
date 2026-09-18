@@ -18,7 +18,10 @@ import {
   tokenUsage,
 } from "./lib/validators";
 import { addUsage, isZeroUsage, subUsage, ZERO_USAGE } from "./lib/tokenUsage";
+import { takeLeadingSkillMentions, withSkillMentions } from "./lib/sessionText";
 import { v } from "convex/values";
+
+export { takeLeadingSkillMentions, withSkillMentions };
 
 export const MAX_SESSION_MESSAGE = 16000;
 export const MAX_SESSION_IMAGES = 4;
@@ -103,14 +106,6 @@ export function titleFrom(text: string, imageCount = 0, fallback = ""): string {
   }
   if (one.length <= MAX_SESSION_TITLE) return one;
   return `${one.slice(0, MAX_SESSION_TITLE - 1).trimEnd()}…`;
-}
-
-export function withSkillMentions(text: string, slugs: readonly string[]): string {
-  const missing = slugs.filter((slug) => slug !== "" && !text.includes(`skill:${slug}`));
-  if (missing.length === 0) return text;
-  const line = missing.map((slug) => `skill:${slug}`).join(" ");
-  const trimmed = text.trim();
-  return trimmed === "" ? line : `${line}\n\n${trimmed}`;
 }
 
 export function isCompactCommand(text: string): boolean {
@@ -266,8 +261,9 @@ export const create = mutation({
   returns: v.id("sessions"),
   handler: async (ctx, args) => {
     const imageIds = requireImageIds(args.imageIds);
-    const skillSlugs = requireSkillSlugs(args.skillSlugs);
-    const text = requireMessageText(args.text, imageIds.length, skillSlugs.length);
+    const mentioned = takeLeadingSkillMentions(args.text);
+    const skillSlugs = requireSkillSlugs([...mentioned.slugs, ...(args.skillSlugs ?? [])]);
+    const text = requireMessageText(mentioned.text, imageIds.length, skillSlugs.length);
     if (isCompactCommand(text)) throw new Error("Compact needs an existing conversation.");
     if (args.model.trim() === "") throw new Error("Model is required");
     const project = await requireProject(ctx, args.projectId);
@@ -342,8 +338,9 @@ export const send = mutation({
     const session = await requireSession(ctx, args.sessionId);
     if (busy(session.status)) throw new Error("Wait for the current turn to finish.");
     const imageIds = requireImageIds(args.imageIds);
-    const skillSlugs = requireSkillSlugs(args.skillSlugs);
-    const text = requireMessageText(args.text, imageIds.length, skillSlugs.length);
+    const mentioned = takeLeadingSkillMentions(args.text);
+    const skillSlugs = requireSkillSlugs([...mentioned.slugs, ...(args.skillSlugs ?? [])]);
+    const text = requireMessageText(mentioned.text, imageIds.length, skillSlugs.length);
     await expirePendingPermissions(ctx, session._id);
     await ctx.db.insert("sessionMessages", {
       sessionId: session._id,

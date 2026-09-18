@@ -15,6 +15,7 @@ import { grokResumeId, runGrokAgent } from "./grokAgent";
 import { probeGrokCatalog, runGrokAcpSession } from "./grokAcp";
 import { collectProviderUsage } from "./providerUsage";
 import { runOpenAIAgent } from "./openaiAgent";
+import { cursorImagesFromPaths, cursorUserMessage } from "./cursorMessage";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { globalSkillDirs, listRepoSkills } from "./repoSkills";
 import { loadSkillFiles } from "./seedSkills";
@@ -543,8 +544,9 @@ async function runSessionCursor(client: ConvexHttpClient, launch: SessionLaunch)
   );
   let live = false;
   let usage = ZERO_USAGE;
-  // ponytail: Cursor session send is text-only. Attachments stay in the transcript; upgrade to SDKUserMessage images.
-  const run = await agent.send(launch.prompt, {
+  const run = await agent.send(
+    cursorUserMessage(launch.prompt, cursorImagesFromPaths(await materializeImages(launch.images))),
+    {
     model,
     onDelta: ({ update }) => {
       if (update.type === "text-delta" || update.type === "thinking-delta") {

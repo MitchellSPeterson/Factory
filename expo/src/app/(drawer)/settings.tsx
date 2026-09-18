@@ -1,11 +1,9 @@
 import { useQuery } from 'convex/react';
 import { useNavigation } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
 import { api } from '@/lib/api';
-import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useProjectScope } from '@/lib/project-scope-context';
 import { providerLabel } from '../../../../convex/lib/agentModel';
@@ -18,21 +16,27 @@ import {
   formatUsdCents,
   usageFillColor,
 } from '@/settings/format';
+import {
+  SettingsGroup,
+  SettingsIcons,
+  SettingsMessage,
+  SettingsRow,
+  StatusValue,
+  UsageTrack,
+} from '@/settings/ui';
 
 type ProviderMeter = NonNullable<Doc<'servers'>['providerUsage']>['meters'][number];
-
-type SettingsTab = 'general' | 'project';
 
 export default function SettingsPage() {
   const theme = useTheme();
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
   const live = useQuery(api.servers.local);
   const { scope, currentProject, label } = useProjectScope();
   const project = useQuery(
     api.projects.get,
     scope.kind === 'project' ? { projectId: scope.projectId } : 'skip',
   );
-  const [tab, setTab] = useState<SettingsTab>('general');
   const [now, setNow] = useState(Date.now());
 
   useLayoutEffect(() => {
@@ -45,237 +49,208 @@ export default function SettingsPage() {
   }, []);
 
   const online = !!(live && now - live.lastSeen < 45_000);
+  const usage = live?.providerUsage;
+  const meters = usage?.meters ?? [];
+  const wide = width >= 768;
 
   return (
     <ScrollView
-      style={[styles.scroll, { backgroundColor: theme.background }]}
-      contentContainerStyle={styles.content}
+      style={[styles.scroll, { backgroundColor: theme.sidebar }]}
+      contentContainerStyle={[
+        styles.content,
+        { paddingHorizontal: wide ? 32 : 16, maxWidth: wide ? 600 : undefined },
+      ]}
       contentInsetAdjustmentBehavior="automatic">
-      <View
-        accessibilityRole="tablist"
-        style={[styles.tabs, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}>
-        <TabButton label="General" selected={tab === 'general'} onPress={() => setTab('general')} />
-        <TabButton label="Project" selected={tab === 'project'} onPress={() => setTab('project')} />
-      </View>
+      <SettingsGroup
+        title="This machine"
+        footer="This machine clones repositories and runs your chats.">
+        {live === undefined ? (
+          <SettingsMessage>Checking this machine…</SettingsMessage>
+        ) : live ? (
+          <>
+            <SettingsRow
+              icon={SettingsIcons.machine}
+              label={live.name}
+              accessory={<StatusValue online={online} />}
+            />
+            <SettingsRow
+              icon={SettingsIcons.folder}
+              label="Repositories"
+              value={live.projectsRoot}
+              valueMode="middle"
+            />
+          </>
+        ) : (
+          <SettingsRow
+            icon={SettingsIcons.machine}
+            label="Worker"
+            accessory={<StatusValue online={false} />}
+            detail="Start the worker on this machine. It registers itself with this Factory."
+          />
+        )}
+      </SettingsGroup>
 
-      {tab === 'general' ? (
+      {live === undefined ? (
+        <SettingsGroup title="Usage">
+          <SettingsMessage>Waiting for the first usage check…</SettingsMessage>
+        </SettingsGroup>
+      ) : !live ? (
+        <SettingsGroup
+          title="Usage"
+          footer="Start the worker to read remaining usage from each provider.">
+          <SettingsMessage>No live limits yet.</SettingsMessage>
+        </SettingsGroup>
+      ) : !usage ? (
+        <SettingsGroup title="Usage">
+          <SettingsMessage>Waiting for the first usage check…</SettingsMessage>
+        </SettingsGroup>
+      ) : meters.length === 0 ? (
+        <SettingsGroup
+          title="Usage"
+          footer="Sign in with Codex or Grok on this machine. Factory reads those logins on its own.">
+          <SettingsMessage>No providers signed in.</SettingsMessage>
+        </SettingsGroup>
+      ) : (
+        meters.map((meter, index) => (
+          <UsageMeter
+            key={meter.provider}
+            meter={meter}
+            now={now}
+            footer={index === meters.length - 1 ? formatCheckedAt(usage.checkedAt, now) : undefined}
+          />
+        ))
+      )}
+
+      {scope.kind === 'project' && project === undefined && currentProject ? (
+        <SettingsGroup title="Project" footer="Settings for the Project selected in the drawer.">
+          <SettingsMessage>Loading Project settings…</SettingsMessage>
+        </SettingsGroup>
+      ) : scope.kind === 'project' && project ? (
         <>
-          <View style={styles.block}>
-            <View style={styles.sectionHeading}>
-              <ThemedText type="section">This machine</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                This machine clones repositories and runs your chats.
-              </ThemedText>
-            </View>
-            {live === undefined ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Checking this machine…
-              </ThemedText>
-            ) : live ? (
-              <View style={[styles.option, { borderColor: theme.line }]}>
-                <ThemedText type="smallBold">
-                  {live.name} · {online ? 'Online' : 'Offline'}
-                </ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Repositories: {live.projectsRoot}
-                </ThemedText>
-              </View>
-            ) : (
-              <ThemedText type="small" themeColor="textSecondary">
-                Start the worker on this machine. It registers itself with this Factory.
-              </ThemedText>
-            )}
-          </View>
-
-          <View style={styles.block}>
-            <View style={styles.sectionHeading}>
-              <ThemedText type="section">Usage</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Live limits from providers already signed in on this machine.
-              </ThemedText>
-            </View>
-            {!live ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Start the worker to read remaining usage from each provider.
-              </ThemedText>
-            ) : !live.providerUsage ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Waiting for the first usage check…
-              </ThemedText>
-            ) : live.providerUsage.meters.length === 0 ? (
-              <ThemedText type="small" themeColor="textSecondary">
-                Sign in with Codex or Grok on this machine. Factory reads those logins on its own.
-              </ThemedText>
-            ) : (
-              <>
-                {live.providerUsage.meters.map((meter) => (
-                  <UsageMeter key={meter.provider} meter={meter} now={now} />
-                ))}
-                <ThemedText type="small" themeColor="textSecondary">
-                  {formatCheckedAt(live.providerUsage.checkedAt, now)}
-                </ThemedText>
-              </>
-            )}
-          </View>
+          <SettingsGroup
+            title="Project"
+            footer="Settings for the Project selected in the drawer.">
+            <SettingsRow
+              icon={SettingsIcons.project}
+              label={project.name}
+              value={kindLabel(project.kind)}
+            />
+            <SettingsRow
+              icon={SettingsIcons.folder}
+              label="Location"
+              value={project.githubRepo || project.localPath}
+              valueMode="middle"
+            />
+            {project.cloneStatus ? (
+              <SettingsRow
+                icon={SettingsIcons.clone}
+                label="Clone"
+                value={cloneLabel(project.cloneStatus)}
+                valueTone={
+                  project.cloneStatus === 'failed'
+                    ? 'danger'
+                    : project.cloneStatus === 'ready'
+                      ? 'success'
+                      : 'textSecondary'
+                }
+                detail={project.cloneStatus === 'failed' ? project.cloneError : undefined}
+              />
+            ) : null}
+          </SettingsGroup>
+          <ProjectUsage usage={project.usage} />
         </>
       ) : (
-        <View style={styles.block}>
-          <View style={styles.sectionHeading}>
-            <ThemedText type="section">Project</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {scope.kind === 'project'
-                ? 'Settings and Factory-recorded usage for the Project selected in the drawer.'
-                : 'Choose a Project in the drawer to see its settings.'}
-            </ThemedText>
-          </View>
-          {scope.kind === 'project' && project === undefined && currentProject ? (
-            <ThemedText type="small" themeColor="textSecondary">
-              Loading Project settings…
-            </ThemedText>
-          ) : scope.kind === 'project' && project ? (
-            <>
-              <View style={[styles.option, { borderColor: theme.line }]}>
-                <ThemedText type="smallBold">{project.name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  {kindLabel(project.kind)} · {project.githubRepo || project.localPath}
-                </ThemedText>
-                {project.cloneStatus ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Clone: {cloneLabel(project.cloneStatus)}
-                    {project.cloneError ? ` · ${project.cloneError}` : ''}
-                  </ThemedText>
-                ) : null}
-              </View>
-              <View style={styles.sectionHeading}>
-                <ThemedText type="smallBold">Usage in this Factory</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Tokens recorded on Sessions for this Project. Remaining provider allowance is on
-                  General — it belongs to the account, not this Project.
-                </ThemedText>
-              </View>
-              <ProjectUsage usage={project.usage} />
-            </>
-          ) : (
-            <View style={[styles.option, { borderColor: theme.line }]}>
-              <ThemedText type="smallBold">{label}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary">
-                Chats currently include every Project.
-              </ThemedText>
-            </View>
-          )}
-        </View>
+        <SettingsGroup
+          title="Project"
+          footer="Choose a Project in the drawer to see its settings.">
+          <SettingsRow
+            icon={SettingsIcons.project}
+            label={label}
+            detail="Chats currently include every Project."
+          />
+        </SettingsGroup>
       )}
     </ScrollView>
-  );
-}
-
-function TabButton({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.tab,
-        {
-          backgroundColor: selected ? theme.backgroundSelected : 'transparent',
-          opacity: pressed ? 0.8 : 1,
-        },
-      ]}>
-      <ThemedText type="smallBold" themeColor={selected ? 'text' : 'textSecondary'}>
-        {label}
-      </ThemedText>
-    </Pressable>
   );
 }
 
 function UsageMeter({
   meter,
   now,
+  footer,
 }: {
   meter: ProviderMeter;
   now: number;
+  footer?: string;
 }) {
-  const theme = useTheme();
   const title = providerLabel(meter.provider);
   if (meter.status !== 'ok') {
     return (
-      <View style={[styles.meter, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
-        <ThemedText type="smallBold">{title}</ThemedText>
-        <ThemedText type="small" themeColor={meter.status === 'error' ? 'danger' : 'textSecondary'}>
-          {meter.message}
-        </ThemedText>
-      </View>
+      <SettingsGroup title={title} footer={footer}>
+        <SettingsRow
+          icon={SettingsIcons.warning}
+          label={meter.status === 'error' ? 'Could not read usage' : 'Not signed in'}
+          valueTone={meter.status === 'error' ? 'danger' : 'textSecondary'}
+          detail={meter.message}
+        />
+      </SettingsGroup>
     );
   }
+
   const windows = meter.windows ?? [];
   const remaining = meter.remainingCents;
   const limit = meter.limitCents;
-  const used = meter.usedCents ?? (remaining !== undefined && limit !== undefined ? limit - remaining : undefined);
-  const percent = meter.percentUsed ?? (used !== undefined && limit ? (used / limit) * 100 : undefined);
+  const used =
+    meter.usedCents ??
+    (remaining !== undefined && limit !== undefined ? limit - remaining : undefined);
+  const percent =
+    meter.percentUsed ?? (used !== undefined && limit ? (used / limit) * 100 : undefined);
   return (
-    <View style={[styles.meter, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
-      <View style={styles.meterHead}>
-        <ThemedText type="smallBold">{title}</ThemedText>
-        {meter.plan ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            {meter.plan}
-          </ThemedText>
-        ) : null}
-      </View>
-      {windows.length > 0
-        ? windows.map((window) => (
-            <UsageBar
-              key={window.name}
-              label={window.name}
-              percent={window.percentUsed}
-              now={now}
-              resetsAt={window.resetsAt}
-              windowSeconds={window.windowSeconds}
-            />
-          ))
-        : percent !== undefined
-          ? (
-              <UsageBar
-                label={remaining !== undefined ? `${formatUsdCents(remaining)} left` : used !== undefined ? `${formatUsdCents(used)} used` : title}
-                percent={percent}
-                now={now}
-                resetsAt={meter.resetsAt}
-                detail={used !== undefined && limit !== undefined ? `${formatUsdCents(used)} of ${formatUsdCents(limit)}` : undefined}
-              />
-            )
-          : remaining !== undefined
-            ? (
-                <ThemedText type="default" style={styles.tabular}>
-                  {formatUsdCents(remaining)} left
-                </ThemedText>
-              )
-            : used !== undefined
-              ? (
-                  <ThemedText type="default" style={styles.tabular}>
-                    {formatUsdCents(used)} used
-                  </ThemedText>
-                )
-              : null}
-      {meter.display ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {meter.display}
-        </ThemedText>
-      ) : null}
-    </View>
+    <SettingsGroup
+      title={title}
+      footer={[meter.display, footer].filter(Boolean).join(' · ') || undefined}>
+      {meter.plan ? <SettingsRow icon={SettingsIcons.plan} label="Plan" value={meter.plan} /> : null}
+      {windows.length > 0 ? (
+        windows.map((window) => (
+          <UsageWindow
+            key={window.name}
+            label={window.name}
+            percent={window.percentUsed}
+            now={now}
+            resetsAt={window.resetsAt}
+            windowSeconds={window.windowSeconds}
+          />
+        ))
+      ) : percent !== undefined ? (
+        <UsageWindow
+          label={
+            remaining !== undefined
+              ? `${formatUsdCents(remaining)} left`
+              : used !== undefined
+                ? `${formatUsdCents(used)} used`
+                : title
+          }
+          percent={percent}
+          now={now}
+          resetsAt={meter.resetsAt}
+          detail={
+            used !== undefined && limit !== undefined
+              ? `${formatUsdCents(used)} of ${formatUsdCents(limit)}`
+              : undefined
+          }
+        />
+      ) : remaining !== undefined ? (
+        <SettingsRow icon={SettingsIcons.chart} label="Remaining" value={formatUsdCents(remaining)} />
+      ) : used !== undefined ? (
+        <SettingsRow icon={SettingsIcons.chart} label="Used" value={formatUsdCents(used)} />
+      ) : (
+        <SettingsMessage>No usage figures yet.</SettingsMessage>
+      )}
+    </SettingsGroup>
   );
 }
 
-function UsageBar({
+function UsageWindow({
   label,
   percent,
   now,
@@ -290,36 +265,16 @@ function UsageBar({
   windowSeconds?: number;
   detail?: string;
 }) {
-  const theme = useTheme();
   const fill = usageFillColor(percent, now, resetsAt, windowSeconds);
-  const width = Math.max(0, Math.min(100, percent));
+  const reset = resetsAt ? formatReset(resetsAt, now) : undefined;
   return (
-    <View style={styles.window}>
-      <View style={styles.meterHead}>
-        <ThemedText type="small" themeColor="textSecondary">
-          {label}
-        </ThemedText>
-        <ThemedText type="smallBold" style={styles.tabular}>
-          {formatPercent(percent)}
-        </ThemedText>
-      </View>
-      <View
-        accessible
-        accessibilityLabel={`${label} ${formatPercent(percent)} used`}
-        style={[styles.track, { backgroundColor: theme.line }]}>
-        <View style={[styles.fill, { width: `${width}%`, backgroundColor: fill }]} />
-      </View>
-      {detail ? (
-        <ThemedText type="small" themeColor="textSecondary" style={styles.tabular}>
-          {detail}
-        </ThemedText>
-      ) : null}
-      {resetsAt ? (
-        <ThemedText type="small" themeColor="textSecondary">
-          {formatReset(resetsAt, now)}
-        </ThemedText>
-      ) : null}
-    </View>
+    <SettingsRow
+      icon={SettingsIcons.chart}
+      label={label}
+      value={formatPercent(percent)}
+      detail={[detail, reset].filter(Boolean).join(' · ') || undefined}>
+      <UsageTrack label={label} percent={percent} fill={fill} />
+    </SettingsRow>
   );
 }
 
@@ -337,26 +292,32 @@ function ProjectUsage({
       }
     | undefined;
 }) {
-  const theme = useTheme();
+  const footer =
+    'Tokens recorded on Sessions for this Project. Remaining provider allowance belongs to the account on this machine, not this Project.';
   if (!usage || usage.totalTokens === 0) {
     return (
-      <View style={[styles.option, { borderColor: theme.line }]}>
-        <ThemedText type="small" themeColor="textSecondary">
-          No Sessions have recorded tokens on this Project yet.
-        </ThemedText>
-      </View>
+      <SettingsGroup title="Usage in this Factory" footer={footer}>
+        <SettingsMessage>No Sessions have recorded tokens on this Project yet.</SettingsMessage>
+      </SettingsGroup>
     );
   }
   return (
-    <View style={[styles.option, { borderColor: theme.line }]}>
-      <ThemedText type="default" style={styles.tabular}>
-        {formatTokens(usage.totalTokens)} tokens
-      </ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.tabular}>
-        {formatTokens(usage.inputTokens)} in · {formatTokens(usage.outputTokens)} out
-        {usage.reasoningTokens ? ` · ${formatTokens(usage.reasoningTokens)} reasoning` : ''}
-      </ThemedText>
-    </View>
+    <SettingsGroup title="Usage in this Factory" footer={footer}>
+      <SettingsRow
+        icon={SettingsIcons.tokens}
+        label="Total"
+        value={`${formatTokens(usage.totalTokens)} tokens`}
+      />
+      <SettingsRow icon={SettingsIcons.tokens} label="Input" value={formatTokens(usage.inputTokens)} />
+      <SettingsRow icon={SettingsIcons.tokens} label="Output" value={formatTokens(usage.outputTokens)} />
+      {usage.reasoningTokens ? (
+        <SettingsRow
+          icon={SettingsIcons.tokens}
+          label="Reasoning"
+          value={formatTokens(usage.reasoningTokens)}
+        />
+      ) : null}
+    </SettingsGroup>
   );
 }
 
@@ -380,66 +341,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 28,
+    width: '100%',
+    alignSelf: 'center',
     paddingTop: 16,
     paddingBottom: 48,
-    gap: Spacing.four,
-    maxWidth: 720,
-  },
-  tabs: {
-    flexDirection: 'row',
-    alignSelf: 'flex-start',
-    padding: 4,
-    borderWidth: 1,
-    borderRadius: 14,
-    borderCurve: 'continuous',
-    gap: 4,
-  },
-  tab: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderCurve: 'continuous',
-    justifyContent: 'center',
-  },
-  block: {
-    gap: Spacing.three,
-  },
-  sectionHeading: {
-    gap: 4,
-  },
-  option: {
-    gap: 2,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-  },
-  meter: {
-    gap: 6,
-    padding: 14,
-    borderWidth: 1,
-    borderRadius: 16,
-    borderCurve: 'continuous',
-  },
-  meterHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 8,
-  },
-  window: {
-    gap: 6,
-  },
-  track: {
-    height: 8,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: 8,
-    borderRadius: 4,
-  },
-  tabular: {
-    fontVariant: ['tabular-nums'],
+    gap: 28,
   },
 });

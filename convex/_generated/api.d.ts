@@ -19,6 +19,7 @@ import type * as lib_projectOperations from "../lib/projectOperations.js";
 import type * as lib_recipeGraph from "../lib/recipeGraph.js";
 import type * as lib_runTiming from "../lib/runTiming.js";
 import type * as lib_servers from "../lib/servers.js";
+import type * as lib_sessionText from "../lib/sessionText.js";
 import type * as lib_tokenUsage from "../lib/tokenUsage.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as projectOperations from "../projectOperations.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "lib/recipeGraph": typeof lib_recipeGraph;
   "lib/runTiming": typeof lib_runTiming;
   "lib/servers": typeof lib_servers;
+  "lib/sessionText": typeof lib_sessionText;
   "lib/tokenUsage": typeof lib_tokenUsage;
   "lib/validators": typeof lib_validators;
   projectOperations: typeof projectOperations;

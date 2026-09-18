@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
-import { titleFrom, withSkillMentions, compactSessionPrompt, isCompactCommand } from "./sessions";
+import { titleFrom, compactSessionPrompt, isCompactCommand } from "./sessions";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -365,13 +365,6 @@ test("stopping a Session expires a pending approval", async () => {
   expect(view?.messages.find((message) => message.kind === "permission")?.status).toBe("failed");
 });
 
-test("withSkillMentions prefixes missing skill tokens", () => {
-  expect(withSkillMentions("Do the thing", [])).toBe("Do the thing");
-  expect(withSkillMentions("Do the thing", ["adapt"])).toBe("skill:adapt\n\nDo the thing");
-  expect(withSkillMentions("skill:adapt already", ["adapt"])).toBe("skill:adapt already");
-  expect(withSkillMentions("", ["adapt", "animate"])).toBe("skill:adapt skill:animate");
-});
-
 test("a Session turn can attach repo Skills as slugs", async () => {
   const { t, projectId } = await setup();
   const sessionId = await t.mutation(api.sessions.create, {
@@ -397,6 +390,20 @@ test("a Session turn can attach repo Skills as slugs", async () => {
   const last = follow?.messages[follow.messages.length - 1];
   expect(last?.text).toBe("");
   expect(last?.skillSlugs).toEqual(["animate"]);
+});
+
+test("pasted skill mentions become Skill slugs", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "skill:adapt skill:grilling\n\nPlan the sidebar",
+  });
+  const view = await t.query(api.sessions.get, { sessionId });
+  expect(view?.messages[0]?.text).toBe("Plan the sidebar");
+  expect(view?.messages[0]?.skillSlugs).toEqual(["adapt", "grilling"]);
 });
 
 test("too many Skills are rejected", async () => {

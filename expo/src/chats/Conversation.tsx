@@ -15,8 +15,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
 import Markdown from "react-native-markdown-display";
-import { File } from "expo-file-system";
+import { readPickedAttachment } from "./pickedAttachment";
+import * as Clipboard from "expo-clipboard";
 import { api } from "@/lib/api";
+import { withSkillMentions } from "../../../convex/lib/sessionText";
 import { dockedBottomPad } from "@/lib/keyboardInset";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
@@ -99,6 +101,35 @@ function SkillChip({
   );
 }
 
+function CopyPromptButton({ text, slugs }: { text: string; slugs: readonly string[] }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+  const payload = withSkillMentions(text, slugs);
+  if (payload.trim() === "") return null;
+  return (
+    <Action
+      icon={copied ? "check" : "copy"}
+      label={copied ? "Copied prompt" : "Copy prompt"}
+      compact
+      onPress={() => {
+        void Clipboard.setStringAsync(payload)
+          .then((ok) => {
+            if (!ok) return;
+            setCopied(true);
+            if (timer.current) clearTimeout(timer.current);
+            timer.current = setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {});
+      }}
+    />
+  );
+}
+
 function MessageRow({
   message,
   skills,
@@ -109,10 +140,11 @@ function MessageRow({
   const theme = useTheme();
   const user = message.role === "user";
   const dark = theme.background === Colors.dark.background;
-  return (
+  const bubble = (
     <View
       style={[
         styles.message,
+        !user && styles.assistantMessage,
         user && styles.userMessage,
         user && {
           backgroundColor: dark ? "#2f2f2f" : "#ececee",
@@ -175,6 +207,13 @@ function MessageRow({
             resizeMode="contain"
           />
         ))}
+    </View>
+  );
+  if (!user) return bubble;
+  return (
+    <View style={styles.userWrap}>
+      {bubble}
+      <CopyPromptButton text={message.text} slugs={message.skillSlugs ?? []} />
     </View>
   );
 }
@@ -339,17 +378,14 @@ export function Conversation({
       const result = await DocumentPicker.getDocumentAsync({
         type: "image/*",
         multiple: false,
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: false,
       });
       if (result.canceled) return;
       const asset = result.assets[0];
       if (!asset) return;
       if ((asset.size ?? 0) > 10 * 1024 * 1024)
         throw new Error("Choose an image smaller than 10 MB.");
-      const body =
-        Platform.OS === "web"
-          ? await (await fetch(asset.uri)).blob()
-          : await new File(asset.uri).bytes();
+      const body = await readPickedAttachment(asset.uri, Platform.OS);
       const response = await fetch(await uploadUrl(), {
         method: "POST",
         headers: { "Content-Type": asset.mimeType ?? "image/png" },
@@ -651,10 +687,16 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     textAlign: "center",
   },
-  message: { gap: 10, maxWidth: "100%", marginVertical: 8 },
-  userMessage: {
+  message: { gap: 10, maxWidth: "100%" },
+  assistantMessage: { marginVertical: 8 },
+  userWrap: {
     alignSelf: "flex-end",
     maxWidth: "78%",
+    alignItems: "flex-end",
+    marginVertical: 8,
+    gap: 2,
+  },
+  userMessage: {
     borderRadius: 22,
     borderCurve: "continuous",
     paddingHorizontal: 16,
