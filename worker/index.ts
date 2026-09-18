@@ -16,6 +16,7 @@ import { probeGrokCatalog, runGrokAcpSession } from "./grokAcp";
 import { collectProviderUsage } from "./providerUsage";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
+import { listRepoSkills, userSkillDirs } from "./repoSkills";
 import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { defaultSimRunner, reconcileSimHub } from "./simHub";
@@ -691,6 +692,8 @@ async function main() {
   let lastGrokProbe = 0;
   let lastSimHub = 0;
   let lastSimRunning = false;
+  let lastSkillsScan = 0;
+  const lastSkills = new Map<string, string>();
   async function grokCatalogTick() {
     if (Date.now() - lastGrokProbe < 60_000) return;
     lastGrokProbe = Date.now();
@@ -714,6 +717,31 @@ async function main() {
       console.error("Provider usage probe failed:", error instanceof Error ? error.message : error);
     }
   }
+  async function skillsTick() {
+    if (Date.now() - lastSkillsScan < 30_000) return;
+    lastSkillsScan = Date.now();
+    const extras = userSkillDirs();
+    try {
+      const projects = await client.query(api.projects.list, {});
+      for (const project of projects) {
+        try {
+          const skills = await listRepoSkills(project.localPath, extras);
+          const key = JSON.stringify(skills);
+          if (lastSkills.get(project._id) === key) continue;
+          await client.mutation(api.projects.reportSkills, {
+            accessKey: identity.accessKey,
+            projectId: project._id,
+            skills,
+          });
+          lastSkills.set(project._id, key);
+        } catch {
+          console.error(`Could not list Skills for ${project.name}.`);
+        }
+      }
+    } catch {
+      console.error("Project Skill scan failed; retrying.");
+    }
+  }
   async function simHubTick() {
     try {
       const work = await client.mutation(api.servers.claimDeviceCommands, { accessKey: identity.accessKey });
@@ -730,7 +758,7 @@ async function main() {
       console.error("Device preview synchronization failed; retrying.");
     }
   }
-  try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await skillsTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
   finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); }
 }
 

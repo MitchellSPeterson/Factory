@@ -101,6 +101,16 @@ export default defineSchema({
     defaultRuntime: runtime,
     recipeId: v.optional(v.id("recipes")),
     usage: v.optional(tokenUsage),
+    skills: v.optional(
+      v.array(
+        v.object({
+          slug: v.string(),
+          title: v.string(),
+          description: v.string(),
+          relPath: v.string(),
+        }),
+      ),
+    ),
   }).index("by_name", ["name"]).index("by_serverId_and_githubRepo", ["serverId", "githubRepo"]),
 
   recipes: defineTable({
@@ -249,6 +259,7 @@ export default defineSchema({
     role: sessionMessageRole,
     text: v.string(),
     imageIds: v.optional(v.array(v.id("_storage"))),
+    skillSlugs: v.optional(v.array(v.string())),
     createdAt: v.number(),
     kind: v.optional(sessionItemKind),
     itemId: v.optional(v.string()),

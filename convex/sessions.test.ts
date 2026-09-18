@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
-import { titleFrom } from "./sessions";
+import { titleFrom, withSkillMentions, compactSessionPrompt, isCompactCommand } from "./sessions";
 
 const modules = import.meta.glob("./**/*.ts");
 
@@ -26,6 +26,7 @@ test("titleFrom keeps short prompts and trims long ones", () => {
   expect(titleFrom("  Fix auth  ")).toBe("Fix auth");
   expect(titleFrom("")).toBe("New session");
   expect(titleFrom("", 1)).toBe("Image");
+  expect(titleFrom("", 0, "Grilling")).toBe("Grilling");
   expect(titleFrom("x".repeat(80)).length).toBe(72);
 });
 
@@ -362,4 +363,92 @@ test("stopping a Session expires a pending approval", async () => {
   await t.mutation(api.sessions.stop, { sessionId });
   const view = await t.query(api.sessions.get, { sessionId });
   expect(view?.messages.find((message) => message.kind === "permission")?.status).toBe("failed");
+});
+
+test("withSkillMentions prefixes missing skill tokens", () => {
+  expect(withSkillMentions("Do the thing", [])).toBe("Do the thing");
+  expect(withSkillMentions("Do the thing", ["adapt"])).toBe("skill:adapt\n\nDo the thing");
+  expect(withSkillMentions("skill:adapt already", ["adapt"])).toBe("skill:adapt already");
+  expect(withSkillMentions("", ["adapt", "animate"])).toBe("skill:adapt skill:animate");
+});
+
+test("a Session turn can attach repo Skills as slugs", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "Plan the sidebar",
+    skillSlugs: ["adapt"],
+  });
+  const view = await t.query(api.sessions.get, { sessionId });
+  expect(view?.messages[0]?.text).toBe("Plan the sidebar");
+  expect(view?.messages[0]?.skillSlugs).toEqual(["adapt"]);
+  const launch = await t.mutation(api.sessions.claim, { sessionId });
+  expect(launch?.prompt).toBe("skill:adapt\n\nPlan the sidebar");
+  await t.mutation(api.sessions.complete, { sessionId });
+  await t.mutation(api.sessions.send, {
+    sessionId,
+    text: "",
+    skillSlugs: ["animate"],
+  });
+  const follow = await t.query(api.sessions.get, { sessionId });
+  const last = follow?.messages[follow.messages.length - 1];
+  expect(last?.text).toBe("");
+  expect(last?.skillSlugs).toEqual(["animate"]);
+});
+
+test("too many Skills are rejected", async () => {
+  const { t, projectId } = await setup();
+  await expect(
+    t.mutation(api.sessions.create, {
+      projectId,
+      provider: "grok",
+      model: "grok-4.6",
+      effort: "medium",
+      text: "Hi",
+      skillSlugs: ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
+    }),
+  ).rejects.toThrow("A message can include at most 8 Skills");
+});
+
+test("compactSessionPrompt rewrites /compact", () => {
+  expect(isCompactCommand("/compact")).toBe(true);
+  expect(isCompactCommand("/compact keep the auth calls")).toBe(true);
+  expect(isCompactCommand("please /compact")).toBe(false);
+  expect(compactSessionPrompt("/compact")).toContain("Summarize this conversation");
+  expect(compactSessionPrompt("/compact keep the auth calls")).toContain("keep the auth calls");
+});
+
+test("the first message cannot be compact", async () => {
+  const { t, projectId } = await setup();
+  await expect(
+    t.mutation(api.sessions.create, {
+      projectId,
+      provider: "grok",
+      model: "grok-4.6",
+      effort: "medium",
+      text: "/compact",
+    }),
+  ).rejects.toThrow("Compact needs an existing conversation.");
+});
+
+test("claim expands /compact into a summarization prompt", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "Plan the sidebar",
+  });
+  await t.mutation(api.sessions.claim, { sessionId });
+  await t.mutation(api.sessions.complete, { sessionId });
+  await t.mutation(api.sessions.send, { sessionId, text: "/compact" });
+  const view = await t.query(api.sessions.get, { sessionId });
+  expect(view?.messages[view.messages.length - 1]?.text).toBe("/compact");
+  const launch = await t.mutation(api.sessions.claim, { sessionId });
+  expect(launch?.prompt).toContain("Summarize this conversation");
+  expect(launch?.prompt).not.toBe("/compact");
 });

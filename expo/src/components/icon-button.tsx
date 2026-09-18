@@ -23,7 +23,6 @@ export const IconNames = {
   compose: { ios: 'square.and.pencil', android: 'edit_note', web: 'edit_note' },
   git: { ios: 'arrow.triangle.branch', android: 'account_tree', web: 'account_tree' },
   terminal: { ios: 'terminal', android: 'terminal', web: 'terminal' },
-  jobs: { ios: 'list.bullet.rectangle', android: 'view_list', web: 'view_list' },
   sessions: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat', web: 'chat' },
   chevronDown: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
   check: { ios: 'checkmark', android: 'check', web: 'check' },

@@ -22,6 +22,7 @@ import { v } from "convex/values";
 
 export const MAX_SESSION_MESSAGE = 16000;
 export const MAX_SESSION_IMAGES = 4;
+export const MAX_SESSION_SKILLS = 8;
 const MAX_SESSION_TITLE = 72;
 
 const sessionDoc = v.object({
@@ -49,6 +50,7 @@ const messageDoc = v.object({
   role: sessionMessageRole,
   text: v.string(),
   imageIds: v.optional(v.array(v.id("_storage"))),
+  skillSlugs: v.optional(v.array(v.string())),
   imageUrls: v.array(v.union(v.string(), v.null())),
   createdAt: v.number(),
   kind: v.optional(sessionItemKind),
@@ -93,20 +95,50 @@ function isLogMessage(message: { role: string; kind?: string }) {
   return message.role === "assistant" && (message.kind === undefined || message.kind === "message");
 }
 
-export function titleFrom(text: string, imageCount = 0): string {
+export function titleFrom(text: string, imageCount = 0, fallback = ""): string {
   const one = text.trim().replace(/\s+/g, " ");
-  if (one === "") return imageCount > 0 ? "Image" : "New session";
+  if (one === "") {
+    if (fallback !== "") return fallback;
+    return imageCount > 0 ? "Image" : "New session";
+  }
   if (one.length <= MAX_SESSION_TITLE) return one;
   return `${one.slice(0, MAX_SESSION_TITLE - 1).trimEnd()}…`;
 }
 
-function requireMessageText(text: string, imageCount = 0): string {
+export function withSkillMentions(text: string, slugs: readonly string[]): string {
+  const missing = slugs.filter((slug) => slug !== "" && !text.includes(`skill:${slug}`));
+  if (missing.length === 0) return text;
+  const line = missing.map((slug) => `skill:${slug}`).join(" ");
   const trimmed = text.trim();
-  if (trimmed === "" && imageCount === 0) throw new Error("Message is required");
+  return trimmed === "" ? line : `${line}\n\n${trimmed}`;
+}
+
+export function isCompactCommand(text: string): boolean {
+  return /^\/compact(?:\s|$)/i.test(text.trim());
+}
+
+export function compactSessionPrompt(text: string): string {
+  const extra = text.trim().replace(/^\/compact\b/i, "").trim();
+  const request =
+    "Summarize this conversation so later turns can continue with less context. Keep decisions, file paths, and unfinished work. Drop chit-chat.";
+  return extra === "" ? request : `${request}\n\n${extra}`;
+}
+
+function requireMessageText(text: string, imageCount = 0, skillCount = 0): string {
+  const trimmed = text.trim();
+  if (trimmed === "" && imageCount === 0 && skillCount === 0) throw new Error("Message is required");
   if (trimmed.length > MAX_SESSION_MESSAGE) {
     throw new Error(`A message can be at most ${MAX_SESSION_MESSAGE} characters`);
   }
   return trimmed;
+}
+
+function requireSkillSlugs(slugs: string[] | undefined): string[] {
+  const unique = [...new Set((slugs ?? []).map((slug) => slug.trim()).filter((slug) => slug !== ""))];
+  if (unique.length > MAX_SESSION_SKILLS) {
+    throw new Error(`A message can include at most ${MAX_SESSION_SKILLS} Skills`);
+  }
+  return unique;
 }
 
 function requireImageIds(ids: Id<"_storage">[] | undefined): Id<"_storage">[] {
@@ -197,9 +229,11 @@ export const get = query({
     messages.sort((a, b) => a.createdAt - b.createdAt);
     const withUrls = [];
     for (const message of messages) {
+      const row = message as typeof message & { skillIds?: unknown };
+      const { skillIds: _legacy, ...rest } = row;
       withUrls.push({
-        ...message,
-        imageUrls: await urlsFor(ctx, message.imageIds),
+        ...rest,
+        imageUrls: await urlsFor(ctx, rest.imageIds),
       });
     }
     return {
@@ -227,11 +261,14 @@ export const create = mutation({
     serviceTier: v.optional(serviceTier),
     text: v.string(),
     imageIds: v.optional(v.array(v.id("_storage"))),
+    skillSlugs: v.optional(v.array(v.string())),
   },
   returns: v.id("sessions"),
   handler: async (ctx, args) => {
     const imageIds = requireImageIds(args.imageIds);
-    const text = requireMessageText(args.text, imageIds.length);
+    const skillSlugs = requireSkillSlugs(args.skillSlugs);
+    const text = requireMessageText(args.text, imageIds.length, skillSlugs.length);
+    if (isCompactCommand(text)) throw new Error("Compact needs an existing conversation.");
     if (args.model.trim() === "") throw new Error("Model is required");
     const project = await requireProject(ctx, args.projectId);
     await requireProjectServer(ctx, project, args.accessKey);
@@ -240,7 +277,7 @@ export const create = mutation({
     }
     const sessionId = await ctx.db.insert("sessions", {
       projectId: project._id,
-      title: titleFrom(text, imageIds.length),
+      title: titleFrom(text, imageIds.length, skillSlugs[0] ?? ""),
       provider: args.provider,
       model: args.model.trim(),
       effort: args.effort,
@@ -253,6 +290,7 @@ export const create = mutation({
       role: "user",
       text,
       imageIds: imageIds.length > 0 ? imageIds : undefined,
+      skillSlugs: skillSlugs.length > 0 ? skillSlugs : undefined,
       createdAt: Date.now(),
     });
     return sessionId;
@@ -297,25 +335,28 @@ export const send = mutation({
     sessionId: v.id("sessions"),
     text: v.string(),
     imageIds: v.optional(v.array(v.id("_storage"))),
+    skillSlugs: v.optional(v.array(v.string())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await requireSession(ctx, args.sessionId);
     if (busy(session.status)) throw new Error("Wait for the current turn to finish.");
     const imageIds = requireImageIds(args.imageIds);
-    const text = requireMessageText(args.text, imageIds.length);
+    const skillSlugs = requireSkillSlugs(args.skillSlugs);
+    const text = requireMessageText(args.text, imageIds.length, skillSlugs.length);
     await expirePendingPermissions(ctx, session._id);
     await ctx.db.insert("sessionMessages", {
       sessionId: session._id,
       role: "user",
       text,
       imageIds: imageIds.length > 0 ? imageIds : undefined,
+      skillSlugs: skillSlugs.length > 0 ? skillSlugs : undefined,
       createdAt: Date.now(),
     });
     await ctx.db.patch(session._id, {
       status: "queued",
       error: undefined,
-      title: session.title === "New session" ? titleFrom(text, imageIds.length) : session.title,
+      title: session.title === "New session" ? titleFrom(text, imageIds.length, skillSlugs[0] ?? "") : session.title,
     });
     return null;
   },
@@ -391,7 +432,9 @@ export const claim = mutation({
     const imageUrls = await urlsFor(ctx, lastUser.imageIds);
     return {
       sessionId: session._id,
-      prompt: lastUser.text,
+      prompt: isCompactCommand(lastUser.text)
+        ? compactSessionPrompt(lastUser.text)
+        : withSkillMentions(lastUser.text, lastUser.skillSlugs ?? []),
       provider: session.provider,
       model: session.model,
       effort: session.effort,

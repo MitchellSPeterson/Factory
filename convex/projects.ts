@@ -3,7 +3,15 @@ import { projectKind, runtime } from "./lib/validators";
 import { v } from "convex/values";
 
 import schema from "./schema";
-import { requireProjectServer } from "./lib/servers";
+import { requireProject } from "./lib/docs";
+import { requireProjectServer, resolveServer } from "./lib/servers";
+
+const repoSkill = v.object({
+  slug: v.string(),
+  title: v.string(),
+  description: v.string(),
+  relPath: v.string(),
+});
 
 const projectDoc = schema.doc("projects");
 
@@ -86,6 +94,26 @@ export const remove = mutation({
       for (const row of variables) await ctx.db.delete(row._id);
     }
     await ctx.db.delete(args.projectId);
+    return null;
+  },
+});
+
+export const reportSkills = mutation({
+  args: {
+    accessKey: v.string(),
+    projectId: v.id("projects"),
+    skills: v.array(repoSkill),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const project = await requireProject(ctx, args.projectId);
+    const server = await resolveServer(ctx, args.accessKey);
+    if (project.serverId && project.serverId !== server._id) {
+      throw new Error("This Project belongs to another worker.");
+    }
+    await requireProjectServer(ctx, project, args.accessKey);
+    if (JSON.stringify(project.skills ?? []) === JSON.stringify(args.skills)) return null;
+    await ctx.db.patch(project._id, { skills: args.skills });
     return null;
   },
 });

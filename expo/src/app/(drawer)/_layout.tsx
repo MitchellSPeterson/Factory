@@ -18,9 +18,8 @@ export default function DrawerLayout() {
         overlayColor: 'rgba(0,0,0,0.45)',
         sceneStyle: { backgroundColor: theme.background },
         drawerType: 'front',
-        title: 'Devices',
+        title: 'Chats',
       }}>
-      <Drawer.Screen name="jobs" options={{ drawerItemStyle: { display: 'none' } }} />
       <Drawer.Screen name="sessions" options={{ drawerItemStyle: { display: 'none' } }} />
     </Drawer>
   );

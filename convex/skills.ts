@@ -25,6 +25,41 @@ export const list = query({
   },
 });
 
+const catalogDoc = v.object({
+  _id: v.id("skills"),
+  slug: v.string(),
+  title: v.string(),
+  description: v.string(),
+});
+
+export function skillBlurb(skill: {
+  title: string;
+  body: string;
+  description?: string;
+}): string {
+  const named = skill.description?.trim();
+  if (named) return named;
+  const line = skill.body
+    .split("\n")
+    .map((row) => row.trim())
+    .find((row) => row !== "" && !row.startsWith("#") && row !== "---");
+  return line ?? skill.title;
+}
+
+export const catalog = query({
+  args: {},
+  returns: v.array(catalogDoc),
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("skills").withIndex("by_slug").take(250);
+    return rows.map((skill) => ({
+      _id: skill._id,
+      slug: skill.slug,
+      title: skill.title,
+      description: skillBlurb(skill),
+    }));
+  },
+});
+
 export const create = mutation({
   args: {
     slug: v.string(),

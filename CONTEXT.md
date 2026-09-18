@@ -20,7 +20,7 @@ A named phase of a Workflow. Each Stage has a key, title, Bindings, optional mod
 _Avoid_: Step, phase, task
 
 **Skill**:
-Factory-owned markdown whose body is what the agent sees for a Stage.
+A `SKILL.md` in the Project or on this machine (`~/.agents/skills` and the same for Claude, Codex, and Grok). Chat can mention it; the agent loads it from disk. Factory does not keep its own Skill catalog in the app.
 _Avoid_: Prompt, instruction, rule, cursor skill
 
 **Binding**:
@@ -32,7 +32,7 @@ A named condition that decides whether a Binding is included. v1 has one name: l
 _Avoid_: Rule, predicate, filter, expression
 
 **Job**:
-One request against one Project, executed through one Workflow.
+One request against one Project, executed through one Workflow. The Expo app does not start or show Jobs; work happens in Sessions.
 _Avoid_: Ticket, task, issue, work item
 
 **View all**:

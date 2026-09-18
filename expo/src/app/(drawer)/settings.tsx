@@ -32,7 +32,6 @@ export default function SettingsPage() {
     api.projects.get,
     scope.kind === 'project' ? { projectId: scope.projectId } : 'skip',
   );
-  const recipes = useQuery(api.recipes.list);
   const [tab, setTab] = useState<SettingsTab>('general');
   const [now, setNow] = useState(Date.now());
 
@@ -46,7 +45,6 @@ export default function SettingsPage() {
   }, []);
 
   const online = !!(live && now - live.lastSeen < 45_000);
-  const workflow = project?.recipeId ? recipes?.find((recipe) => recipe._id === project.recipeId) : undefined;
 
   return (
     <ScrollView
@@ -66,7 +64,7 @@ export default function SettingsPage() {
             <View style={styles.sectionHeading}>
               <ThemedText type="section">This machine</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                This machine clones repositories and runs your Jobs.
+                This machine clones repositories and runs your chats.
               </ThemedText>
             </View>
             {live === undefined ? (
@@ -147,16 +145,11 @@ export default function SettingsPage() {
                     {project.cloneError ? ` · ${project.cloneError}` : ''}
                   </ThemedText>
                 ) : null}
-                {workflow ? (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    Workflow: {workflow.name}
-                  </ThemedText>
-                ) : null}
               </View>
               <View style={styles.sectionHeading}>
                 <ThemedText type="smallBold">Usage in this Factory</ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  Tokens recorded on Jobs and Sessions for this Project. Remaining provider allowance is on
+                  Tokens recorded on Sessions for this Project. Remaining provider allowance is on
                   General — it belongs to the account, not this Project.
                 </ThemedText>
               </View>
@@ -349,7 +342,7 @@ function ProjectUsage({
     return (
       <View style={[styles.option, { borderColor: theme.line }]}>
         <ThemedText type="small" themeColor="textSecondary">
-          No Jobs or Sessions have recorded tokens on this Project yet.
+          No Sessions have recorded tokens on this Project yet.
         </ThemedText>
       </View>
     );

@@ -32,6 +32,8 @@ import {
 import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
 import type { ChatSettings } from "./lastSettings";
 import { ModelMenu, PickerChip, effortLabel, modelTitle } from "./model-picker";
+import { SlashMenu } from "./SlashMenu";
+import { isCompactDraft, slashItems, slashQuery, type SlashItem } from "./composerSlash";
 import {
   DEFAULT_PERMISSION_MODE,
   DEFAULT_SERVICE_TIER,
@@ -40,8 +42,69 @@ import {
 type SessionView = NonNullable<FunctionReturnType<typeof api.sessions.get>>;
 type Message = SessionView["messages"][number];
 type Attachment = { id: Id<"_storage">; uri: string; name: string };
+type PickedSkill = { slug: string; title: string };
+type RepoSkill = { slug: string; title: string; description: string };
+const MAX_CHAT_SKILLS = 8;
 
-function MessageRow({ message }: { message: Message }) {
+function labelsFor(
+  slugs: string[] | undefined,
+  catalog: readonly RepoSkill[],
+): PickedSkill[] {
+  if (!slugs?.length) return [];
+  return slugs.map((slug) => {
+    const skill = catalog.find((row) => row.slug === slug);
+    return { slug, title: skill?.title ?? slug };
+  });
+}
+
+function SkillChip({
+  slug,
+  onRemove,
+}: {
+  slug: string;
+  onRemove?: () => void;
+}) {
+  const theme = useTheme();
+  const chip = (
+    <View
+      style={[
+        styles.skillChip,
+        { backgroundColor: theme.subtleHover },
+      ]}
+    >
+      <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
+        skill:
+        <Text style={{ color: theme.text }}>{slug}</Text>
+        {onRemove ? (
+          <Text style={{ color: theme.textSecondary, fontWeight: "500" }}>  ×</Text>
+        ) : null}
+      </Text>
+    </View>
+  );
+  if (!onRemove) return chip;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Remove skill ${slug}`}
+      onPress={onRemove}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        justifyContent: "center",
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      {chip}
+    </Pressable>
+  );
+}
+
+function MessageRow({
+  message,
+  skills,
+}: {
+  message: Message;
+  skills: PickedSkill[];
+}) {
   const theme = useTheme();
   const user = message.role === "user";
   const dark = theme.background === Colors.dark.background;
@@ -55,10 +118,19 @@ function MessageRow({ message }: { message: Message }) {
         },
       ]}
     >
+      {skills.length > 0 ? (
+        <View style={styles.skillRow}>
+          {skills.map((skill) => (
+            <SkillChip key={skill.slug} slug={skill.slug} />
+          ))}
+        </View>
+      ) : null}
       {user ? (
-        <Text selectable style={[styles.prose, { color: theme.text }]}>
-          {message.text}
-        </Text>
+        message.text ? (
+          <Text selectable style={[styles.prose, { color: theme.text }]}>
+            {message.text}
+          </Text>
+        ) : null
       ) : (
         <Markdown
           style={{
@@ -126,11 +198,17 @@ export function Conversation({
   const stop = useMutation(api.sessions.stop);
   const configure = useMutation(api.sessions.configure);
   const uploadUrl = useMutation(api.sessions.generateUploadUrl);
+  const project = useQuery(
+    api.projects.get,
+    projectId ? { projectId } : "skip",
+  );
+  const catalog = project?.skills ?? [];
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [pickedSkills, setPickedSkills] = useState<PickedSkill[]>([]);
   const [picker, setPicker] = useState<null | "model">(null);
   const [settings, setSettings] = useState<ChatSettings>(readLastSettings);
   const scroll = useRef<ScrollView>(null);
@@ -166,6 +244,20 @@ export function Conversation({
     view?.session.permissionMode,
     view?.session.serviceTier,
   ]);
+  const query = slashQuery(text);
+  const items = useMemo(() => {
+    return slashItems(
+      query ?? "",
+      catalog.map((skill) => ({
+        id: skill.slug,
+        slug: skill.slug,
+        title: skill.title,
+        description: skill.description,
+      })),
+      { compact: !!sessionId && !busy },
+    );
+  }, [query, catalog, sessionId, busy]);
+  const slashOpen = query !== null && picker !== "model";
   async function changeSettings(next: ChatSettings) {
     const previous = settings;
     setError("");
@@ -179,21 +271,36 @@ export function Conversation({
       setError(e instanceof Error ? e.message : "Could not update model.");
     }
   }
-  async function submit() {
-    if ((!text.trim() && !attachments.length) || pending || busy || !projectId)
+  async function submit(draft?: {
+    text: string;
+    imageIds: Id<"_storage">[];
+    skillSlugs: string[];
+  }) {
+    const args = draft ?? {
+      text: text.trim(),
+      imageIds: attachments.map((item) => item.id),
+      skillSlugs: pickedSkills.map((skill) => skill.slug),
+    };
+    if (
+      (!args.text && !args.imageIds.length && !args.skillSlugs.length) ||
+      pending ||
+      busy ||
+      !projectId
+    )
       return;
+    if (isCompactDraft(args.text) && !sessionId) {
+      setError("Compact needs an existing conversation.");
+      return;
+    }
     setPicker(null);
     setPending(true);
     setError("");
     try {
-      const args = {
-        text: text.trim(),
-        imageIds: attachments.map((item) => item.id),
-      };
       if (sessionId) await send({ sessionId, ...args });
       else onCreated(await create({ projectId, ...settings, ...args }));
       setText("");
       setAttachments([]);
+      setPickedSkills([]);
       follow.current = true;
       setAtBottom(true);
     } catch (e) {
@@ -201,6 +308,25 @@ export function Conversation({
     } finally {
       setPending(false);
     }
+  }
+  function pickSlash(item: SlashItem) {
+    if (item.kind === "command") {
+      setText("");
+      if (item.id === "compact") {
+        void submit({ text: "/compact", imageIds: [], skillSlugs: [] });
+        return;
+      }
+      setPicker("model");
+      return;
+    }
+    const skill = catalog.find((row) => row.slug === item.slug);
+    if (!skill) return;
+    setText("");
+    setPickedSkills((previous) => {
+      if (previous.some((row) => row.slug === skill.slug)) return previous;
+      if (previous.length >= MAX_CHAT_SKILLS) return previous;
+      return [...previous, { slug: skill.slug, title: skill.title }];
+    });
   }
   async function attach() {
     setUploading(true);
@@ -311,7 +437,13 @@ export function Conversation({
                 />
               );
             }
-            return <MessageRow key={row.message._id} message={row.message} />;
+            return (
+              <MessageRow
+                key={row.message._id}
+                message={row.message}
+                skills={labelsFor(row.message.skillSlugs, catalog)}
+              />
+            );
           })
         ) : (
           <View style={styles.empty}>
@@ -361,6 +493,7 @@ export function Conversation({
           </View>
         )}
         {error ? <Notice text={error} error /> : null}
+        <SlashMenu visible={slashOpen} items={items} onSelect={pickSlash} />
         <ModelMenu
           visible={picker === "model"}
           current={settings}
@@ -399,16 +532,34 @@ export function Conversation({
               ))}
             </ScrollView>
           )}
+          {pickedSkills.length > 0 ? (
+            <View style={[styles.skillRow, { paddingHorizontal: 8, paddingTop: 8 }]}>
+              {pickedSkills.map((skill) => (
+                <SkillChip
+                  key={skill.slug}
+                  slug={skill.slug}
+                  onRemove={() =>
+                    setPickedSkills((previous) =>
+                      previous.filter((row) => row.slug !== skill.slug),
+                    )
+                  }
+                />
+              ))}
+            </View>
+          ) : null}
           <TextInput
             accessibilityLabel="Message"
             placeholder={
               busy
                 ? "Write your next message…"
-                : "Ask anything, or describe a change…"
+                : "Ask anything, or type /"
             }
             placeholderTextColor={theme.textSecondary}
             value={text}
-            onChangeText={setText}
+            onChangeText={(next) => {
+              if (slashQuery(next) !== null) setPicker(null);
+              setText(next);
+            }}
             multiline
             maxLength={16000}
             style={[styles.editor, { color: theme.text }]}
@@ -452,7 +603,7 @@ export function Conversation({
                   pending ||
                   uploading ||
                   !projectId ||
-                  (!text.trim() && !attachments.length)
+                  (!text.trim() && !attachments.length && !pickedSkills.length)
                 }
                 onPress={() => void submit()}
               />
@@ -557,4 +708,13 @@ const styles = StyleSheet.create({
   },
   thumbnail: { width: 60, height: 60, borderRadius: 8 },
   jump: { alignSelf: "center", marginBottom: 8 },
+  skillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  skillChip: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderCurve: "continuous",
+    justifyContent: "center",
+  },
 });
