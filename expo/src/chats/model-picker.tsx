@@ -37,7 +37,7 @@ const PROVIDER_ICONS = {
   grok: require("../../assets/providerIcons/grok-ai-icon.webp"),
 } as const;
 
-function ProviderMark({ provider, size }: { provider: Provider; size: number }) {
+export function ProviderMark({ provider, size }: { provider: Provider; size: number }) {
   const theme = useTheme();
   return (
     <Image

@@ -2,11 +2,12 @@ import { useMutation, useQuery } from "convex/react";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,9 +17,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import Swipeable, {
-  type SwipeableMethods,
-} from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "@/lib/api";
@@ -28,90 +26,75 @@ import { useTheme } from "@/hooks/use-theme";
 import { Action } from "@/chats/ui";
 import { Conversation } from "@/chats/Conversation";
 import { chatHeaderTitleMaxWidth } from "@/chats/headerTitleLayout";
+import { ProviderMark } from "@/chats/model-picker";
 import { ProjectTools } from "@/chats/ProjectTools";
 import { TerminalPanel } from "@/chats/TerminalPanel";
 import { IconButton, IconNames } from "@/components/icon-button";
 
 function ChatRow({
   title,
-  metadata,
+  projectName,
+  provider,
+  status,
   selected,
   statusColor,
   onOpen,
   onDelete,
-  onSwipeStart,
-  swipeRef,
 }: {
   title: string;
-  metadata: string;
+  projectName?: string;
+  provider: "codex" | "cursor" | "grok";
+  status: string;
   selected: boolean;
   statusColor: string;
   onOpen: () => void;
   onDelete: () => void;
-  onSwipeStart: () => void;
-  swipeRef: (methods: SwipeableMethods | null) => void;
 }) {
   const theme = useTheme();
   return (
-    <Swipeable
-      ref={swipeRef}
-      friction={1}
-      overshootFriction={8}
-      enableTrackpadTwoFingerGesture
-      containerStyle={styles.swipe}
-      onSwipeableOpenStartDrag={onSwipeStart}
-      renderRightActions={() => (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Delete ${title}`}
-          onPress={onDelete}
-          style={({ pressed }) => [
-            styles.delete,
-            { backgroundColor: theme.danger, opacity: pressed ? 0.85 : 1 },
-          ]}
-        >
-          <Text style={styles.deleteLabel}>Delete</Text>
-        </Pressable>
-      )}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title}${projectName ? `, ${projectName}` : ""}, ${status}`}
+      accessibilityHint="Hold to delete"
+      accessibilityActions={[{ name: "delete", label: "Delete" }]}
+      accessibilityState={{ selected }}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "delete") onDelete();
+      }}
+      onPress={onOpen}
+      onLongPress={onDelete}
+      style={({ pressed }) => [
+        styles.row,
+        {
+          backgroundColor: selected
+            ? theme.backgroundSelected
+            : pressed
+              ? theme.subtleHover
+              : "transparent",
+        },
+      ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        accessibilityHint="Swipe left to delete"
-        accessibilityActions={[{ name: "delete", label: "Delete" }]}
-        accessibilityState={{ selected }}
-        onAccessibilityAction={(event) => {
-          if (event.nativeEvent.actionName === "delete") onDelete();
-        }}
-        onPress={onOpen}
-        style={({ pressed }) => [
-          styles.row,
-          {
-            backgroundColor: selected
-              ? theme.backgroundSelected
-              : pressed
-                ? theme.subtleHover
-                : "transparent",
-          },
-        ]}
-      >
-        <View style={styles.rowHeading}>
-          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+      <View style={styles.rowBody}>
+        <ProviderMark provider={provider} size={18} />
+        <View style={styles.rowCopy}>
           <Text
             numberOfLines={2}
             style={[styles.rowTitle, { color: theme.text }]}
           >
             {title}
           </Text>
+          {projectName ? (
+            <Text
+              numberOfLines={1}
+              style={[styles.projectName, { color: theme.textSecondary }]}
+            >
+              {projectName}
+            </Text>
+          ) : null}
         </View>
-        <Text
-          numberOfLines={1}
-          style={[styles.metadata, { color: theme.textSecondary }]}
-        >
-          {metadata}
-        </Text>
-      </Pressable>
-    </Swipeable>
+        <View style={[styles.dot, { backgroundColor: statusColor }]} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -127,12 +110,10 @@ export default function ChatsPage() {
   const [draftProject, setDraftProject] = useState<Id<"projects"> | null>(null);
   const [panel, setPanel] = useState<"git" | "terminal" | null>(null);
   const [lastPanel, setLastPanel] = useState<"git" | "terminal" | null>(null);
-  const swipeRefs = useRef(new Map<string, SwipeableMethods>());
-  function closeSwipes(except?: string) {
-    for (const [id, methods] of swipeRefs.current) {
-      if (id !== except) methods.close();
-    }
-  }
+  const [closing, setClosing] = useState<{
+    id: Id<"sessions">;
+    title: string;
+  } | null>(null);
   function togglePanel(next: "git" | "terminal") {
     setLastPanel(next);
     setPanel(panel === next ? null : next);
@@ -162,12 +143,10 @@ export default function ChatsPage() {
   const project = projects?.find((item) => item._id === projectId);
   const showList = wide || !showingConversation;
   function open(id: Id<"sessions">) {
-    closeSwipes(id);
     setPanel(null);
     router.setParams({ session: id, new: undefined });
   }
   function newChat() {
-    closeSwipes();
     setPanel(null);
     router.setParams({ session: undefined, new: "1" });
   }
@@ -178,27 +157,15 @@ export default function ChatsPage() {
   async function deleteChat(id: Id<"sessions">) {
     try {
       await removeSession({ sessionId: id });
+      setClosing(null);
       if (params.session === id) closeChat();
     } catch (e) {
+      setClosing(null);
       Alert.alert(
         "Could not delete chat",
         e instanceof Error ? e.message : "Try again.",
       );
     }
-  }
-  function confirmDelete(id: Id<"sessions">, title: string) {
-    Alert.alert(
-      `Delete ${title}?`,
-      "This deletes the conversation and its messages.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => void deleteChat(id),
-        },
-      ],
-    );
   }
   function onBack() {
     if (panel) {
@@ -285,10 +252,10 @@ export default function ChatsPage() {
                     icon="trash"
                     accessibilityLabel="Delete chat"
                     onPress={() =>
-                      confirmDelete(
-                        selected.session._id,
-                        selected.session.title,
-                      )
+                      setClosing({
+                        id: selected.session._id,
+                        title: selected.session.title,
+                      })
                     }
                     style={{ backgroundColor: "transparent" }}
                   />
@@ -404,13 +371,11 @@ export default function ChatsPage() {
                 <ChatRow
                   key={row.session._id}
                   title={row.session.title}
-                  metadata={`${row.projectName} · ${
-                    row.session.provider === "codex"
-                      ? "Codex"
-                      : row.session.provider === "cursor"
-                        ? "Cursor"
-                        : "Grok"
-                  } · ${row.session.status}`}
+                  provider={row.session.provider}
+                  projectName={
+                    scope.kind === "viewAll" ? row.projectName : undefined
+                  }
+                  status={row.session.status}
                   selected={row.session._id === selected?.session._id}
                   statusColor={
                     row.session.status === "running" ||
@@ -422,13 +387,11 @@ export default function ChatsPage() {
                   }
                   onOpen={() => open(row.session._id)}
                   onDelete={() =>
-                    confirmDelete(row.session._id, row.session.title)
+                    setClosing({
+                      id: row.session._id,
+                      title: row.session.title,
+                    })
                   }
-                  onSwipeStart={() => closeSwipes(row.session._id)}
-                  swipeRef={(methods) => {
-                    if (methods) swipeRefs.current.set(row.session._id, methods);
-                    else swipeRefs.current.delete(row.session._id);
-                  }}
                 />
               ))
             )}
@@ -520,6 +483,58 @@ export default function ChatsPage() {
           </View>
         </View>
       )}
+      <Modal
+        visible={!!closing}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClosing(null)}
+      >
+        <View style={styles.overlay}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            onPress={() => setClosing(null)}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={[
+              styles.dialog,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.line,
+              },
+            ]}
+          >
+            <Text style={[styles.dialogTitle, { color: theme.text }]}>
+              Delete {closing?.title}?
+            </Text>
+            <Text style={[styles.dialogBody, { color: theme.textSecondary }]}>
+              This deletes the conversation and its messages.
+            </Text>
+            <View style={styles.dialogActions}>
+              <Action label="Cancel" onPress={() => setClosing(null)} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Delete chat"
+                onPress={() => {
+                  if (closing) void deleteChat(closing.id);
+                }}
+                style={({ pressed }) => [
+                  styles.dialogDelete,
+                  pressed && {
+                    backgroundColor: theme.subtleHover,
+                    transform: [{ scale: 0.97 }],
+                  },
+                ]}
+              >
+                <Text style={{ color: theme.danger, fontSize: 13, fontWeight: "500" }}>
+                  Delete chat
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -538,14 +553,47 @@ const styles = StyleSheet.create({
   },
   list: { paddingHorizontal: 8, paddingBottom: 88, gap: 4 },
   listEmpty: { padding: 16, gap: 8 },
-  swipe: { borderRadius: 12, borderCurve: "continuous" },
-  delete: { width: 80, justifyContent: "center", alignItems: "center" },
-  deleteLabel: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  row: { padding: 14, gap: 8 },
-  rowHeading: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dot: { width: 5, height: 5, borderRadius: 3 },
-  rowTitle: { fontSize: 14, fontWeight: "500", flex: 1, lineHeight: 20 },
-  metadata: { fontSize: 11, paddingLeft: 13 },
+  row: { padding: 14, borderRadius: 12, borderCurve: "continuous" },
+  rowBody: { flexDirection: "row", alignItems: "center", gap: 10 },
+  rowCopy: { flex: 1, minWidth: 0, gap: 4 },
+  rowTitle: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
+  projectName: { fontSize: 11 },
+  dot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  dialog: {
+    width: 360,
+    maxWidth: "100%",
+    alignSelf: "center",
+    padding: 20,
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 16,
+    borderCurve: "continuous",
+  },
+  dialogTitle: { fontSize: 17, fontWeight: "600" },
+  dialogBody: { fontSize: 13, lineHeight: 20 },
+  dialogActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 4,
+  },
+  dialogDelete: {
+    minHeight: 44,
+    minWidth: 44,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   main: { flex: 1, minWidth: 0 },
   headerRight: {
     flexDirection: "row",
