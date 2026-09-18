@@ -153,6 +153,14 @@ export const permissionMode = v.union(
 export type PermissionMode = "supervised" | "auto-accept-edits" | "auto" | "full-access";
 export const DEFAULT_PERMISSION_MODE: PermissionMode = "supervised";
 
+export const serviceTier = v.union(
+  v.literal("standard"),
+  v.literal("flex"),
+  v.literal("priority"),
+);
+export type ServiceTier = "standard" | "flex" | "priority";
+export const DEFAULT_SERVICE_TIER: ServiceTier = "standard";
+
 export const sessionItemKind = v.union(
   v.literal("message"),
   v.literal("tool"),

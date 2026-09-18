@@ -14,13 +14,18 @@ import { SymbolView } from "expo-symbols";
 import { useTheme } from "@/hooks/use-theme";
 import { Colors } from "@/constants/theme";
 import {
-  AGENT_EFFORTS,
   CODEX_MODELS,
   CURSOR_MODELS,
-  DEFAULT_AGENT_EFFORT,
   GROK_MODELS,
 } from "../../../convex/lib/agentModel";
 import { favoriteId, useFavorites } from "./favorites";
+import type { ChatSettings } from "./lastSettings";
+import {
+  applyPickerChoice,
+  pickerChoices,
+  pickerOptionRows,
+  type PickerOptionId,
+} from "./modelOptions";
 
 type Provider = "codex" | "cursor" | "grok";
 type Rail = "favorites" | Provider;
@@ -53,6 +58,8 @@ const icons = {
   starFill: { ios: "star.fill", android: "star", web: "star" },
   search: { ios: "magnifyingglass", android: "search", web: "search" },
   chevron: { ios: "chevron.down", android: "expand_more", web: "expand_more" },
+  chevronRight: { ios: "chevron.right", android: "chevron_right", web: "chevron_right" },
+  chevronLeft: { ios: "chevron.left", android: "chevron_left", web: "chevron_left" },
 } as const;
 
 const STAR = "#e8a317";
@@ -76,15 +83,7 @@ export function modelTitle(id: string) {
   return id;
 }
 
-export function effortLabel(effort: string) {
-  if (effort === "xhigh") return "Extra High";
-  if (effort === "low") return "Low";
-  if (effort === "medium") return "Medium";
-  if (effort === "high") return "High";
-  if (effort === "max") return "Max";
-  if (effort === "ultra") return "Ultra";
-  return effort;
-}
+export { effortLabel } from "./modelOptions";
 
 const CHAT_MODELS: ChatModel[] = [
   ...CODEX_MODELS.map((model) => ({
@@ -170,7 +169,7 @@ export function PickerChip({
       {icon ? <ProviderMark provider={asProvider(icon)} size={16} /> : null}
       <Text
         numberOfLines={1}
-        style={{ color: theme.text, fontSize: 13, fontWeight: "600", maxWidth: 140 }}
+        style={{ color: theme.text, fontSize: 13, fontWeight: "600", maxWidth: 200 }}
       >
         {label}
       </Text>
@@ -183,12 +182,12 @@ export function ModelMenu({
   visible,
   current,
   disabled,
-  onSelect,
+  onChange,
 }: {
   visible: boolean;
-  current: { provider: string; model: string };
+  current: ChatSettings;
   disabled?: boolean;
-  onSelect: (next: { provider: Provider; model: string }) => void;
+  onChange: (next: ChatSettings) => void;
 }) {
   const theme = useTheme();
   const { height } = useWindowDimensions();
@@ -196,11 +195,13 @@ export function ModelMenu({
   const defaultRail: Rail = asProvider(current.provider);
   const [railOverride, setRailOverride] = useState<Rail | null>(null);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState<PickerOptionId | "models">("models");
   const rail = railOverride ?? defaultRail;
   useEffect(() => {
     if (visible) return;
     setRailOverride(null);
     setQuery("");
+    setPage("models");
   }, [visible]);
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -221,8 +222,76 @@ export function ModelMenu({
     theme.background === Colors.dark.background
       ? "rgba(255,255,255,0.08)"
       : "#f0f0f2";
+  const maxHeight = Math.min(460, Math.round(height * 0.58));
+  if (page !== "models") {
+    const spec = pickerChoices(page);
+    return (
+      <MenuCard maxHeight={maxHeight}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Back to models, ${spec.title}`}
+          onPress={() => setPage("models")}
+          style={({ pressed }) => [
+            styles.choiceHeader,
+            { borderBottomColor: theme.lineStrong, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <SymbolView name={icons.chevronLeft} size={16} tintColor={theme.text} />
+          <Text style={{ color: theme.text, fontSize: 15, fontWeight: "600" }}>
+            {spec.title}
+          </Text>
+        </Pressable>
+        <ScrollView keyboardShouldPersistTaps="handled">
+          {spec.choices.map((choice, index) => {
+            const selected = choice.id === currentValue(current, page);
+            return (
+              <Pressable
+                key={choice.id}
+                accessibilityRole="button"
+                accessibilityLabel={choice.label}
+                accessibilityState={{ selected, disabled: !!disabled }}
+                disabled={disabled}
+                onPress={() => {
+                  onChange(applyPickerChoice(current, page, choice.id));
+                  setPage("models");
+                }}
+                style={({ pressed }) => [
+                  styles.effortRow,
+                  {
+                    backgroundColor: selected || pressed ? selectedFill : "transparent",
+                    opacity: disabled ? 0.4 : 1,
+                    transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
+                    marginTop: index === 0 ? 6 : 0,
+                  },
+                ]}
+              >
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ color: theme.text, fontSize: 15, fontWeight: "500" }}>
+                    {choice.label}
+                  </Text>
+                  {choice.description ? (
+                    <Text style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 16 }}>
+                      {choice.description}
+                    </Text>
+                  ) : null}
+                </View>
+                {choice.isDefault ? (
+                  <View style={[styles.defaultPill, { backgroundColor: theme.lineStrong }]}>
+                    <Text style={{ color: theme.text, fontSize: 11, fontWeight: "600" }}>
+                      Default
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </MenuCard>
+    );
+  }
+  const optionRows = pickerOptionRows(current);
   return (
-    <MenuCard maxHeight={Math.min(340, Math.round(height * 0.48))}>
+    <MenuCard maxHeight={maxHeight}>
       <View style={[styles.search, { borderBottomColor: theme.lineStrong }]}>
         <SymbolView name={icons.search} size={16} tintColor={theme.textSecondary} />
         <TextInput
@@ -309,7 +378,9 @@ export function ModelMenu({
                     accessibilityLabel={row.title}
                     accessibilityState={{ selected, disabled: !!disabled }}
                     disabled={disabled}
-                    onPress={() => onSelect({ provider: row.provider, model: row.model })}
+                    onPress={() =>
+                      onChange({ ...current, provider: row.provider, model: row.model })
+                    }
                     style={({ pressed }) => [
                       styles.rowMain,
                       {
@@ -352,8 +423,48 @@ export function ModelMenu({
           )}
         </ScrollView>
       </View>
+      <View style={[styles.options, { borderTopColor: theme.lineStrong }]}>
+        <Text style={[styles.section, { color: theme.textSecondary }]}>Options</Text>
+        {optionRows.map((row, index) => (
+          <Pressable
+            key={row.id}
+            accessibilityRole="button"
+            accessibilityLabel={`${row.label}, ${row.valueLabel}`}
+            disabled={disabled}
+            onPress={() => setPage(row.id)}
+            style={({ pressed }) => [
+              styles.optionRow,
+              {
+                opacity: disabled ? 0.4 : 1,
+                backgroundColor: pressed ? selectedFill : "transparent",
+                borderBottomColor: theme.line,
+                borderBottomWidth:
+                  index === optionRows.length - 1 ? 0 : StyleSheet.hairlineWidth,
+              },
+            ]}
+          >
+            <Text style={{ color: theme.text, fontSize: 15, fontWeight: "500" }}>
+              {row.label}
+            </Text>
+            <View style={styles.optionValue}>
+              <Text style={{ color: theme.textSecondary, fontSize: 15 }}>{row.valueLabel}</Text>
+              <SymbolView
+                name={icons.chevronRight}
+                size={12}
+                tintColor={theme.textSecondary}
+              />
+            </View>
+          </Pressable>
+        ))}
+      </View>
     </MenuCard>
   );
+}
+
+function currentValue(settings: ChatSettings, page: PickerOptionId) {
+  if (page === "effort") return settings.effort;
+  if (page === "service") return settings.serviceTier;
+  return settings.permissionMode;
 }
 
 function RailButton({
@@ -392,63 +503,6 @@ function RailButton({
   );
 }
 
-export function EffortMenu({
-  visible,
-  current,
-  disabled,
-  onSelect,
-}: {
-  visible: boolean;
-  current: string;
-  disabled?: boolean;
-  onSelect: (effort: (typeof AGENT_EFFORTS)[number]) => void;
-}) {
-  const theme = useTheme();
-  const { height } = useWindowDimensions();
-  if (!visible) return null;
-  const selectedFill =
-    theme.background === Colors.dark.background
-      ? "rgba(255,255,255,0.08)"
-      : "#f0f0f2";
-  return (
-    <MenuCard maxHeight={Math.min(340, Math.round(height * 0.48))}>
-      <Text style={[styles.section, { color: theme.textSecondary }]}>Reasoning</Text>
-      {AGENT_EFFORTS.map((effort) => {
-        const selected = current === effort;
-        return (
-          <Pressable
-            key={effort}
-            accessibilityRole="button"
-            accessibilityLabel={effortLabel(effort)}
-            accessibilityState={{ selected, disabled: !!disabled }}
-            disabled={disabled}
-            onPress={() => onSelect(effort)}
-            style={({ pressed }) => [
-              styles.effortRow,
-              {
-                backgroundColor: selected || pressed ? selectedFill : "transparent",
-                opacity: disabled ? 0.4 : 1,
-                transform: [{ scale: pressed && !disabled ? 0.97 : 1 }],
-              },
-            ]}
-          >
-            <Text style={{ color: theme.text, fontSize: 15, fontWeight: "500" }}>
-              {effortLabel(effort)}
-            </Text>
-            {effort === DEFAULT_AGENT_EFFORT ? (
-              <View style={[styles.defaultPill, { backgroundColor: theme.lineStrong }]}>
-                <Text style={{ color: theme.text, fontSize: 11, fontWeight: "600" }}>
-                  Default
-                </Text>
-              </View>
-            ) : null}
-          </Pressable>
-        );
-      })}
-    </MenuCard>
-  );
-}
-
 const styles = StyleSheet.create({
   card: {
     borderRadius: 16,
@@ -478,7 +532,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 8 },
-  body: { flexDirection: "row", flex: 1, minHeight: 180 },
+  body: { flexDirection: "row", flex: 1, minHeight: 148 },
   rail: {
     width: 48,
     borderRightWidth: StyleSheet.hairlineWidth,
@@ -522,6 +576,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 10,
     borderCurve: "continuous",
+  },
+  options: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingBottom: 6,
+  },
+  optionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+    paddingHorizontal: 14,
+    gap: 12,
+  },
+  optionValue: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  choiceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   section: {
     fontSize: 12,

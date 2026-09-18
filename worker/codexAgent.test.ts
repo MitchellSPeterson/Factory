@@ -28,7 +28,7 @@ test("Codex passes exact model/effort, Project, MCP identity, credentials, and s
   expect(h.text.join("")).toBe("Hello Factory\n");
   expect(h.values().thread).toMatchObject({ model: "gpt-5.6-terra", modelReasoningEffort: "low", workingDirectory: "/project", sandboxMode: "workspace-write", approvalPolicy: "never" });
   expect(h.values().prompt).toBe("Review the change");
-  expect(h.values().config).toMatchObject({ apiKey: "test", config: { mcp_servers: { factory: { required: true, env: { FACTORY_RUN_ID: "run-1", FACTORY_MCP_TRANSPORT: "jsonl" } } } } });
+  expect(h.values().config).toMatchObject({ apiKey: "test", config: { model_provider: "openai", service_tier: "default", mcp_servers: { factory: { required: true, env: { FACTORY_RUN_ID: "run-1", FACTORY_MCP_TRANSPORT: "jsonl" } } } } });
   expect(h.values().config?.env?.OPENAI_BASE_URL).toBeUndefined();
 });
 test("Codex rejects cloud Runs before launching", async () => {
@@ -53,7 +53,22 @@ test("Session Codex resumes the thread and skips Factory MCP", async () => {
   h.options.runId = undefined;
   await runCodexAgent(h.options);
   expect(h.values().resumed).toBe("codex-1");
-  expect(h.values().config?.config).toEqual({ model_provider: "openai" });
+  expect(h.values().config?.config).toEqual({ model_provider: "openai", service_tier: "default" });
+});
+
+test("Session Codex maps full access and flex service tier", async () => {
+  const h = harness([
+    { type: "thread.started", thread_id: "codex-1" },
+    { type: "item.completed", item: { type: "agent_message", id: "a", text: "Hi" } },
+    done,
+  ]);
+  h.options.mode = "session";
+  h.options.runId = undefined;
+  h.options.permissionMode = "full-access";
+  h.options.serviceTier = "flex";
+  await runCodexAgent(h.options);
+  expect(h.values().thread).toMatchObject({ sandboxMode: "danger-full-access" });
+  expect(h.values().config?.config).toEqual({ model_provider: "openai", service_tier: "flex" });
 });
 
 test("Codex accumulates turn usage", async () => {

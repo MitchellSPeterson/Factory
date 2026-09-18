@@ -53,6 +53,36 @@ export function permissionModeLabel(mode: (typeof PERMISSION_MODES)[number]) {
   return "Supervised";
 }
 
+export function permissionModeDescription(mode: (typeof PERMISSION_MODES)[number]) {
+  if (mode === "auto-accept-edits") return "Auto-approve edits, ask before other actions.";
+  if (mode === "full-access") return "Allow commands and edits without prompts.";
+  if (mode === "auto") return "Supported providers approve routine actions; others still ask.";
+  return "Ask before commands and file changes.";
+}
+
+export const SERVICE_TIERS = ["standard", "flex", "priority"] as const;
+export function serviceTierLabel(tier: (typeof SERVICE_TIERS)[number]) {
+  if (tier === "flex") return "Flex";
+  if (tier === "priority") return "Priority";
+  return "Standard";
+}
+
+export function serviceTierDescription(tier: (typeof SERVICE_TIERS)[number]) {
+  if (tier === "flex") return "Lower cost, with more latency.";
+  if (tier === "priority") return "Faster processing when the account allows it.";
+  return "Default routing and pricing.";
+}
+
+export function codexSandboxMode(
+  mode: (typeof PERMISSION_MODES)[number],
+): "workspace-write" | "danger-full-access" {
+  return mode === "full-access" ? "danger-full-access" : "workspace-write";
+}
+
+export function codexServiceTierConfig(tier: (typeof SERVICE_TIERS)[number]) {
+  return tier === "standard" ? "default" : tier;
+}
+
 /** Older Agents and unassigned Stages retain the worker's configured provider. */
 export function resolveProvider(provider?: AgentProvider, workerDefault?: string): AgentProvider {
   const resolved = provider ?? workerDefault ?? "cursor";

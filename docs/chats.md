@@ -4,7 +4,7 @@ Factory's Expo Chats screen lets the operator work with Codex or Grok in a Proje
 
 ## Conversation
 
-Choose a conversation from the searchable list, or start a new chat and choose a Project. Project scope filters the list. The composer supports text, image attachments, provider and model selection, and effort selection. Messages render Markdown and images; permission prompts let the operator answer the agent. A running conversation shows its state and a Stop agent action. The Latest message action returns to the bottom after scrolling up.
+Choose a conversation from the searchable list, or start a new chat and choose a Project. Project scope filters the list. The composer supports text, image attachments, and a model picker with per-provider options: reasoning effort, runtime access mode, and Codex service tier. Messages render Markdown and images; permission prompts let the operator answer the agent. A running conversation shows its state and a Stop agent action. The Latest message action returns to the bottom after scrolling up.
 
 On phones, the list, conversation, and Project tools each use the available panel width. All chats returns to the list; Close panel returns from tools to the conversation. At widths of at least 1,000, the list stays beside the conversation. At 1,280 and above, tools open in a third column.
 

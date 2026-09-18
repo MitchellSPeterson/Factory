@@ -1,6 +1,11 @@
 import { Codex, type CodexOptions, type Input, type ThreadOptions, type ThreadEvent } from "@openai/codex-sdk";
 import path from "node:path";
-import type { AGENT_EFFORTS } from "../convex/lib/agentModel";
+import {
+  type AGENT_EFFORTS,
+  codexSandboxMode,
+  codexServiceTierConfig,
+} from "../convex/lib/agentModel";
+import type { PermissionMode, ServiceTier } from "../convex/lib/validators";
 import { addUsage, ZERO_USAGE } from "../convex/lib/tokenUsage";
 import { fromCodexUsage } from "./usage";
 
@@ -19,6 +24,8 @@ export type CodexAgentOptions = {
   resumeThreadId?: string;
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
+  permissionMode?: PermissionMode;
+  serviceTier?: ServiceTier;
   prompt: string;
   imagePaths?: string[];
   env?: Record<string, string | undefined>;
@@ -35,7 +42,12 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
   const env = Object.fromEntries(Object.entries(opts.env ?? process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
   // The OpenAI-compatible runner may target a different service on this worker.
   delete env.OPENAI_BASE_URL;
-  const config: CodexOptions["config"] = { model_provider: "openai" };
+  const permissionMode = opts.permissionMode ?? "supervised";
+  const serviceTier = opts.serviceTier ?? "standard";
+  const config: CodexOptions["config"] = {
+    model_provider: "openai",
+    service_tier: codexServiceTierConfig(serviceTier),
+  };
   if (mode === "stage" && opts.runId) {
     config.mcp_servers = {
       factory: {
@@ -59,7 +71,7 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
     model: opts.model,
     modelReasoningEffort: opts.effort,
     workingDirectory: opts.workingDirectory,
-    sandboxMode: "workspace-write",
+    sandboxMode: codexSandboxMode(permissionMode),
     approvalPolicy: "never",
     networkAccessEnabled: true,
   };

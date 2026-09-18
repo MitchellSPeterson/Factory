@@ -84,6 +84,7 @@ test("the worker claims a Session, streams a reply, and returns it to idle", asy
   expect(view?.session.agentId).toBe("thread-1");
   expect(view?.messages.map((message) => message.text)).toEqual(["Explain the board", "Hello world"]);
   expect(launch?.permissionMode).toBe("supervised");
+  expect(launch?.serviceTier).toBe("standard");
   expect(view?.messages[0]?.imageUrls).toEqual([]);
   expect(view?.session.usage?.totalTokens).toBe(14);
 });
@@ -105,12 +106,32 @@ test("configure can change provider on an idle Session and drops the stored thre
     provider: "codex",
     model: "gpt-5.6-terra",
     effort: "high",
+    permissionMode: "full-access",
+    serviceTier: "priority",
   });
   const view = await t.query(api.sessions.get, { sessionId });
   expect(view?.session.provider).toBe("codex");
   expect(view?.session.model).toBe("gpt-5.6-terra");
   expect(view?.session.effort).toBe("high");
+  expect(view?.session.permissionMode).toBe("full-access");
+  expect(view?.session.serviceTier).toBe("priority");
   expect(view?.session.agentId).toBeUndefined();
+});
+
+test("create stores runtime and Codex service tier for the worker launch", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "codex",
+    model: "gpt-5.6-terra",
+    effort: "medium",
+    permissionMode: "full-access",
+    serviceTier: "flex",
+    text: "Go",
+  });
+  const launch = await t.mutation(api.sessions.claim, { sessionId });
+  expect(launch?.permissionMode).toBe("full-access");
+  expect(launch?.serviceTier).toBe("flex");
 });
 
 test("creating a Session with Cursor stores that provider", async () => {

@@ -72,6 +72,7 @@ type SessionLaunch = {
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
   permissionMode: "supervised" | "auto-accept-edits" | "auto" | "full-access";
+  serviceTier: "standard" | "flex" | "priority";
   agentId?: string;
   images: Array<{ url: string }>;
   project: Launch["project"];
@@ -507,6 +508,8 @@ async function runSessionCodex(client: ConvexHttpClient, launch: SessionLaunch) 
       resumeThreadId: launch.agentId,
       model: launch.model,
       effort: launch.effort,
+      permissionMode: launch.permissionMode,
+      serviceTier: launch.serviceTier,
       prompt: launch.prompt,
       imagePaths: await materializeImages(launch.images),
       onThreadId: agentId => client.mutation(api.sessions.bindAgent, { sessionId: launch.sessionId, agentId }),

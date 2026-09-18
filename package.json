@@ -11,7 +11,7 @@
     "dev:worker": "bun --watch worker/index.ts",
     "worker": "bun worker/index.ts",
     "build": "tsc -b && vite build",
-    "check": "bun test worker/terminals.test.ts worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/grokAcp.test.ts worker/mcpStdio.test.ts worker/providerUsage.test.ts expo/src/settings/format.test.ts expo/src/chats/activity.test.ts expo/src/chats/headerTitleLayout.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
+    "check": "bun test worker/terminals.test.ts worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/grokAcp.test.ts worker/mcpStdio.test.ts worker/providerUsage.test.ts expo/src/settings/format.test.ts expo/src/chats/activity.test.ts expo/src/chats/headerTitleLayout.test.ts expo/src/chats/lastSettings.test.ts expo/src/chats/modelOptions.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "verify": "bun scripts/verify-factory.ts",
     "build:device-stream": "bun scripts/build-device-stream.ts",
     "dev:device-hub": "expo-device-hub --host 0.0.0.0 --port 3400 --transport webrtc --video-fps 60 --video-bitrate 8000000 --max-dimension 1080",

@@ -6,8 +6,10 @@ import { requireProjectServer } from "./lib/servers";
 import {
   agentEffort,
   DEFAULT_PERMISSION_MODE,
+  DEFAULT_SERVICE_TIER,
   permissionMode,
   permissionOption,
+  serviceTier,
   sessionItemKind,
   sessionItemStatus,
   sessionMessageRole,
@@ -31,6 +33,7 @@ const sessionDoc = v.object({
   model: v.string(),
   effort: agentEffort,
   permissionMode: v.optional(permissionMode),
+  serviceTier: v.optional(serviceTier),
   status: sessionStatus,
   agentId: v.optional(v.string()),
   error: v.optional(v.string()),
@@ -73,6 +76,7 @@ const sessionLaunch = v.object({
   model: v.string(),
   effort: agentEffort,
   permissionMode: permissionMode,
+  serviceTier: serviceTier,
   agentId: v.optional(v.string()),
   images: v.array(v.object({ url: v.string() })),
   project: v.object({
@@ -220,6 +224,7 @@ export const create = mutation({
     model: v.string(),
     effort: agentEffort,
     permissionMode: v.optional(permissionMode),
+    serviceTier: v.optional(serviceTier),
     text: v.string(),
     imageIds: v.optional(v.array(v.id("_storage"))),
   },
@@ -240,6 +245,7 @@ export const create = mutation({
       model: args.model.trim(),
       effort: args.effort,
       permissionMode: args.permissionMode ?? DEFAULT_PERMISSION_MODE,
+      serviceTier: args.serviceTier ?? DEFAULT_SERVICE_TIER,
       status: "queued",
     });
     await ctx.db.insert("sessionMessages", {
@@ -266,6 +272,7 @@ export const configure = mutation({
     model: v.string(),
     effort: agentEffort,
     permissionMode: v.optional(permissionMode),
+    serviceTier: v.optional(serviceTier),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -278,6 +285,7 @@ export const configure = mutation({
       model: args.model.trim(),
       effort: args.effort,
       permissionMode: args.permissionMode ?? session.permissionMode ?? DEFAULT_PERMISSION_MODE,
+      serviceTier: args.serviceTier ?? session.serviceTier ?? DEFAULT_SERVICE_TIER,
       ...(providerChanged ? { agentId: undefined } : {}),
     });
     return null;
@@ -388,6 +396,7 @@ export const claim = mutation({
       model: session.model,
       effort: session.effort,
       permissionMode: session.permissionMode ?? DEFAULT_PERMISSION_MODE,
+      serviceTier: session.serviceTier ?? DEFAULT_SERVICE_TIER,
       agentId: session.agentId,
       images: imageUrls.flatMap((url) => (url ? [{ url }] : [])),
       project: {

@@ -22,7 +22,6 @@ import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
 import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { CODEX_MODELS } from "../../../convex/lib/agentModel";
 import { Action, Notice } from "./ui";
 import { ActivityRow, ThinkingRow, WorkGroup } from "./ActivityRow";
 import {
@@ -30,17 +29,16 @@ import {
   hasPendingPermission,
   shouldShowThinkingRow,
 } from "./activity";
+import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
+import type { ChatSettings } from "./lastSettings";
+import { ModelMenu, PickerChip, effortLabel, modelTitle } from "./model-picker";
 import {
-  EffortMenu,
-  ModelMenu,
-  PickerChip,
-  effortLabel,
-  modelTitle,
-} from "./model-picker";
+  DEFAULT_PERMISSION_MODE,
+  DEFAULT_SERVICE_TIER,
+} from "../../../convex/lib/validators";
 
 type SessionView = NonNullable<FunctionReturnType<typeof api.sessions.get>>;
 type Message = SessionView["messages"][number];
-type Settings = Pick<SessionView["session"], "provider" | "model" | "effort">;
 type Attachment = { id: Id<"_storage">; uri: string; name: string };
 
 function MessageRow({ message }: { message: Message }) {
@@ -133,12 +131,8 @@ export function Conversation({
   const [pending, setPending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [picker, setPicker] = useState<null | "model" | "effort">(null);
-  const [settings, setSettings] = useState<Settings>({
-    provider: "codex",
-    model: CODEX_MODELS[0],
-    effort: "medium",
-  });
+  const [picker, setPicker] = useState<null | "model">(null);
+  const [settings, setSettings] = useState<ChatSettings>(readLastSettings);
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -162,16 +156,26 @@ export function Conversation({
         provider: view.session.provider,
         model: view.session.model,
         effort: view.session.effort,
+        permissionMode: view.session.permissionMode ?? DEFAULT_PERMISSION_MODE,
+        serviceTier: view.session.serviceTier ?? DEFAULT_SERVICE_TIER,
       });
-  }, [view?.session.provider, view?.session.model, view?.session.effort]);
-  async function changeSettings(next: Settings) {
+  }, [
+    view?.session.provider,
+    view?.session.model,
+    view?.session.effort,
+    view?.session.permissionMode,
+    view?.session.serviceTier,
+  ]);
+  async function changeSettings(next: ChatSettings) {
     const previous = settings;
     setError("");
     setSettings(next);
+    writeLastSettings(next);
     try {
       if (sessionId) await configure({ sessionId, ...next });
     } catch (e) {
       setSettings(previous);
+      writeLastSettings(previous);
       setError(e instanceof Error ? e.message : "Could not update model.");
     }
   }
@@ -361,18 +365,8 @@ export function Conversation({
           visible={picker === "model"}
           current={settings}
           disabled={busy}
-          onSelect={(next) => {
-            void changeSettings({ ...settings, ...next });
-            setPicker(null);
-          }}
-        />
-        <EffortMenu
-          visible={picker === "effort"}
-          current={settings.effort}
-          disabled={busy}
-          onSelect={(effort) => {
-            void changeSettings({ ...settings, effort });
-            setPicker(null);
+          onChange={(next) => {
+            void changeSettings(next);
           }}
         />
         <View
@@ -428,26 +422,11 @@ export function Conversation({
               disabled={uploading || attachments.length >= 4}
             />
             <PickerChip
-              label={modelTitle(settings.model)}
+              label={`${modelTitle(settings.model)} · ${effortLabel(settings.effort)}`}
               icon={settings.provider}
               open={picker === "model"}
               disabled={busy}
               onPress={() => setPicker(picker === "model" ? null : "model")}
-            />
-            <View
-              style={{
-                width: StyleSheet.hairlineWidth,
-                height: 14,
-                backgroundColor: theme.lineStrong,
-                marginHorizontal: 2,
-              }}
-            />
-            <PickerChip
-              label={effortLabel(settings.effort)}
-              open={picker === "effort"}
-              filled
-              disabled={busy}
-              onPress={() => setPicker(picker === "effort" ? null : "effort")}
             />
             <View style={{ flex: 1 }} />
             {uploading || pending ? (
