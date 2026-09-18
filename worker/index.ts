@@ -438,7 +438,7 @@ async function waitForSessionPermission(
 ): Promise<{ outcome: "selected"; optionId: string } | { outcome: "cancelled" }> {
   for (;;) {
     const status = await client.query(api.sessions.getStatus, { sessionId });
-    if (status === "stopped" || status === "failed" || status === null) return { outcome: "cancelled" };
+    if (status !== "running") return { outcome: "cancelled" };
     const decision = await client.query(api.sessions.getPermission, { sessionId, requestId });
     if (decision?.status === "resolved" || decision?.status === "denied") {
       if (decision.optionId) return { outcome: "selected", optionId: decision.optionId };

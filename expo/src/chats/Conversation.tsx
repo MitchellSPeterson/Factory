@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -24,8 +24,12 @@ import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { CODEX_MODELS } from "../../../convex/lib/agentModel";
 import { Action, Notice } from "./ui";
-import { ActivityRow } from "./ActivityRow";
-import { hasPendingPermission } from "./activity";
+import { ActivityRow, ThinkingRow, WorkGroup } from "./ActivityRow";
+import {
+  groupChatFeed,
+  hasPendingPermission,
+  shouldShowThinkingRow,
+} from "./activity";
 import {
   EffortMenu,
   ModelMenu,
@@ -39,17 +43,8 @@ type Message = SessionView["messages"][number];
 type Settings = Pick<SessionView["session"], "provider" | "model" | "effort">;
 type Attachment = { id: Id<"_storage">; uri: string; name: string };
 
-function MessageRow({
-  message,
-  sessionId,
-}: {
-  message: Message;
-  sessionId: Id<"sessions">;
-}) {
+function MessageRow({ message }: { message: Message }) {
   const theme = useTheme();
-  const activity = message.kind && message.kind !== "message";
-  if (activity)
-    return <ActivityRow message={message} sessionId={sessionId} />;
   const user = message.role === "user";
   const dark = theme.background === Colors.dark.background;
   return (
@@ -149,7 +144,18 @@ export function Conversation({
   const [atBottom, setAtBottom] = useState(true);
   const busy =
     view?.session.status === "running" || view?.session.status === "queued";
-  const awaitingApproval = hasPendingPermission(view?.messages ?? []);
+  const awaitingApproval =
+    view?.session.status === "running" && hasPendingPermission(view?.messages ?? []);
+  const feed = useMemo(
+    () => groupChatFeed(view?.messages ?? []),
+    [view?.messages],
+  );
+  const showThinking = shouldShowThinkingRow({
+    busy,
+    queued: view?.session.status === "queued",
+    awaitingApproval,
+    messages: view?.messages ?? [],
+  });
   useEffect(() => {
     if (view)
       setSettings({
@@ -280,13 +286,29 @@ export function Conversation({
         }}
       >
         {view?.messages.length ? (
-          view.messages.map((message) => (
-            <MessageRow
-              key={message._id}
-              message={message}
-              sessionId={view.session._id}
-            />
-          ))
+          feed.map((row) => {
+            if (row.type === "work") {
+              return (
+                <WorkGroup
+                  key={row.id}
+                  messages={row.messages}
+                  live={busy && row.messages.some((message) => message.status === "inProgress" && message.kind === "tool")}
+                  sessionLive={busy}
+                />
+              );
+            }
+            if (row.type === "permission") {
+              return (
+                <ActivityRow
+                  key={row.message._id}
+                  message={row.message}
+                  sessionId={view.session._id}
+                  canResolve={view.session.status === "running"}
+                />
+              );
+            }
+            return <MessageRow key={row.message._id} message={row.message} />;
+          })
         ) : (
           <View style={styles.empty}>
             <Text style={[styles.emptyTitle, { color: theme.text }]}>
@@ -299,16 +321,15 @@ export function Conversation({
             </Text>
           </View>
         )}
-        {busy && !awaitingApproval && (
+        {view?.session.status === "queued" ? (
           <View style={styles.running}>
             <ActivityIndicator size="small" color={theme.accent} />
             <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-              {view?.session.status === "queued"
-                ? "Waiting for this machine…"
-                : "Agent is working…"}
+              Waiting for this machine…
             </Text>
           </View>
-        )}
+        ) : null}
+        {showThinking ? <ThinkingRow /> : null}
         {view?.session.error ? (
           <Notice text={view.session.error} error />
         ) : null}

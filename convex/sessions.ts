@@ -123,12 +123,25 @@ function busy(status: Doc<"sessions">["status"]): boolean {
   return status === "queued" || status === "running";
 }
 
+async function expirePendingPermissions(ctx: MutationCtx, sessionId: Id<"sessions">) {
+  const rows = await ctx.db
+    .query("sessionMessages")
+    .withIndex("by_session", (q) => q.eq("sessionId", sessionId))
+    .collect();
+  for (const row of rows) {
+    if (row.kind === "permission" && row.status === "pending") {
+      await ctx.db.patch(row._id, { status: "failed" });
+    }
+  }
+}
+
 async function closeTurn(
   ctx: MutationCtx,
   session: Doc<"sessions">,
   status: Doc<"sessions">["status"],
   error?: string,
 ) {
+  await expirePendingPermissions(ctx, session._id);
   const extra =
     session.turnStartedAt !== undefined ? Math.max(0, Date.now() - session.turnStartedAt) : 0;
   await ctx.db.patch(session._id, {
@@ -283,6 +296,7 @@ export const send = mutation({
     if (busy(session.status)) throw new Error("Wait for the current turn to finish.");
     const imageIds = requireImageIds(args.imageIds);
     const text = requireMessageText(args.text, imageIds.length);
+    await expirePendingPermissions(ctx, session._id);
     await ctx.db.insert("sessionMessages", {
       sessionId: session._id,
       role: "user",
@@ -482,7 +496,7 @@ export const resolvePermission = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const session = await requireSession(ctx, args.sessionId);
-    if (session.status !== "running") throw new Error("This turn is no longer waiting for approval.");
+    if (session.status !== "running") return null;
     const rows = await ctx.db
       .query("sessionMessages")
       .withIndex("by_session", (q) => q.eq("sessionId", session._id))
@@ -490,7 +504,7 @@ export const resolvePermission = mutation({
     const pending = rows.find(
       (row) => row.kind === "permission" && row.requestId === args.requestId && row.status === "pending",
     );
-    if (!pending) throw new Error("That approval is no longer pending.");
+    if (!pending) return null;
     const allowed = (pending.options ?? []).some((option) => option.optionId === args.optionId);
     if (!allowed) throw new Error("Unknown approval option.");
     const selected = pending.options?.find((option) => option.optionId === args.optionId);
@@ -524,6 +538,7 @@ export const getPermission = query({
     if (row.status === "pending") return { status: "pending" as const };
     if (row.status === "denied") return { status: "denied" as const, optionId: row.decision };
     if (row.status === "resolved") return { status: "resolved" as const, optionId: row.decision };
+    if (row.status === "failed") return { status: "denied" as const };
     return null;
   },
 });

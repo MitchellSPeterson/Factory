@@ -2,6 +2,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { api } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { titleFrom } from "./sessions";
 
@@ -252,4 +253,92 @@ test("a blank message is rejected", async () => {
   await t.mutation(api.sessions.claim, { sessionId });
   await t.mutation(api.sessions.complete, { sessionId });
   await expect(t.mutation(api.sessions.send, { sessionId, text: "" })).rejects.toThrow("Message is required");
+});
+
+async function requestApproval(
+  t: Awaited<ReturnType<typeof setup>>["t"],
+  sessionId: Id<"sessions">,
+  requestId = "5",
+) {
+  await t.mutation(api.sessions.upsertItem, {
+    sessionId,
+    itemId: "call_1",
+    kind: "permission",
+    title: "Edit file",
+    status: "pending",
+    requestId,
+    options: [
+      { optionId: "allow-once", name: "Yes", kind: "allow_once" },
+      { optionId: "reject-once", name: "No", kind: "reject_once" },
+    ],
+  });
+}
+
+test("ending a turn drops leftover approvals so a follow-up does not throw", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    permissionMode: "supervised",
+    text: "Edit the sidebar",
+  });
+  await t.mutation(api.sessions.claim, { sessionId });
+  await requestApproval(t, sessionId);
+  await t.mutation(api.sessions.complete, { sessionId });
+  const view = await t.query(api.sessions.get, { sessionId });
+  const permission = view?.messages.find((message) => message.kind === "permission");
+  expect(permission?.status).toBe("failed");
+  expect(await t.query(api.sessions.getPermission, { sessionId, requestId: "5" })).toEqual({
+    status: "denied",
+  });
+  await expect(
+    t.mutation(api.sessions.resolvePermission, {
+      sessionId,
+      requestId: "5",
+      optionId: "allow-once",
+    }),
+  ).resolves.toBeNull();
+  await t.mutation(api.sessions.send, { sessionId, text: "Try again" });
+  expect(await t.query(api.sessions.getStatus, { sessionId })).toBe("queued");
+  const followUp = await t.query(api.sessions.get, { sessionId });
+  expect(followUp?.messages.some((message) => message.status === "pending")).toBe(false);
+});
+
+test("a follow-up expires leftover approvals from an earlier turn", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "Edit the sidebar",
+  });
+  await t.mutation(api.sessions.claim, { sessionId });
+  await t.mutation(api.sessions.complete, { sessionId });
+  await requestApproval(t, sessionId);
+  expect(await t.query(api.sessions.getPermission, { sessionId, requestId: "5" })).toEqual({
+    status: "pending",
+  });
+  await t.mutation(api.sessions.send, { sessionId, text: "Continue" });
+  expect(await t.query(api.sessions.getPermission, { sessionId, requestId: "5" })).toEqual({
+    status: "denied",
+  });
+});
+
+test("stopping a Session expires a pending approval", async () => {
+  const { t, projectId } = await setup();
+  const sessionId = await t.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "Edit the sidebar",
+  });
+  await t.mutation(api.sessions.claim, { sessionId });
+  await requestApproval(t, sessionId);
+  await t.mutation(api.sessions.stop, { sessionId });
+  const view = await t.query(api.sessions.get, { sessionId });
+  expect(view?.messages.find((message) => message.kind === "permission")?.status).toBe("failed");
 });
