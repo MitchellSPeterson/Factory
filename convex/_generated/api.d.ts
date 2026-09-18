@@ -23,6 +23,7 @@ import type * as lib_tokenUsage from "../lib/tokenUsage.js";
 import type * as lib_validators from "../lib/validators.js";
 import type * as projectOperations from "../projectOperations.js";
 import type * as projects from "../projects.js";
+import type * as pty from "../pty.js";
 import type * as recipes from "../recipes.js";
 import type * as seed from "../seed.js";
 import type * as servers from "../servers.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   "lib/validators": typeof lib_validators;
   projectOperations: typeof projectOperations;
   projects: typeof projects;
+  pty: typeof pty;
   recipes: typeof recipes;
   seed: typeof seed;
   servers: typeof servers;

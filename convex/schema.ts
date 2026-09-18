@@ -63,7 +63,14 @@ export default defineSchema({
     pty: v.optional(v.object({ checkedAt: v.number(), os: v.string(), url: v.string() })),
     simHubWanted: v.optional(v.boolean()),
     simHub: v.optional(simHub),
+    pty: v.optional(v.object({ url: v.string(), os: v.optional(v.string()), checkedAt: v.number() })),
   }).index("by_accessKey", ["accessKey"]).index("by_lastSeen", ["lastSeen"]),
+  ptyTickets: defineTable({
+    token: v.string(),
+    projectId: v.id("projects"),
+    serverId: v.id("servers"),
+    expiresAt: v.number(),
+  }).index("by_token", ["token"]),
   deviceCommands: defineTable({
     serverId: v.id("servers"),
     commandId: v.string(),
