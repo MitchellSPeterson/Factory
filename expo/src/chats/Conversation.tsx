@@ -24,6 +24,8 @@ import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { CODEX_MODELS } from "../../../convex/lib/agentModel";
 import { Action, Notice } from "./ui";
+import { ActivityRow } from "./ActivityRow";
+import { hasPendingPermission } from "./activity";
 import {
   EffortMenu,
   ModelMenu,
@@ -45,77 +47,9 @@ function MessageRow({
   sessionId: Id<"sessions">;
 }) {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState(false);
-  const [error, setError] = useState("");
-  const [pending, setPending] = useState(false);
-  const resolve = useMutation(api.sessions.resolvePermission);
   const activity = message.kind && message.kind !== "message";
   if (activity)
-    return (
-      <View style={styles.activity}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          onPress={() => setExpanded(!expanded)}
-          style={styles.activityTitle}
-        >
-          <Text
-            style={{
-              color:
-                message.status === "failed"
-                  ? theme.danger
-                  : theme.textSecondary,
-              fontSize: 12,
-              lineHeight: 18,
-              flex: 1,
-            }}
-          >
-            {message.title ||
-              (message.kind === "reasoning"
-                ? "Thinking"
-                : message.kind === "permission"
-                  ? "Approval requested"
-                  : "Tool activity")}
-          </Text>
-          <Action
-            icon="down"
-            label="Toggle activity details"
-            compact
-            onPress={() => setExpanded(!expanded)}
-          />
-        </Pressable>
-        {expanded && (
-          <Text
-            selectable
-            style={[styles.code, { color: theme.textSecondary }]}
-          >
-            {message.detail || message.text}
-          </Text>
-        )}
-        {message.kind === "permission" &&
-          !message.decision &&
-          message.options?.map((option) => (
-            <Action
-              key={option.optionId}
-              label={option.name}
-              disabled={pending}
-              onPress={() => {
-                if (!message.requestId) return;
-                setPending(true);
-                setError("");
-                void resolve({
-                  sessionId,
-                  requestId: message.requestId,
-                  optionId: option.optionId,
-                })
-                  .catch((e) => setError(String(e)))
-                  .finally(() => setPending(false));
-              }}
-            />
-          ))}
-        {error ? <Notice text={error} error /> : null}
-      </View>
-    );
+    return <ActivityRow message={message} sessionId={sessionId} />;
   const user = message.role === "user";
   const dark = theme.background === Colors.dark.background;
   return (
@@ -215,6 +149,7 @@ export function Conversation({
   const [atBottom, setAtBottom] = useState(true);
   const busy =
     view?.session.status === "running" || view?.session.status === "queued";
+  const awaitingApproval = hasPendingPermission(view?.messages ?? []);
   useEffect(() => {
     if (view)
       setSettings({
@@ -364,7 +299,7 @@ export function Conversation({
             </Text>
           </View>
         )}
-        {busy && (
+        {busy && !awaitingApproval && (
           <View style={styles.running}>
             <ActivityIndicator size="small" color={theme.accent} />
             <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
@@ -378,20 +313,6 @@ export function Conversation({
           <Notice text={view.session.error} error />
         ) : null}
       </ScrollView>
-      {!atBottom && (
-        <View style={styles.jump}>
-          <Action
-            icon="down"
-            label="Latest message"
-            selected
-            onPress={() => {
-              follow.current = true;
-              setAtBottom(true);
-              scroll.current?.scrollToEnd({ animated: true });
-            }}
-          />
-        </View>
-      )}
       {picker ? (
         <Pressable
           accessibilityLabel="Dismiss picker"
@@ -400,6 +321,20 @@ export function Conversation({
         />
       ) : null}
       <View style={[styles.composerWrap, { zIndex: 2 }]}>
+        {!atBottom && (
+          <View style={styles.jump}>
+            <Action
+              icon="down"
+              label="Latest message"
+              selected
+              onPress={() => {
+                follow.current = true;
+                setAtBottom(true);
+                scroll.current?.scrollToEnd({ animated: true });
+              }}
+            />
+          </View>
+        )}
         {error ? <Notice text={error} error /> : null}
         <ModelMenu
           visible={picker === "model"}
@@ -537,8 +472,8 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: 20,
     paddingTop: 28,
-    paddingBottom: 24,
-    gap: 24,
+    paddingBottom: 28,
+    gap: 8,
   },
   emptyFeed: { flexGrow: 1 },
   empty: {
@@ -561,7 +496,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
     textAlign: "center",
   },
-  message: { gap: 10, maxWidth: "100%" },
+  message: { gap: 10, maxWidth: "100%", marginVertical: 8 },
   userMessage: {
     alignSelf: "flex-end",
     maxWidth: "78%",
@@ -571,16 +506,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   prose: { fontSize: 16, lineHeight: 24 },
-  activity: { paddingVertical: 4, paddingHorizontal: 4 },
-  activityTitle: { flexDirection: "row", alignItems: "center", gap: 8 },
-  code: {
-    fontFamily: Fonts.mono,
-    fontSize: 12,
-    lineHeight: 20,
-    paddingBottom: 8,
-  },
   image: { width: 240, height: 180, maxWidth: "100%", borderRadius: 12 },
-  running: { flexDirection: "row", gap: 10, alignItems: "center", paddingHorizontal: 4 },
+  running: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+  },
   composerWrap: {
     paddingHorizontal: 16,
     width: "100%",
@@ -623,5 +556,5 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   thumbnail: { width: 60, height: 60, borderRadius: 8 },
-  jump: { position: "absolute", bottom: 112, alignSelf: "center" },
+  jump: { alignSelf: "center", marginBottom: 8 },
 });

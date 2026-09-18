@@ -36,9 +36,7 @@ test("ACP session updates become text, tools, or reasoning items", () => {
     itemId: "call_1",
     kind: "tool",
     title: "Read file",
-    detail: "read",
     status: "inProgress",
-    text: "read",
   });
   expect(sessionUpdateToItem({
     update: { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "hmm" } },
@@ -48,5 +46,76 @@ test("ACP session updates become text, tools, or reasoning items", () => {
     title: "Reasoning",
     status: "inProgress",
     text: "hmm",
+  });
+});
+
+test("tool calls keep a real name and do not fall back to Tool", () => {
+  expect(sessionUpdateToItem({
+    update: {
+      sessionUpdate: "tool_call",
+      toolCallId: "call_2",
+      title: "graft__graft_find_code",
+      status: "in_progress",
+    },
+  })).toEqual({
+    itemId: "call_2",
+    kind: "tool",
+    title: "graft_find_code",
+    status: "inProgress",
+  });
+  expect(sessionUpdateToItem({
+    update: {
+      sessionUpdate: "tool_call",
+      toolCallId: "call_3",
+      kind: "read",
+      status: "in_progress",
+      locations: [{ path: "expo/src/chats/Conversation.tsx" }],
+    },
+  })).toEqual({
+    itemId: "call_3",
+    kind: "tool",
+    title: "Read Conversation.tsx",
+    detail: "expo/src/chats/Conversation.tsx",
+    text: "expo/src/chats/Conversation.tsx",
+    status: "inProgress",
+  });
+  expect(sessionUpdateToItem({
+    update: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_1",
+      status: "completed",
+    },
+  })).toEqual({
+    itemId: "call_1",
+    kind: "tool",
+    status: "completed",
+  });
+  expect(sessionUpdateToItem({
+    update: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "call_1",
+      content: [{ type: "content", content: { type: "text", text: "ok" } }],
+    },
+  })).toEqual({
+    itemId: "call_1",
+    kind: "tool",
+    detail: "ok",
+    text: "ok",
+  });
+  expect(sessionUpdateToItem({
+    update: {
+      sessionUpdate: "tool_call",
+      toolCallId: "call_4",
+      kind: "execute",
+      status: "in_progress",
+      rawInput: { command: "bunx tsc --noEmit -p expo/tsconfig.json" },
+    },
+  })).toEqual({
+    itemId: "call_4",
+    kind: "tool",
+    title: "Command",
+    detail: "bunx tsc --noEmit -p expo/tsconfig.json",
+    text: "bunx tsc --noEmit -p expo/tsconfig.json",
+    status: "inProgress",
   });
 });

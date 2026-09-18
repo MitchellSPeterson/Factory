@@ -50,6 +50,15 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
             props.navigation.closeDrawer();
           }}
         />
+        <DrawerLink
+          icon="terminal"
+          label="Terminal"
+          focused={pathname === '/terminal'}
+          onPress={() => {
+            router.push('/terminal');
+            props.navigation.closeDrawer();
+          }}
+        />
         <View style={styles.bottom}>
           <DrawerLink
             icon="settings"

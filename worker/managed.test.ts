@@ -72,4 +72,5 @@ test("Project values cannot replace worker bootstrapping or shell startup config
   expect(() => validateVariableName("DATABASE_URL", false)).not.toThrow();
   expect(() => validateVariableName("OPENAI_API_KEY", true)).not.toThrow();
   expect(() => validateVariableName("CODEX_API_KEY", true)).not.toThrow();
+  expect(() => validateVariableName("XAI_MANAGEMENT_KEY", true)).not.toThrow();
 });

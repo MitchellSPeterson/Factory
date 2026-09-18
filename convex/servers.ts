@@ -2,7 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { localServer, requireServer, resolveServer } from "./lib/servers";
 import { validateRepository, validateVariableName } from "../shared/managed";
-import { deviceCommand, grokCatalog, projectKind, simHub } from "./lib/validators";
+import { deviceCommand, grokCatalog, projectKind, providerUsage, simHub } from "./lib/validators";
 import schema from "./schema";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -13,6 +13,7 @@ const serverView = v.object({
   projectsRoot: v.string(),
   lastSeen: v.number(),
   grokCatalog: v.optional(grokCatalog),
+  providerUsage: v.optional(providerUsage),
   simHubWanted: v.optional(v.boolean()),
   simHub: v.optional(simHub),
 });
@@ -40,6 +41,7 @@ function toView(server: Doc<"servers">) {
     projectsRoot: server.projectsRoot,
     lastSeen: server.lastSeen,
     grokCatalog: server.grokCatalog,
+    providerUsage: server.providerUsage,
     simHubWanted: server.simHubWanted,
     simHub: server.simHub,
   };
@@ -61,6 +63,16 @@ export const reportGrokCatalog = mutation({
   handler: async (ctx, args) => {
     const server = await requireServer(ctx, args.accessKey);
     await ctx.db.patch(server._id, { grokCatalog: args.catalog, lastSeen: Date.now() });
+    return null;
+  },
+});
+export const reportProviderUsage = mutation({
+  args: { accessKey: v.string(), usage: providerUsage },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const server = await requireServer(ctx, args.accessKey);
+    if (args.usage.meters.length > 8) throw new Error("Too many provider usage meters.");
+    await ctx.db.patch(server._id, { providerUsage: args.usage, lastSeen: Date.now() });
     return null;
   },
 });

@@ -190,6 +190,42 @@ export const grokCatalog = v.object({
   models: v.array(grokCatalogModel),
 });
 
+const providerMeterAmounts = {
+  provider: agentProvider,
+  checkedAt: v.number(),
+  plan: v.optional(v.string()),
+  usedCents: v.optional(v.number()),
+  remainingCents: v.optional(v.number()),
+  limitCents: v.optional(v.number()),
+  percentUsed: v.optional(v.number()),
+  resetsAt: v.optional(v.number()),
+  display: v.optional(v.string()),
+};
+
+export const providerMeter = v.union(
+  v.object({
+    ...providerMeterAmounts,
+    status: v.literal("ok"),
+  }),
+  v.object({
+    provider: agentProvider,
+    status: v.literal("unconfigured"),
+    checkedAt: v.number(),
+    message: v.string(),
+  }),
+  v.object({
+    provider: agentProvider,
+    status: v.literal("error"),
+    checkedAt: v.number(),
+    message: v.string(),
+  }),
+);
+
+export const providerUsage = v.object({
+  checkedAt: v.number(),
+  meters: v.array(providerMeter),
+});
+
 export const simDeviceState = v.union(
   v.literal("booted"),
   v.literal("shutdown"),

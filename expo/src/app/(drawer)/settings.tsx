@@ -1,24 +1,43 @@
 import { useQuery } from 'convex/react';
 import { useNavigation } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { api } from '@/lib/api';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useProjectScope } from '@/lib/project-scope-context';
+import { providerLabel } from '../../../../convex/lib/agentModel';
+import type { Doc } from '../../../../convex/_generated/dataModel';
+import {
+  formatCheckedAt,
+  formatPercent,
+  formatReset,
+  formatTokens,
+  formatUsdCents,
+} from '@/settings/format';
+
+type ProviderMeter = NonNullable<Doc<'servers'>['providerUsage']>['meters'][number];
+
+type SettingsTab = 'general' | 'project';
 
 export default function SettingsPage() {
   const theme = useTheme();
   const navigation = useNavigation();
   const live = useQuery(api.servers.local);
   const { scope, currentProject, label } = useProjectScope();
+  const project = useQuery(
+    api.projects.get,
+    scope.kind === 'project' ? { projectId: scope.projectId } : 'skip',
+  );
+  const recipes = useQuery(api.recipes.list);
+  const [tab, setTab] = useState<SettingsTab>('general');
+  const [now, setNow] = useState(Date.now());
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: 'Settings' });
   }, [navigation]);
-  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15_000);
@@ -26,65 +45,290 @@ export default function SettingsPage() {
   }, []);
 
   const online = !!(live && now - live.lastSeen < 45_000);
+  const workflow = project?.recipeId ? recipes?.find((recipe) => recipe._id === project.recipeId) : undefined;
 
   return (
     <ScrollView
       style={[styles.scroll, { backgroundColor: theme.background }]}
       contentContainerStyle={styles.content}
       contentInsetAdjustmentBehavior="automatic">
-      <View style={styles.block}>
-        <View style={styles.sectionHeading}>
-          <ThemedText type="section">This machine</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            This machine clones repositories and runs your Jobs.
-          </ThemedText>
-        </View>
-        {live === undefined ? (
-          <ThemedText type="small" themeColor="textSecondary">
-            Checking this machine…
-          </ThemedText>
-        ) : live ? (
-          <View style={[styles.option, { borderColor: theme.line }]}>
-            <ThemedText type="smallBold">
-              {live.name} · {online ? 'Online' : 'Offline'}
-            </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Repositories: {live.projectsRoot}
-            </ThemedText>
-          </View>
-        ) : (
-          <ThemedText type="small" themeColor="textSecondary">
-            Start the worker on this machine. It registers itself with this Factory.
-          </ThemedText>
-        )}
+      <View
+        accessibilityRole="tablist"
+        style={[styles.tabs, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}>
+        <TabButton label="General" selected={tab === 'general'} onPress={() => setTab('general')} />
+        <TabButton label="Project" selected={tab === 'project'} onPress={() => setTab('project')} />
       </View>
-      <View style={styles.block}>
-        <View style={styles.sectionHeading}>
-          <ThemedText type="section">Project scope</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {scope.kind === 'project'
-              ? 'The Project selected in the drawer.'
-              : 'Choose a Project in the drawer to focus Chats on one repository.'}
-          </ThemedText>
+
+      {tab === 'general' ? (
+        <>
+          <View style={styles.block}>
+            <View style={styles.sectionHeading}>
+              <ThemedText type="section">This machine</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                This machine clones repositories and runs your Jobs.
+              </ThemedText>
+            </View>
+            {live === undefined ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Checking this machine…
+              </ThemedText>
+            ) : live ? (
+              <View style={[styles.option, { borderColor: theme.line }]}>
+                <ThemedText type="smallBold">
+                  {live.name} · {online ? 'Online' : 'Offline'}
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Repositories: {live.projectsRoot}
+                </ThemedText>
+              </View>
+            ) : (
+              <ThemedText type="small" themeColor="textSecondary">
+                Start the worker on this machine. It registers itself with this Factory.
+              </ThemedText>
+            )}
+          </View>
+
+          <View style={styles.block}>
+            <View style={styles.sectionHeading}>
+              <ThemedText type="section">Usage</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Remaining allowance from Cursor, Codex, Grok Build, and the OpenAI-compatible API.
+              </ThemedText>
+            </View>
+            {!live ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Start the worker to read remaining usage from each provider.
+              </ThemedText>
+            ) : !live.providerUsage ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                Waiting for the first usage check…
+              </ThemedText>
+            ) : (
+              <>
+                {live.providerUsage.meters.map((meter) => (
+                  <UsageMeter key={meter.provider} meter={meter} now={now} />
+                ))}
+                <ThemedText type="small" themeColor="textSecondary">
+                  {formatCheckedAt(live.providerUsage.checkedAt, now)}
+                </ThemedText>
+              </>
+            )}
+          </View>
+        </>
+      ) : (
+        <View style={styles.block}>
+          <View style={styles.sectionHeading}>
+            <ThemedText type="section">Project</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {scope.kind === 'project'
+                ? 'Settings and Factory-recorded usage for the Project selected in the drawer.'
+                : 'Choose a Project in the drawer to see its settings.'}
+            </ThemedText>
+          </View>
+          {scope.kind === 'project' && project === undefined && currentProject ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              Loading Project settings…
+            </ThemedText>
+          ) : scope.kind === 'project' && project ? (
+            <>
+              <View style={[styles.option, { borderColor: theme.line }]}>
+                <ThemedText type="smallBold">{project.name}</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {kindLabel(project.kind)} · {project.githubRepo || project.localPath}
+                </ThemedText>
+                {project.cloneStatus ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Clone: {cloneLabel(project.cloneStatus)}
+                    {project.cloneError ? ` · ${project.cloneError}` : ''}
+                  </ThemedText>
+                ) : null}
+                {workflow ? (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Workflow: {workflow.name}
+                  </ThemedText>
+                ) : null}
+              </View>
+              <View style={styles.sectionHeading}>
+                <ThemedText type="smallBold">Usage in this Factory</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Tokens recorded on Jobs and Sessions for this Project. Remaining provider allowance is on
+                  General — it belongs to the account, not this Project.
+                </ThemedText>
+              </View>
+              <ProjectUsage usage={project.usage} />
+            </>
+          ) : (
+            <View style={[styles.option, { borderColor: theme.line }]}>
+              <ThemedText type="smallBold">{label}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                Chats currently include every Project.
+              </ThemedText>
+            </View>
+          )}
         </View>
-        {scope.kind === 'project' && currentProject ? (
-          <View style={[styles.option, { borderColor: theme.line }]}>
-            <ThemedText type="smallBold">{currentProject.name}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              {currentProject.githubRepo || currentProject.localPath}
-            </ThemedText>
-          </View>
-        ) : (
-          <View style={[styles.option, { borderColor: theme.line }]}>
-            <ThemedText type="smallBold">{label}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Chats currently include every Project.
-            </ThemedText>
-          </View>
-        )}
-      </View>
+      )}
     </ScrollView>
   );
+}
+
+function TabButton({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.tab,
+        {
+          backgroundColor: selected ? theme.backgroundSelected : 'transparent',
+          opacity: pressed ? 0.8 : 1,
+        },
+      ]}>
+      <ThemedText type="smallBold" themeColor={selected ? 'text' : 'textSecondary'}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+function UsageMeter({
+  meter,
+  now,
+}: {
+  meter: ProviderMeter;
+  now: number;
+}) {
+  const theme = useTheme();
+  const title = providerLabel(meter.provider);
+  if (meter.status !== 'ok') {
+    return (
+      <View style={[styles.meter, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
+        <ThemedText type="smallBold">{title}</ThemedText>
+        <ThemedText type="small" themeColor={meter.status === 'error' ? 'danger' : 'textSecondary'}>
+          {meter.message}
+        </ThemedText>
+      </View>
+    );
+  }
+  const remaining = meter.remainingCents;
+  const limit = meter.limitCents;
+  const used = meter.usedCents ?? (remaining !== undefined && limit !== undefined ? limit - remaining : undefined);
+  const percent = meter.percentUsed ?? (used !== undefined && limit ? (used / limit) * 100 : undefined);
+  const low = percent !== undefined && percent >= 85;
+  return (
+    <View style={[styles.meter, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
+      <View style={styles.meterHead}>
+        <ThemedText type="smallBold">{title}</ThemedText>
+        {meter.plan ? (
+          <ThemedText type="small" themeColor="textSecondary">
+            {meter.plan}
+          </ThemedText>
+        ) : null}
+      </View>
+      {remaining !== undefined ? (
+        <ThemedText type="default" style={styles.tabular}>
+          {formatUsdCents(remaining)} left
+        </ThemedText>
+      ) : used !== undefined ? (
+        <ThemedText type="default" style={styles.tabular}>
+          {formatUsdCents(used)} used
+        </ThemedText>
+      ) : null}
+      {used !== undefined && limit !== undefined ? (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.tabular}>
+          {formatUsdCents(used)} of {formatUsdCents(limit)}
+          {percent !== undefined ? ` · ${formatPercent(percent)}` : ''}
+        </ThemedText>
+      ) : null}
+      {percent !== undefined ? (
+        <View
+          accessible
+          accessibilityLabel={`${title} ${formatPercent(percent)} used`}
+          style={[styles.track, { backgroundColor: theme.line }]}>
+          <View
+            style={[
+              styles.fill,
+              {
+                width: `${Math.max(0, Math.min(100, percent))}%`,
+                backgroundColor: low ? theme.danger : theme.accent,
+              },
+            ]}
+          />
+        </View>
+      ) : null}
+      {meter.display ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {meter.display}
+        </ThemedText>
+      ) : null}
+      {meter.resetsAt ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {formatReset(meter.resetsAt, now)}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+function ProjectUsage({
+  usage,
+}: {
+  usage:
+    | {
+        inputTokens: number;
+        outputTokens: number;
+        cacheReadTokens: number;
+        cacheWriteTokens: number;
+        reasoningTokens: number;
+        totalTokens: number;
+      }
+    | undefined;
+}) {
+  const theme = useTheme();
+  if (!usage || usage.totalTokens === 0) {
+    return (
+      <View style={[styles.option, { borderColor: theme.line }]}>
+        <ThemedText type="small" themeColor="textSecondary">
+          No Jobs or Sessions have recorded tokens on this Project yet.
+        </ThemedText>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.option, { borderColor: theme.line }]}>
+      <ThemedText type="default" style={styles.tabular}>
+        {formatTokens(usage.totalTokens)} tokens
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary" style={styles.tabular}>
+        {formatTokens(usage.inputTokens)} in · {formatTokens(usage.outputTokens)} out
+        {usage.reasoningTokens ? ` · ${formatTokens(usage.reasoningTokens)} reasoning` : ''}
+      </ThemedText>
+    </View>
+  );
+}
+
+function kindLabel(kind: string | undefined): string {
+  if (kind === 'expo') return 'Expo';
+  if (kind === 'web') return 'Web';
+  if (kind === 'mixed') return 'Mixed';
+  return 'Project';
+}
+
+function cloneLabel(status: string): string {
+  if (status === 'ready') return 'Ready';
+  if (status === 'queued') return 'Queued';
+  if (status === 'cloning') return 'Cloning';
+  if (status === 'failed') return 'Failed';
+  return status;
 }
 
 const styles = StyleSheet.create({
@@ -98,6 +342,22 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
     maxWidth: 720,
   },
+  tabs: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    padding: 4,
+    borderWidth: 1,
+    borderRadius: 14,
+    borderCurve: 'continuous',
+    gap: 4,
+  },
+  tab: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderCurve: 'continuous',
+    justifyContent: 'center',
+  },
   block: {
     gap: Spacing.three,
   },
@@ -109,5 +369,29 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderTopWidth: 1,
     borderBottomWidth: 1,
+  },
+  meter: {
+    gap: 6,
+    padding: 14,
+    borderWidth: 1,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+  },
+  meterHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  track: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  fill: {
+    height: 4,
+  },
+  tabular: {
+    fontVariant: ['tabular-nums'],
   },
 });

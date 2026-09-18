@@ -11,16 +11,19 @@
     "dev:worker": "bun --watch worker/index.ts",
     "worker": "bun worker/index.ts",
     "build": "tsc -b && vite build",
-    "check": "bun test worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/mcpStdio.test.ts src/github/connectionState.test.ts src/pages/settingsReadiness.test.ts src/jobsBoard.test.ts src/jobsProgress.test.ts src/jobNeed.test.ts src/contextViewer.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
+    "check": "bun test worker/terminals.test.ts worker/managed.test.ts worker/github.test.ts worker/jobState.test.ts worker/liveLog.test.ts worker/recipeGraph.test.ts worker/openaiAgent.test.ts worker/codexAgent.test.ts worker/grokAgent.test.ts worker/grokAcp.test.ts worker/mcpStdio.test.ts worker/providerUsage.test.ts expo/src/settings/format.test.ts expo/src/chats/activity.test.ts && vitest run && tsc --noEmit && tsc --noEmit -p convex/tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
     "verify": "bun scripts/verify-factory.ts",
     "build:device-stream": "bun scripts/build-device-stream.ts",
-    "dev:device-hub": "expo-device-hub --host 0.0.0.0 --port 3400 --transport webrtc --video-fps 60 --video-bitrate 8000000 --max-dimension 1080"
+    "dev:device-hub": "expo-device-hub --host 0.0.0.0 --port 3400 --transport webrtc --video-fps 60 --video-bitrate 8000000 --max-dimension 1080",
+    "build:terminal": "bun scripts/build-terminal.ts",
+    "postinstall": "node scripts/prepare-terminal.cjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.0",
     "@openai/codex-sdk": "^0.153.4",
     "convex": "^1.25.0",
     "expo-device-hub": "0.10.1",
+    "node-pty": "^1.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-markdown": "^10.1.0",
@@ -39,6 +42,7 @@
     "vitest": "^5.0.0"
   },
   "trustedDependencies": [
-    "node-datachannel"
+    "node-datachannel",
+    "node-pty"
   ]
 }

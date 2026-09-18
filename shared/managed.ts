@@ -1,4 +1,4 @@
-export const serverVariableNames = ["FACTORY_PROVIDER", "CURSOR_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "CODEX_API_KEY", "CODEX_BASE_URL", "CODEX_PATH", "XAI_API_KEY", "GROK_PATH"] as const;
+export const serverVariableNames = ["FACTORY_PROVIDER", "CURSOR_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_MODEL", "CODEX_API_KEY", "CODEX_BASE_URL", "CODEX_PATH", "XAI_API_KEY", "XAI_MANAGEMENT_KEY", "GROK_PATH"] as const;
 export function validateVariableName(name: string, server: boolean) {
   if (!/^[A-Z_][A-Z0-9_]{0,127}$/.test(name)) throw new Error("Use an environment variable name such as DATABASE_URL.");
   if (server) {

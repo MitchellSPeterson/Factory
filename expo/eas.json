@@ -1,0 +1,24 @@
+{
+  "cli": {
+    "version": ">= 23.2.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "bun": "1.4.2"
+    },
+    "preview": {
+      "distribution": "internal",
+      "bun": "1.4.2"
+    },
+    "production": {
+      "autoIncrement": true,
+      "bun": "1.4.2"
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

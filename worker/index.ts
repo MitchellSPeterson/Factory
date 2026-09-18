@@ -1,3 +1,4 @@
+import { startTerminals } from "./terminals";
 import { Agent } from "@cursor/sdk";
 import { ConvexHttpClient } from "convex/browser";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -12,6 +13,7 @@ import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
 import { grokResumeId, runGrokAgent } from "./grokAgent";
 import { probeGrokCatalog, runGrokAcpSession } from "./grokAcp";
+import { collectProviderUsage } from "./providerUsage";
 import { runOpenAIAgent } from "./openaiAgent";
 import { assemblePrompt, buildLaunchPrompt } from "./prompt";
 import { loadSkillFiles } from "./seedSkills";
@@ -682,17 +684,27 @@ async function main() {
   async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
   void imports();
   const stopProjectOperations = startProjectOperations(client, identity);
+  const stopTerminals = startTerminals(client, identity);
   let lastGrokProbe = 0;
   let lastSimHub = 0;
   let lastSimRunning = false;
   async function grokCatalogTick() {
     if (Date.now() - lastGrokProbe < 60_000) return;
     lastGrokProbe = Date.now();
+    let env: Record<string, string | undefined> = { ...process.env };
     try {
-      const catalog = await probeGrokCatalog();
-      await client.mutation(api.servers.reportGrokCatalog, { accessKey: identity.accessKey, catalog });
+      const values = await environmentFor(client, identity);
+      env = { ...env, ...values.server };
     } catch {
-      console.error("Grok catalog probe failed; retrying.");
+      // Worker environment may be empty until variables are saved.
+    }
+    try {
+      const catalog = await probeGrokCatalog(env);
+      await client.mutation(api.servers.reportGrokCatalog, { accessKey: identity.accessKey, catalog });
+      const usage = await collectProviderUsage({ env, grokCatalog: catalog });
+      await client.mutation(api.servers.reportProviderUsage, { accessKey: identity.accessKey, usage });
+    } catch {
+      console.error("Provider usage probe failed; retrying.");
     }
   }
   async function simHubTick() {
@@ -712,7 +724,7 @@ async function main() {
     }
   }
   try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
-  finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); }
+  finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); }
 }
 
 void main().catch(() => { console.error("Worker startup failed. Check the deployment connection and worker identity, then restart."); process.exitCode = 1; });

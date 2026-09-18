@@ -6,6 +6,7 @@ import {
   askKind,
   askStatus,
   grokCatalog,
+  providerUsage,
   simHub,
   deviceCommand,
   deviceCommandStatus,
@@ -35,6 +36,16 @@ import { v } from "convex/values";
 import { projectOperation, operationResult, operationState } from "./lib/projectOperations";
 
 export default defineSchema({
+  terminals: defineTable({
+    projectId: v.id("projects"), serverId: v.id("servers"), title: v.string(),
+    state: v.union(v.literal("queued"), v.literal("running"), v.literal("exited")),
+    owner: v.optional(v.string()), leaseUntil: v.number(),
+    cols: v.number(), rows: v.number(), message: v.optional(v.string()),
+  }).index("by_projectId", ["projectId"]).index("by_serverId_and_state", ["serverId", "state"]),
+  terminalIO: defineTable({
+    terminalId: v.id("terminals"), input: v.string(), inputEnd: v.number(),
+    output: v.string(), outputEnd: v.number(),
+  }).index("by_terminalId", ["terminalId"]),
   projectOperations: defineTable({
     projectId: v.id("projects"), serverId: v.id("servers"), operation: projectOperation,
     state: operationState, output: v.string(), result: v.optional(operationResult),
@@ -48,6 +59,8 @@ export default defineSchema({
   servers: defineTable({
     accessKey: v.string(), name: v.string(), publicKey: v.string(), projectsRoot: v.string(), lastSeen: v.number(),
     grokCatalog: v.optional(grokCatalog),
+    providerUsage: v.optional(providerUsage),
+    pty: v.optional(v.object({ checkedAt: v.number(), os: v.string(), url: v.string() })),
     simHubWanted: v.optional(v.boolean()),
     simHub: v.optional(simHub),
   }).index("by_accessKey", ["accessKey"]).index("by_lastSeen", ["lastSeen"]),

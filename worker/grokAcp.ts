@@ -157,6 +157,78 @@ function contentText(content: unknown): string | undefined {
   return parts.length > 0 ? parts.join("\n") : undefined;
 }
 
+const KIND_TITLES: Record<string, string> = {
+  read: "Read",
+  edit: "Edit",
+  delete: "Delete",
+  move: "Move",
+  search: "Search",
+  execute: "Command",
+  think: "Thinking",
+  fetch: "Fetch",
+};
+
+export function humanizeMcpTitle(title: string): string {
+  const trimmed = title.trim();
+  const mcp = /^[A-Za-z0-9][A-Za-z0-9_-]*__([A-Za-z0-9_]+)$/.exec(trimmed);
+  return mcp?.[1] ?? trimmed;
+}
+
+function firstLocationPath(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  for (const entry of value) {
+    if (isRecord(entry) && typeof entry.path === "string" && entry.path.trim() !== "") {
+      return entry.path;
+    }
+  }
+  return undefined;
+}
+
+function formatRawInput(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim() !== "") return value;
+  if (!isRecord(value)) return undefined;
+  const preferred = ["command", "path", "query", "pattern", "file", "target", "url", "prompt"];
+  const parts: string[] = [];
+  for (const key of preferred) {
+    const entry = value[key];
+    if (typeof entry === "string" && entry.trim() !== "") parts.push(entry);
+  }
+  if (parts.length > 0) return parts.join("\n");
+  try {
+    const json = JSON.stringify(value, null, 2);
+    return json === "{}" ? undefined : json;
+  } catch {
+    return undefined;
+  }
+}
+
+function toolTitleFromUpdate(update: Record<string, unknown>): string | undefined {
+  const explicit = textFromUnknown(update.title);
+  if (explicit) return humanizeMcpTitle(explicit);
+  const named =
+    textFromUnknown(update.toolName) ??
+    textFromUnknown(update.name) ??
+    textFromUnknown(isRecord(update._meta) ? update._meta.toolName : undefined);
+  if (named) return humanizeMcpTitle(named);
+  const kind = textFromUnknown(update.kind);
+  const path = firstLocationPath(update.locations);
+  if (kind && path) {
+    const label = KIND_TITLES[kind] ?? kind;
+    const base = path.split("/").pop() ?? path;
+    return `${label} ${base}`;
+  }
+  if (kind && KIND_TITLES[kind]) return KIND_TITLES[kind];
+  return undefined;
+}
+
+function toolDetailFromUpdate(update: Record<string, unknown>): string | undefined {
+  return (
+    contentText(update.content) ??
+    firstLocationPath(update.locations) ??
+    formatRawInput(update.rawInput)
+  );
+}
+
 export function sessionUpdateToItem(params: unknown): GrokSessionItem | { kind: "text"; text: string } | { kind: "usage"; usage: TokenUsage } | null {
   if (!isRecord(params)) return null;
   const update = isRecord(params.update) ? params.update : params;
@@ -176,15 +248,20 @@ export function sessionUpdateToItem(params: unknown): GrokSessionItem | { kind: 
   if (sessionUpdate === "tool_call" || sessionUpdate === "tool_call_update") {
     const toolCallId = textFromUnknown(update.toolCallId);
     if (!toolCallId) return null;
-    const title = textFromUnknown(update.title);
-    const detail = contentText(update.content) ?? textFromUnknown(update.kind);
+    const title = toolTitleFromUpdate(update);
+    const detail = toolDetailFromUpdate(update);
+    const status =
+      update.status !== undefined
+        ? toolStatus(update.status)
+        : sessionUpdate === "tool_call"
+          ? "inProgress"
+          : undefined;
     return {
       itemId: toolCallId,
       kind: "tool",
-      title: title ?? "Tool",
-      detail,
-      status: toolStatus(update.status),
-      text: detail,
+      ...(title ? { title } : {}),
+      ...(detail ? { detail, text: detail } : {}),
+      ...(status ? { status } : {}),
     };
   }
   const usage = usageFromUnknown(update.usage ?? params.usage);
@@ -232,8 +309,8 @@ function permissionParams(params: unknown): {
   if (!isRecord(params)) return null;
   const toolCall = isRecord(params.toolCall) ? params.toolCall : undefined;
   const itemId = textFromUnknown(toolCall?.toolCallId) ?? "permission";
-  const title = textFromUnknown(toolCall?.title) ?? "Grok needs approval";
-  const detail = contentText(toolCall?.content) ?? textFromUnknown(toolCall?.kind);
+  const title = toolTitleFromUpdate(toolCall ?? {}) ?? "Approval needed";
+  const detail = toolCall ? toolDetailFromUpdate(toolCall) : undefined;
   if (!Array.isArray(params.options)) return null;
   const options = params.options.flatMap((entry) => {
     if (!isRecord(entry) || typeof entry.optionId !== "string" || typeof entry.name !== "string") return [];

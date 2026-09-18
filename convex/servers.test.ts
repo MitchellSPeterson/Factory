@@ -32,6 +32,19 @@ test("unpaired callers cannot read or change variables; metadata does not return
     },
   });
   expect((await t.query(api.servers.paired, { accessKey: key })).grokCatalog?.models[0]?.slug).toBe("grok-4.6");
+  await t.mutation(api.servers.reportProviderUsage, {
+    accessKey: key,
+    usage: {
+      checkedAt: 2,
+      meters: [
+        { provider: "cursor", status: "ok", checkedAt: 2, remainingCents: 4500, limitCents: 7000, percentUsed: 36 },
+        { provider: "codex", status: "unconfigured", checkedAt: 2, message: "Set CODEX_API_KEY." },
+      ],
+    },
+  });
+  const usage = (await t.query(api.servers.paired, { accessKey: key })).providerUsage;
+  expect(usage?.meters[0]).toMatchObject({ provider: "cursor", remainingCents: 4500 });
+  await expect(t.mutation(api.servers.reportProviderUsage, { accessKey: "c".repeat(64), usage: { checkedAt: 3, meters: [] } })).rejects.toThrow();
   const rows = await t.query(api.servers.variables, { accessKey: key, scope: "server" });
   expect(rows).toHaveLength(1); expect(rows[0]).not.toHaveProperty("sealed");
   expect(await t.query(api.servers.readEnvironment, { accessKey: otherKey })).toEqual([]);

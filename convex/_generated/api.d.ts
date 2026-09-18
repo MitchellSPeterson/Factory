@@ -28,6 +28,7 @@ import type * as seed from "../seed.js";
 import type * as servers from "../servers.js";
 import type * as sessions from "../sessions.js";
 import type * as skills from "../skills.js";
+import type * as terminals from "../terminals.js";
 import type * as worker from "../worker.js";
 
 import type {
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   servers: typeof servers;
   sessions: typeof sessions;
   skills: typeof skills;
+  terminals: typeof terminals;
   worker: typeof worker;
 }>;
 

@@ -1,13 +1,14 @@
 ## Learned User Preferences
 
 - Brand the product as Factory. Sidebar shows the name Factory; tab icon is the F mark at `/favicon.svg`.
-- Factory UI should follow dark Notara-like sidebar chrome.
+- Factory UI should follow dark Notara-like sidebar chrome. Chat and terminal should match T3/ChatGPT: polished, conversation-first, minimal extra chrome.
 - Implement on the current branch. Do not create a feature branch unless asked.
 
 ## Learned Workspace Facts
 
 - CONTEXT.md is the domain glossary. Use its terms (View all, Project scope, Needs Grilling, Workflow, Job, Run, Ask, Lane) and do not invent synonyms.
 - Offline or local model access is via the OpenAI-compatible worker provider (`FACTORY_PROVIDER=openai` + `OPENAI_BASE_URL`), not a Convex replacement.
+- The mobile terminal is a T3-style live PTY (one session per project, native module + worker-hosted PTY), not a command log or output viewer.
 
 <!-- convex-ai-start -->
 
