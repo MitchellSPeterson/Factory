@@ -3,7 +3,7 @@ import Foundation
 
 final class App: NSObject, NSApplicationDelegate {
   let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-  var worker: Process?
+  var children: [Process] = []
   let root: URL
 
   init(root: URL) {
@@ -20,19 +20,33 @@ final class App: NSObject, NSApplicationDelegate {
     menu.addItem(NSMenuItem.separator())
     menu.addItem(NSMenuItem(title: "Quit Factory", action: #selector(quit), keyEquivalent: "q"))
     item.menu = menu
-    startWorker()
+    start(["bun", "worker/index.ts"])
+    start(["bun", "--cwd", "expo", "start", "--web"])
     enableLoginItem()
   }
 
-  func startWorker() {
+  func start(_ arguments: [String]) {
     let process = Process()
     process.currentDirectoryURL = root
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["bun", "worker/index.ts"]
+    process.arguments = arguments
+    process.environment = processEnv()
     process.standardOutput = FileHandle.standardOutput
     process.standardError = FileHandle.standardError
     try? process.run()
-    worker = process
+    children.append(process)
+  }
+
+  func processEnv() -> [String: String] {
+    var env = ProcessInfo.processInfo.environment
+    let extra = "\(NSHomeDirectory())/.bun/bin:/opt/homebrew/bin"
+    env["PATH"] = "\(extra):\(env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")"
+    return env
+  }
+
+  func stopChildren() {
+    for process in children { process.terminate() }
+    children.removeAll()
   }
 
   @objc func openFactory() {
@@ -57,7 +71,7 @@ final class App: NSObject, NSApplicationDelegate {
   }
 
   @objc func quit() {
-    worker?.terminate()
+    stopChildren()
     NSApp.terminate(nil)
   }
 
@@ -68,7 +82,7 @@ final class App: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
-    worker?.terminate()
+    stopChildren()
   }
 }
 
