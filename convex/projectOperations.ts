@@ -1,9 +1,11 @@
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireProject } from "./lib/docs";
 import { requireServer, resolveServer } from "./lib/servers";
 import { operationResult, projectOperation } from "./lib/projectOperations";
 import schema from "./schema";
+
+type OperationKind = Infer<typeof projectOperation>["kind"];
 
 const document = schema.tables.projectOperations.validator;
 const view = v.object({
@@ -46,6 +48,29 @@ export const enqueue = mutation({
         operation.paths.length > 500)
     )
       throw new Error("Select files and enter a commit message.");
+    if (
+      operation.kind === "checkout" &&
+      (!operation.branch.trim() || operation.branch.length > 255)
+    )
+      throw new Error("Enter a branch name.");
+    if (
+      operation.kind === "createBranch" &&
+      (!operation.name.trim() || operation.name.length > 255)
+    )
+      throw new Error("Enter a branch name.");
+    if (
+      operation.kind === "createWorktree" &&
+      (!operation.name.trim() ||
+        operation.name.length > 80 ||
+        !operation.branch.trim() ||
+        operation.branch.length > 255)
+    )
+      throw new Error("Enter a worktree name and branch.");
+    if (
+      operation.kind === "removeWorktree" &&
+      (!operation.path.trim() || operation.path.length > 1024)
+    )
+      throw new Error("Choose a worktree to remove.");
     const recent = await ctx.db
       .query("projectOperations")
       .withIndex("by_projectId", (q) => q.eq("projectId", projectId))
@@ -60,15 +85,37 @@ export const enqueue = mutation({
     }
     if (active.length >= 10)
       throw new Error("Wait for the pending commands to finish.");
-    if (operation.kind === "commit") {
+    const blocksAgent =
+      operation.kind === "commit" ||
+      operation.kind === "checkout" ||
+      operation.kind === "pull" ||
+      (operation.kind === "createBranch" && operation.checkout);
+    if (blocksAgent) {
       const sessions = await ctx.db
         .query("sessions")
         .withIndex("by_project", (q) => q.eq("projectId", projectId))
         .take(100);
-      if (sessions.some((s) => s.status === "running" || s.status === "queued"))
-        throw new Error("Stop the agent before committing its changes.");
+      if (sessions.some((s) => s.status === "running" || s.status === "queued")) {
+        if (operation.kind === "commit")
+          throw new Error("Stop the agent before committing its changes.");
+        if (operation.kind === "pull")
+          throw new Error("Stop the agent before pulling.");
+        throw new Error("Stop the agent before switching branches.");
+      }
     }
-    const keep = { status: 2, diff: 5, terminal: 20, commit: 10 };
+    const keep: Record<OperationKind, number> = {
+      status: 2,
+      diff: 5,
+      terminal: 20,
+      commit: 10,
+      checkout: 8,
+      createBranch: 8,
+      createWorktree: 8,
+      removeWorktree: 8,
+      fetch: 5,
+      pull: 5,
+      push: 5,
+    };
     for (const row of recent) {
       if (row.state === "queued" || row.state === "running") continue;
       if (keep[row.operation.kind]-- <= 0) await ctx.db.delete(row._id);

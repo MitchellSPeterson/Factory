@@ -42,6 +42,15 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
           }}
         />
         <DrawerLink
+          icon="git"
+          label="Git"
+          focused={pathname === '/git'}
+          onPress={() => {
+            router.push('/git');
+            props.navigation.closeDrawer();
+          }}
+        />
+        <DrawerLink
           icon="devices"
           label="Devices"
           focused={pathname === '/devices'}

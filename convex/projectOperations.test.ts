@@ -69,6 +69,38 @@ test("status requests coalesce and offline workers reject new work", async () =>
     "offline",
   );
 });
+test("branch switches reject active agents and empty names", async () => {
+  const { t, projectId } = await setup();
+  await expect(
+    t.mutation(api.projectOperations.enqueue, {
+      projectId,
+      operation: { kind: "checkout", branch: "   " },
+    }),
+  ).rejects.toThrow("branch name");
+  await t.run((ctx) =>
+    ctx.db.insert("sessions", {
+      projectId,
+      title: "test",
+      provider: "codex",
+      model: "test",
+      effort: "medium",
+      status: "running",
+    }),
+  );
+  await expect(
+    t.mutation(api.projectOperations.enqueue, {
+      projectId,
+      operation: { kind: "checkout", branch: "main" },
+    }),
+  ).rejects.toThrow("Stop the agent");
+  await expect(
+    t.mutation(api.projectOperations.enqueue, {
+      projectId,
+      operation: { kind: "pull" },
+    }),
+  ).rejects.toThrow("Stop the agent");
+});
+
 test("commits reject active agents and empty selection", async () => {
   const { t, projectId } = await setup();
   await expect(

@@ -4,8 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import {
   executeProjectOperation,
+  parseForEachRef,
   parseGitStatus,
+  parseLog,
+  parseTrack,
+  parseWorktrees,
+  validateBranchName,
   validateGitPath,
+  validateWorktreeName,
 } from "./projectOperations";
 
 const directories: string[] = [];
@@ -16,7 +22,7 @@ afterEach(async () => {
 async function repo() {
   const directory = await mkdtemp(path.join(os.tmpdir(), "factory-git-test-"));
   directories.push(directory);
-  await git(directory, ["init"]);
+  await git(directory, ["init", "-b", "main"]);
   await git(directory, ["config", "user.email", "test@example.test"]);
   await git(directory, ["config", "user.name", "Factory test"]);
   await writeFile(path.join(directory, "one.txt"), "one\n");
@@ -126,6 +132,155 @@ test("selected staged rename commits both ends of the rename", async () => {
   expect(await git(directory, ["ls-tree", "--name-only", "HEAD"])).toBe(
     "renamed.txt\ntwo.txt\n",
   );
+});
+
+test("parses branch track, for-each-ref, worktrees, and log records", () => {
+  expect(parseTrack("ahead 2, behind 1")).toEqual({
+    ahead: 2,
+    behind: 1,
+    gone: false,
+  });
+  expect(parseTrack("gone")).toEqual({ ahead: 0, behind: 0, gone: true });
+  expect(
+    parseForEachRef(
+      "refs/heads/main\0main\0*\0abc\0origin/main\0ahead 1\0/repo\nrefs/remotes/origin/HEAD\0origin/HEAD\0\0abc\0\0\0\nrefs/remotes/origin/main\0origin/main\0\0abc\0\0\0\n",
+    ),
+  ).toEqual([
+    {
+      name: "main",
+      current: true,
+      remote: false,
+      upstream: "origin/main",
+      ahead: 1,
+      behind: 0,
+      gone: false,
+      worktreePath: "/repo",
+    },
+    {
+      name: "origin/main",
+      current: false,
+      remote: true,
+      ahead: 0,
+      behind: 0,
+      gone: false,
+    },
+  ]);
+  expect(
+    parseWorktrees(
+      "worktree /repo\nHEAD abc\nbranch refs/heads/main\n\nworktree /repo-feat\nHEAD def\nbranch refs/heads/feat\nlocked\n",
+      "/repo",
+    ),
+  ).toEqual([
+    {
+      path: "/repo",
+      head: "abc",
+      branch: "main",
+      bare: false,
+      locked: false,
+      prunable: false,
+      current: true,
+    },
+    {
+      path: "/repo-feat",
+      head: "def",
+      branch: "feat",
+      bare: false,
+      locked: true,
+      prunable: false,
+      current: false,
+    },
+  ]);
+  expect(
+    parseLog(
+      ["abc", "subject", "Ada", "1720000000"].join("\0") +
+        "\x1e" +
+        ["def", "next", "Bob", "1720000001"].join("\0") +
+        "\x1e",
+    ),
+  ).toEqual([
+    { sha: "abc", subject: "subject", author: "Ada", committedAt: 1720000000 },
+    { sha: "def", subject: "next", author: "Bob", committedAt: 1720000001 },
+  ]);
+  expect(() => validateBranchName("..oops")).toThrow();
+  expect(validateWorktreeName("review-12")).toBe("review-12");
+  expect(() => validateWorktreeName("a/b")).toThrow();
+});
+
+test("status snapshot includes this checkout, branches, and recent commits", async () => {
+  const directory = await repo();
+  const status = await executeProjectOperation(directory, { kind: "status" });
+  expect(status.kind).toBe("status");
+  if (status.kind !== "status") return;
+  expect(status.commits?.some((item) => item.subject === "initial")).toBe(true);
+  expect(status.worktrees?.some((item) => item.current)).toBe(true);
+  expect(status.branches?.some((item) => item.current && !item.remote)).toBe(true);
+});
+
+test("checkout refuses a dirty tree and switch works after creating a branch", async () => {
+  const directory = await repo();
+  await writeFile(path.join(directory, "one.txt"), "dirty\n");
+  await expect(
+    executeProjectOperation(directory, {
+      kind: "checkout",
+      branch: "missing",
+    }),
+  ).rejects.toThrow("Commit or stash");
+  await git(directory, ["checkout", "--", "one.txt"]);
+  await executeProjectOperation(directory, {
+    kind: "createBranch",
+    name: "feature",
+    checkout: true,
+  });
+  const onFeature = await executeProjectOperation(directory, { kind: "status" });
+  expect(onFeature.kind === "status" && onFeature.branch).toBe("feature");
+  await executeProjectOperation(directory, {
+    kind: "checkout",
+    branch: "main",
+  });
+  const onMain = await executeProjectOperation(directory, { kind: "status" });
+  expect(onMain.kind === "status" && onMain.branch).toBe("main");
+});
+
+test("checking out a remote-only branch creates a local tracking branch", async () => {
+  const directory = await repo();
+  await git(directory, ["update-ref", "refs/remotes/origin/from-remote", "HEAD"]);
+  await executeProjectOperation(directory, {
+    kind: "checkout",
+    branch: "origin/from-remote",
+  });
+  const status = await executeProjectOperation(directory, { kind: "status" });
+  expect(status.kind === "status" && status.branch).toBe("from-remote");
+});
+
+test("worktrees are created as siblings and cannot remove the current checkout", async () => {
+  const directory = await repo();
+  await executeProjectOperation(directory, {
+    kind: "createWorktree",
+    name: "review",
+    branch: "review",
+    createBranch: true,
+  });
+  const status = await executeProjectOperation(directory, { kind: "status" });
+  expect(status.kind).toBe("status");
+  if (status.kind !== "status") return;
+  const extra = status.worktrees?.find((item) => !item.current);
+  expect(extra?.branch).toBe("review");
+  expect(extra?.path.endsWith("-review")).toBe(true);
+  await expect(
+    executeProjectOperation(directory, {
+      kind: "removeWorktree",
+      path: directory,
+    }),
+  ).rejects.toThrow("this Project is using");
+  if (!extra) throw new Error("expected extra worktree");
+  await executeProjectOperation(directory, {
+    kind: "removeWorktree",
+    path: extra.path,
+  });
+  const after = await executeProjectOperation(directory, { kind: "status" });
+  expect(
+    after.kind === "status" && after.worktrees?.every((item) => item.current),
+  ).toBe(true);
 });
 
 test("commit refuses a branch changed since review", async () => {
