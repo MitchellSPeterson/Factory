@@ -18,6 +18,7 @@ import {
 } from '@/settings/format';
 import { FactorySetup } from '@/settings/setup-forms';
 import {
+  AppearanceSwitcher,
   SettingsGroup,
   SettingsIcons,
   SettingsMessage,
@@ -62,6 +63,8 @@ export default function SettingsPage() {
         { paddingHorizontal: wide ? 32 : 16, maxWidth: wide ? 600 : undefined },
       ]}
       contentInsetAdjustmentBehavior="automatic">
+      <AppearanceSwitcher />
+
       <SettingsGroup
         title="This machine"
         footer="This machine clones repositories and runs your chats.">

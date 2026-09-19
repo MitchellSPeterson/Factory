@@ -1,10 +1,12 @@
 import { Children, type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import type { ThemeColor } from '@/constants/theme';
+import { useAppearance } from '@/lib/appearance-context';
+import type { AppearancePreference } from '@/lib/appearance';
 
 export const SettingsIcons = {
   machine: { ios: 'desktopcomputer', android: 'computer', web: 'computer' },
@@ -115,6 +117,52 @@ export function SettingsMessage({ children }: { children: string }) {
         {children}
       </ThemedText>
     </View>
+  );
+}
+
+const APPEARANCE_OPTIONS: { value: AppearancePreference; label: string }[] = [
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'system', label: 'System' },
+];
+
+export function AppearanceSwitcher() {
+  const theme = useTheme();
+  const { preference, setPreference } = useAppearance();
+  return (
+    <SettingsGroup
+      title="Appearance"
+      footer="System follows this device's light or dark setting.">
+      <View
+        accessibilityRole="radiogroup"
+        style={[styles.segmentTrack, { backgroundColor: theme.sidebar }]}>
+        {APPEARANCE_OPTIONS.map((option) => {
+          const selected = preference === option.value;
+          return (
+            <Pressable
+              key={option.value}
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={option.label}
+              onPress={() => setPreference(option.value)}
+              style={({ pressed }) => [
+                styles.segment,
+                selected
+                  ? { backgroundColor: theme.backgroundElement }
+                  : pressed
+                    ? { backgroundColor: theme.subtleHover }
+                    : null,
+              ]}>
+              <ThemedText
+                themeColor={selected ? 'text' : 'textSecondary'}
+                style={styles.segmentLabel}>
+                {option.label}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
+      </View>
+    </SettingsGroup>
   );
 }
 
@@ -266,5 +314,27 @@ const styles = StyleSheet.create({
   fill: {
     height: 4,
     borderRadius: 2,
+  },
+  segmentTrack: {
+    margin: 8,
+    padding: 3,
+    borderRadius: 10,
+    borderCurve: 'continuous',
+    flexDirection: 'row',
+    gap: 2,
+  },
+  segment: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 8,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  segmentLabel: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: 600,
   },
 });

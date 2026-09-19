@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { AppearanceProvider } from '@/lib/appearance-context';
 import { ConvexClientProvider } from '@/lib/convex';
 import { ProjectScopeProvider } from '@/lib/project-scope-context';
 
@@ -38,8 +39,6 @@ const factoryLight: Theme = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   useEffect(() => {
     void SplashScreen.hideAsync();
   }, []);
@@ -48,12 +47,21 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ConvexClientProvider>
         <ProjectScopeProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? factoryDark : factoryLight}>
-            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-            <Stack screenOptions={{ headerShown: false }} />
-          </ThemeProvider>
+          <AppearanceProvider>
+            <ThemedRoot />
+          </AppearanceProvider>
         </ProjectScopeProvider>
       </ConvexClientProvider>
     </GestureHandlerRootView>
+  );
+}
+
+function ThemedRoot() {
+  const colorScheme = useColorScheme();
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? factoryDark : factoryLight}>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false }} />
+    </ThemeProvider>
   );
 }
