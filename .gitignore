@@ -8,6 +8,10 @@ dist
 
 .factory/
 ./desktop/FactoryMenu
+desktop/FactoryMenu.app
+desktop/FactoryMenu-macos-*.zip
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+README.local.md

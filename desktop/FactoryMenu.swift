@@ -1,10 +1,57 @@
 import AppKit
 import Foundation
 
+private let rootDefaultsKey = "factoryRoot"
+
+func isCheckout(_ url: URL) -> Bool {
+  FileManager.default.fileExists(atPath: url.appendingPathComponent("worker/index.ts").path)
+}
+
+func pickCheckout() -> URL? {
+  let panel = NSOpenPanel()
+  panel.canChooseFiles = false
+  panel.canChooseDirectories = true
+  panel.allowsMultipleSelection = false
+  panel.message = "Choose the Factory checkout this menu should run."
+  panel.prompt = "Use this folder"
+  NSApp.activate(ignoringOtherApps: true)
+  guard panel.runModal() == .OK, let url = panel.url else { return nil }
+  guard isCheckout(url) else {
+    let alert = NSAlert()
+    alert.messageText = "Not a Factory checkout"
+    alert.informativeText = "Pick the folder that contains worker/index.ts."
+    alert.runModal()
+    return nil
+  }
+  UserDefaults.standard.set(url.path, forKey: rootDefaultsKey)
+  return url
+}
+
+func resolveRoot() -> URL? {
+  let defaults = UserDefaults.standard
+  if CommandLine.argc > 1 {
+    let url = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+    if isCheckout(url) {
+      defaults.set(url.path, forKey: rootDefaultsKey)
+      return url
+    }
+  }
+  if let saved = defaults.string(forKey: rootDefaultsKey) {
+    let url = URL(fileURLWithPath: saved, isDirectory: true)
+    if isCheckout(url) { return url }
+  }
+  let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+  if isCheckout(cwd) {
+    defaults.set(cwd.path, forKey: rootDefaultsKey)
+    return cwd
+  }
+  return pickCheckout()
+}
+
 final class App: NSObject, NSApplicationDelegate {
   let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
   var children: [Process] = []
-  let root: URL
+  var root: URL
 
   init(root: URL) {
     self.root = root
@@ -17,12 +64,17 @@ final class App: NSObject, NSApplicationDelegate {
     menu.addItem(NSMenuItem(title: "Open Factory", action: #selector(openFactory), keyEquivalent: "o"))
     menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
     menu.addItem(NSMenuItem(title: "Show pairing address", action: #selector(showPair), keyEquivalent: "p"))
+    menu.addItem(NSMenuItem(title: "Choose checkout…", action: #selector(chooseCheckout), keyEquivalent: ""))
     menu.addItem(NSMenuItem.separator())
     menu.addItem(NSMenuItem(title: "Quit Factory", action: #selector(quit), keyEquivalent: "q"))
     item.menu = menu
+    startServices()
+    enableLoginItem()
+  }
+
+  func startServices() {
     start(["bun", "worker/index.ts"])
     start(["bun", "--cwd", "expo", "start", "--web"])
-    enableLoginItem()
   }
 
   func start(_ arguments: [String]) {
@@ -70,6 +122,13 @@ final class App: NSObject, NSApplicationDelegate {
     alert.runModal()
   }
 
+  @objc func chooseCheckout() {
+    guard let next = pickCheckout() else { return }
+    stopChildren()
+    root = next
+    startServices()
+  }
+
   @objc func quit() {
     stopChildren()
     NSApp.terminate(nil)
@@ -86,9 +145,15 @@ final class App: NSObject, NSApplicationDelegate {
   }
 }
 
-let root = URL(fileURLWithPath: CommandLine.argc > 1 ? CommandLine.arguments[1] : FileManager.default.currentDirectoryPath)
 let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+guard let root = resolveRoot() else {
+  let alert = NSAlert()
+  alert.messageText = "Factory"
+  alert.informativeText = "Choose the Factory checkout (the folder that contains worker/)."
+  alert.runModal()
+  exit(1)
+}
 let delegate = App(root: root)
 app.delegate = delegate
-app.setActivationPolicy(.accessory)
 app.run()
