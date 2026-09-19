@@ -27,8 +27,8 @@ export const register = mutation({
     if (!/^[a-f0-9]{64}$/.test(args.accessKey) || args.name.length > 100 || args.publicKey.length > 4096 || args.projectsRoot.length > 1024) throw new Error("Invalid worker registration.");
     const old = await ctx.db.query("servers").withIndex("by_accessKey", q => q.eq("accessKey", args.accessKey)).unique();
     if (old) {
-      if (old.publicKey !== args.publicKey || old.projectsRoot !== args.projectsRoot) throw new Error("Worker identity changed. Restore its identity file.");
-      await ctx.db.patch(old._id, { lastSeen: Date.now(), name: args.name }); return old._id;
+      if (old.publicKey !== args.publicKey) throw new Error("Worker identity changed. Restore its identity file.");
+      await ctx.db.patch(old._id, { lastSeen: Date.now(), name: args.name, projectsRoot: args.projectsRoot }); return old._id;
     }
     return ctx.db.insert("servers", { ...args, lastSeen: Date.now() });
   },
@@ -203,15 +203,14 @@ export const readEnvironment = query({
   },
 });
 export const importRepository = mutation({
-  args: { accessKey: v.optional(v.string()), repo: v.string(), name: v.string(), kind: projectKind, recipeId: v.optional(v.id("recipes")), sealedToken: v.string() }, returns: v.id("projects"),
+  args: { accessKey: v.optional(v.string()), repo: v.string(), name: v.string(), kind: projectKind, sealedToken: v.string() }, returns: v.id("projects"),
   handler: async (ctx, args) => {
     const server = await resolveServer(ctx, args.accessKey);
     const repo = validateRepository(args.repo).toLowerCase();
     if (!args.name.trim() || args.name.length > 200 || args.sealedToken.length < 100 || args.sealedToken.length > 30000) throw new Error("Invalid import request.");
-    if (args.recipeId && !await ctx.db.get(args.recipeId)) throw new Error("Workflow not found.");
     const existing = await ctx.db.query("projects").withIndex("by_serverId_and_githubRepo", q => q.eq("serverId", server._id).eq("githubRepo", repo)).unique();
     if (existing) throw new Error("This repository is already a Project on this worker.");
-    const projectId = await ctx.db.insert("projects", { name: args.name.trim(), githubRepo: repo, kind: args.kind, defaultRuntime: "local", localPath: "", serverId: server._id, cloneStatus: "queued", recipeId: args.recipeId });
+    const projectId = await ctx.db.insert("projects", { name: args.name.trim(), githubRepo: repo, kind: args.kind, defaultRuntime: "local", localPath: "", serverId: server._id, cloneStatus: "queued" });
     await ctx.db.insert("projectImports", { projectId, serverId: server._id, repo, sealedToken: args.sealedToken, status: "queued", leaseUntil: 0, attempt: 0 });
     return projectId;
   },

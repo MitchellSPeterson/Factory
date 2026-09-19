@@ -1,14 +1,24 @@
 import { ConvexProvider, ConvexReactClient } from 'convex/react';
-import { type ReactNode } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 
-const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
-
-if (!convexUrl) {
-  throw new Error('EXPO_PUBLIC_CONVEX_URL is not set.');
-}
-
-const convex = new ConvexReactClient(convexUrl, { unsavedChangesWarning: false });
+import { PairingScreen } from '@/settings/pairing-screen';
+import { readConvexUrl, writeConvexUrl } from '@/lib/convex-url';
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
-  return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+  const [url, setUrl] = useState(readConvexUrl);
+  const client = useMemo(
+    () => (url ? new ConvexReactClient(url, { unsavedChangesWarning: false }) : null),
+    [url],
+  );
+  if (!url || !client) {
+    return (
+      <PairingScreen
+        onReady={(next) => {
+          writeConvexUrl(next);
+          setUrl(next);
+        }}
+      />
+    );
+  }
+  return <ConvexProvider client={client}>{children}</ConvexProvider>;
 }

@@ -38,16 +38,11 @@ export const create = mutation({
     localPath: v.string(),
     githubRepo: v.string(),
     defaultRuntime: runtime,
-    recipeId: v.optional(v.id("recipes")),
   },
   returns: v.id("projects"),
   handler: async (ctx, args) => {
     if (args.name.trim() === "") throw new Error("Name is required");
     if (args.localPath.trim() === "") throw new Error("Local path is required");
-    if (args.recipeId) {
-      const recipe = await ctx.db.get(args.recipeId);
-      if (!recipe) throw new Error("Workflow not found");
-    }
     return await ctx.db.insert("projects", args);
   },
 });
@@ -61,16 +56,11 @@ export const update = mutation({
     localPath: v.string(),
     githubRepo: v.string(),
     defaultRuntime: runtime,
-    recipeId: v.optional(v.id("recipes")),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const project = await ctx.db.get(args.projectId);
     if (!project) throw new Error("Project not found");
-    if (args.recipeId) {
-      const recipe = await ctx.db.get(args.recipeId);
-      if (!recipe) throw new Error("Workflow not found");
-    }
     await requireProjectServer(ctx, project, args.accessKey);
     if (project.serverId && (args.localPath !== project.localPath || args.githubRepo !== project.githubRepo)) throw new Error("Managed repository paths cannot be changed. Import another repository instead.");
     const { projectId, accessKey: _accessKey, ...fields } = args;

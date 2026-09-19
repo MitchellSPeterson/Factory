@@ -74,7 +74,7 @@ function ChatRow({
 }: {
   title: string;
   projectName?: string;
-  provider: "codex" | "cursor" | "grok";
+  provider: "codex" | "cursor" | "grok" | "claude" | "openai";
   status: string;
   selected: boolean;
   statusColor: string;

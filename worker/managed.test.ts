@@ -20,6 +20,7 @@ test("worker identity survives restart, is private, and rejects a different depl
   expect(await loadIdentity(dir)).toEqual(identity);
   expect((await fs.stat(path.join(dir, ".factory/worker.json"))).mode & 0o777).toBe(0o600);
   await expect(loadIdentity(dir, "https://different.convex.cloud")).rejects.toThrow("another Convex");
+  expect(identity.projectsRoot).toBe(path.join(os.homedir(), "Factory"));
 });
 test("multiline values encrypt for only their destination worker and tampering fails", async () => {
   const identity = await loadIdentity(await root(), "https://test.convex.cloud");

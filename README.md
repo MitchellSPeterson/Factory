@@ -1,12 +1,10 @@
 # Factory
 
-A personal control plane for running agents across your product repos. You sit here. Agents do the work.
+A personal app for Sessions in your product repos. You sit here. The Worker does the work on this Mac.
 
-Factory is three processes on one machine: a Convex backend, a local worker that touches your checkouts, and an Expo app (web, iOS, or Android) where you talk to the agents.
+The Mac menu bar process is the Worker (`bun run desktop`, or `bun run factory`). Expo (web, iOS, Android) is where you talk. Your Convex deployment is the household key. Anyone who has that URL can use this Factory.
 
-Chats are the daily loop. You pick a Project, talk to Codex or Grok Build, inspect diffs, and run commands. Devices streams an iOS Simulator from this machine into the app. Jobs still exist as staged Workflows the worker can run; Chats do not start a Job.
-
-This is a single-operator tool. There is no multi-user login. Treat the worker as a trusted account on your repos.
+Chats are the daily loop. You pick a Project, talk to Codex, Grok, Cursor, Claude Code, or an OpenAI-compatible API, inspect diffs, and run commands. Devices streams an iOS Simulator from this Mac.
 
 ## What you need
 
@@ -17,8 +15,6 @@ This is a single-operator tool. There is no multi-user login. Treat the worker a
   - Codex: sign in with the Codex CLI on this machine, or set `CODEX_API_KEY`
   - Grok Build: `npm install -g @xai-official/grok`, then `grok login`
 - macOS and Xcode, only if you want Devices
-
-Cursor keys still drive Workflow Jobs. Chats use Codex or Grok, not Cursor.
 
 ## Install
 
@@ -90,9 +86,9 @@ bunx convex run projects:create '{
 
 `kind` is `web`, `expo`, or `mixed`. `githubRepo` can stay empty for a local checkout. `defaultRuntime` should be `local` unless you are running a Cursor cloud Job.
 
-The drawer lists Projects under Working on. **View all** shows every Chat. Choosing a Project scopes the list to that repo.
+Or add a Project in Settings: folder picker, or clone from GitHub. Clones land in `~/Factory` unless you change that folder.
 
-The worker also seeds Factory Skills and a Feature Workflow on first start. You do not create those by hand.
+The drawer lists Projects. View all shows every Chat. Choosing a Project scopes the list to that repo.
 
 ## Chats
 
@@ -119,43 +115,29 @@ Devices talks to iOS Simulators on this machine. The worker starts the device hu
 
 This needs macOS with Xcode. An offline worker or a machine without Simulator support shows an empty state instead of a stream.
 
-## Jobs and Workflows
-
-A Job is one request against one Project, executed through a Workflow of Stages (plan, implement, verify, PR). The Expo app has no Jobs board, Agent editor, or Workflow editor. Chats do not create Jobs. The Convex APIs and the worker are still there: the worker claims Jobs and runs Cursor, Codex, Grok, or an OpenAI-compatible API, depending on the Agent and `FACTORY_PROVIDER`. Cloud Jobs are Cursor only.
-
-Start a Job from the command line:
-
-```sh
-bunx convex run jobs:create '{
-  "projectId": "PROJECT_ID",
-  "request": "What you want built.",
-  "runtime": "local",
-  "forceGrill": false
-}'
-```
-
-Factory language for all of this is in [CONTEXT.md](CONTEXT.md).
+Factory language is in [CONTEXT.md](CONTEXT.md).
 
 ## Providers
 
-| Provider | Chats | Jobs | How it authenticates |
-| --- | --- | --- | --- |
-| Codex | yes | local Jobs | Codex CLI login, or `CODEX_API_KEY` (`OPENAI_API_KEY` as fallback) |
-| Grok Build | yes | local Jobs | `grok login`, or `XAI_API_KEY`. Optional `GROK_PATH` |
-| Cursor | no | local or cloud | `CURSOR_API_KEY` |
-| OpenAI-compatible | no | local Jobs | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` |
+| Provider | How it authenticates |
+| --- | --- |
+| Codex | Codex CLI login, or `CODEX_API_KEY` |
+| Grok Build | `grok login`, or `XAI_API_KEY`. Optional `GROK_PATH` |
+| Cursor | `CURSOR_API_KEY` in Settings |
+| Claude Code | Claude CLI login. Optional `CLAUDE_PATH` |
+| OpenAI-compatible | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` |
 
 Local models are the OpenAI-compatible provider (`FACTORY_PROVIDER=openai` plus `OPENAI_BASE_URL`), not a stand-in for Convex.
 
-Settings shows this machine and provider usage. GitHub connect, repository import, and encrypted worker environment lived in Settings on the old web app. Those Convex APIs are still there. The Expo app has no forms for them. For a local Project, `.env.local` plus `projects:create` is enough. The older flow is in [docs/github.md](docs/github.md) and [docs/worker-settings.md](docs/worker-settings.md).
+Settings holds Convex URL, provider keys, GitHub, and Add a Project. Pairing is a QR or the Mac IP on port 3402.
 
 ## Layout
 
 ```
-convex/     backend (Jobs, Sessions, Projects, worker protocol)
-worker/     claims Runs and Sessions, clones, talks to agents
+convex/     backend (Sessions, Projects, Worker protocol)
+worker/     claims Sessions, clones, talks to providers
 expo/       Factory app
-skills/     markdown the worker seeds as Factory Skills
+desktop/    Mac menu bar host
 docs/       Chats, GitHub, worker environment
 ```
 

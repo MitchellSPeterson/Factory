@@ -1,8 +1,10 @@
 import {
   AGENT_EFFORTS,
+  CLAUDE_MODELS,
   CODEX_MODELS,
   CURSOR_MODELS,
   GROK_MODELS,
+  OPENAI_MODELS,
   PERMISSION_MODES,
   SERVICE_TIERS,
   canonicalCursorModel,
@@ -15,7 +17,7 @@ import {
 } from "../../../convex/lib/validators";
 
 export type ChatSettings = {
-  provider: "codex" | "cursor" | "grok";
+  provider: "codex" | "cursor" | "grok" | "claude" | "openai";
   model: string;
   effort: (typeof AGENT_EFFORTS)[number];
   permissionMode: PermissionMode;
@@ -26,6 +28,8 @@ const MODELS: Record<ChatSettings["provider"], readonly string[]> = {
   codex: CODEX_MODELS,
   cursor: CURSOR_MODELS,
   grok: GROK_MODELS,
+  claude: CLAUDE_MODELS,
+  openai: OPENAI_MODELS,
 };
 
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
@@ -37,7 +41,7 @@ export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
 };
 
 function isProvider(value: unknown): value is ChatSettings["provider"] {
-  return value === "codex" || value === "cursor" || value === "grok";
+  return value === "codex" || value === "cursor" || value === "grok" || value === "claude" || value === "openai";
 }
 
 function isEffort(value: unknown): value is ChatSettings["effort"] {

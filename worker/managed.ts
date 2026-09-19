@@ -8,21 +8,36 @@ import type { Id } from "../convex/_generated/dataModel";
 import { openSecret } from "../shared/secrets";
 import { validateRepository, validateVariableName } from "../shared/managed";
 
-export type WorkerIdentity = { accessKey: string; publicKey: string; privateKey: JsonWebKey; convexUrl: string; projectsRoot: string; name: string };
+export type WorkerIdentity = { accessKey: string; publicKey: string; privateKey: JsonWebKey; convexUrl: string; projectsRoot: string; name: string; keepAwake?: boolean };
+export function identityPath(root: string) {
+  return path.join(root, ".factory", "worker.json");
+}
+export function defaultProjectsRoot() {
+  return path.join(os.homedir(), "Factory");
+}
+export async function replaceIdentity(root: string) {
+  await fs.rm(identityPath(root), { force: true });
+}
 export async function loadIdentity(root: string, convexUrl?: string): Promise<WorkerIdentity> {
   const dir = path.join(root, ".factory");
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  const file = path.join(dir, "worker.json");
+  const file = identityPath(root);
   try {
     const saved = JSON.parse(await fs.readFile(file, "utf8")) as WorkerIdentity;
-    if (convexUrl && saved.convexUrl !== convexUrl) throw new Error("Worker belongs to another Convex deployment. Use a separate Factory checkout.");
+    if (convexUrl && saved.convexUrl !== convexUrl) throw new Error("This Worker already belongs to another Convex deployment. Replace the Convex account in Settings.");
     return saved;
   } catch (err) { if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; }
-  if (!convexUrl) throw new Error("Start once with CONVEX_URL or --url https://your-deployment.convex.cloud.");
+  if (!convexUrl) throw new Error("Set a Convex URL in Settings.");
   const keys = await crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
-  const identity: WorkerIdentity = { accessKey: randomBytes(32).toString("hex"), publicKey: JSON.stringify(await crypto.subtle.exportKey("jwk", keys.publicKey)), privateKey: await crypto.subtle.exportKey("jwk", keys.privateKey), convexUrl, name: os.hostname(), projectsRoot: path.join(dir, "projects") };
+  const identity: WorkerIdentity = { accessKey: randomBytes(32).toString("hex"), publicKey: JSON.stringify(await crypto.subtle.exportKey("jwk", keys.publicKey)), privateKey: await crypto.subtle.exportKey("jwk", keys.privateKey), convexUrl, name: os.hostname(), projectsRoot: defaultProjectsRoot(), keepAwake: true };
   await fs.writeFile(file, JSON.stringify(identity), { mode: 0o600, flag: "wx" });
   return identity;
+}
+export async function patchIdentity(root: string, patch: Partial<Pick<WorkerIdentity, "projectsRoot" | "keepAwake" | "name">>) {
+  const identity = await loadIdentity(root);
+  const next = { ...identity, ...patch };
+  await fs.writeFile(identityPath(root), JSON.stringify(next), { mode: 0o600 });
+  return next;
 }
 export type GitRunner = (args: string[], env: Record<string, string>) => Promise<string>;
 export const runGit: GitRunner = async (args, env) => {

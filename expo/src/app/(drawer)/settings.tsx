@@ -16,6 +16,7 @@ import {
   formatUsdCents,
   usageFillColor,
 } from '@/settings/format';
+import { FactorySetup } from '@/settings/setup-forms';
 import {
   SettingsGroup,
   SettingsIcons,
@@ -89,6 +90,8 @@ export default function SettingsPage() {
           />
         )}
       </SettingsGroup>
+
+      <FactorySetup publicKey={live?.publicKey} />
 
       {live === undefined ? (
         <SettingsGroup title="Usage">

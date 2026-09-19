@@ -14,9 +14,11 @@ import { SymbolView } from "expo-symbols";
 import { useTheme } from "@/hooks/use-theme";
 import { Colors } from "@/constants/theme";
 import {
+  CLAUDE_MODELS,
   CODEX_MODELS,
   CURSOR_MODELS,
   GROK_MODELS,
+  OPENAI_MODELS,
 } from "../../../convex/lib/agentModel";
 import { favoriteId, useFavorites } from "./favorites";
 import type { ChatSettings } from "./lastSettings";
@@ -27,7 +29,7 @@ import {
   type PickerOptionId,
 } from "./modelOptions";
 
-type Provider = "codex" | "cursor" | "grok";
+type Provider = "codex" | "cursor" | "grok" | "claude" | "openai";
 type Rail = "favorites" | Provider;
 type ChatModel = { provider: Provider; model: string; title: string };
 
@@ -37,16 +39,29 @@ const PROVIDER_ICONS = {
   grok: require("../../assets/providerIcons/grok-ai-icon.webp"),
 } as const;
 
-// Fraction of the layout box the drawn glyph should occupy.
-// Grok's asset is edge-to-edge; others already have padding in the file.
-const PROVIDER_ICON_FIT: Record<Provider, number> = {
+const PROVIDER_ICON_FIT = {
   codex: 1,
   cursor: 1,
   grok: 0.82,
-};
+} as const;
 
 export function ProviderMark({ provider, size }: { provider: Provider; size: number }) {
   const theme = useTheme();
+  if (provider === "claude" || provider === "openai") {
+    return (
+      <View
+        style={{
+          width: size,
+          height: size,
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+        <Text style={{ color: theme.text, fontSize: size * 0.55, fontWeight: "700" }}>
+          {provider === "claude" ? "C" : "O"}
+        </Text>
+      </View>
+    );
+  }
   const fit = PROVIDER_ICON_FIT[provider];
   const dim = size * fit;
   return (
@@ -121,16 +136,30 @@ const CHAT_MODELS: ChatModel[] = [
     model,
     title: modelTitle(model),
   })),
+  ...CLAUDE_MODELS.map((model) => ({
+    provider: "claude" as const,
+    model,
+    title: modelTitle(model),
+  })),
+  ...OPENAI_MODELS.map((model) => ({
+    provider: "openai" as const,
+    model,
+    title: modelTitle(model),
+  })),
 ];
 
 function asProvider(provider: string): Provider {
-  if (provider === "grok" || provider === "cursor") return provider;
+  if (provider === "grok" || provider === "cursor" || provider === "claude" || provider === "openai") {
+    return provider;
+  }
   return "codex";
 }
 
 function providerName(provider: string) {
   if (provider === "grok") return "Grok";
   if (provider === "cursor") return "Cursor";
+  if (provider === "claude") return "Claude";
+  if (provider === "openai") return "OpenAI";
   return "Codex";
 }
 
@@ -366,6 +395,22 @@ export function ModelMenu({
             onPress={() => setRailOverride("grok")}
           >
             <ProviderMark provider="grok" size={18} />
+          </RailButton>
+          <RailButton
+            label="Claude"
+            selected={rail === "claude"}
+            selectedFill={selectedFill}
+            onPress={() => setRailOverride("claude")}
+          >
+            <ProviderMark provider="claude" size={18} />
+          </RailButton>
+          <RailButton
+            label="OpenAI"
+            selected={rail === "openai"}
+            selectedFill={selectedFill}
+            onPress={() => setRailOverride("openai")}
+          >
+            <ProviderMark provider="openai" size={18} />
           </RailButton>
         </View>
         <View style={styles.main}>

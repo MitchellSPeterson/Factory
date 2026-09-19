@@ -45,11 +45,18 @@ export function toModelSelection(model: string, effort: string) {
 
 export const CODEX_MODELS = ["gpt-5.6-terra", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"] as const;
 export const GROK_MODELS = ["grok-4.6", "grok-4.5", "grok-build-0.1"] as const;
+export const CLAUDE_MODELS = ["claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"] as const;
+export const OPENAI_MODELS = ["gpt-5.6", "gpt-5.4", "gpt-4.1"] as const;
 export const CURSOR_MODELS = AGENT_MODELS;
-export const AGENT_PROVIDERS = ["cursor", "codex", "grok", "openai"] as const;
+export const AGENT_PROVIDERS = ["cursor", "codex", "grok", "claude", "openai"] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 export function providerLabel(provider?: AgentProvider) {
-  return provider === "codex" ? "Codex" : provider === "cursor" ? "Cursor" : provider === "grok" ? "Grok Build" : provider === "openai" ? "OpenAI-compatible API" : "Worker default";
+  if (provider === "codex") return "Codex";
+  if (provider === "cursor") return "Cursor";
+  if (provider === "grok") return "Grok Build";
+  if (provider === "claude") return "Claude Code";
+  if (provider === "openai") return "OpenAI-compatible API";
+  return "Worker default";
 }
 
 export const PERMISSION_MODES = ["supervised", "auto-accept-edits", "auto", "full-access"] as const;
@@ -90,7 +97,6 @@ export function codexServiceTierConfig(tier: (typeof SERVICE_TIERS)[number]) {
   return tier === "standard" ? "default" : tier;
 }
 
-/** Older Agents and unassigned Stages retain the worker's configured provider. */
 export function resolveProvider(provider?: AgentProvider, workerDefault?: string): AgentProvider {
   const resolved = provider ?? workerDefault ?? "cursor";
   if (!AGENT_PROVIDERS.includes(resolved as AgentProvider)) throw new Error("Unknown Factory provider");

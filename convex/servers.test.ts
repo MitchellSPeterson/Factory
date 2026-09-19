@@ -67,10 +67,10 @@ test("environment values are scoped to the paired worker and can be replaced or 
   await t.mutation(api.servers.removeVariable, { accessKey: key, scope: projectId, name: "DATABASE_URL" });
   expect(await t.query(api.servers.readEnvironment, { accessKey: key, projectId })).toEqual([]);
 });
-test("imports deduplicate repositories and readiness blocks Jobs", async () => {
+test("imports deduplicate repositories and readiness blocks Sessions", async () => {
   const { t } = await setup(); const id = await add(t);
   await expect(add(t)).rejects.toThrow("already a Project");
-  await expect(t.mutation(api.jobs.create, { projectId: id, accessKey: key, request: "test", runtime: "local", forceGrill: false })).rejects.toThrow("finish cloning");
+  await expect(t.mutation(api.sessions.create, { projectId: id, accessKey: key, provider: "codex", model: "gpt-5.6-terra", effort: "medium", text: "hello" })).rejects.toThrow("finish cloning");
   expect(await t.mutation(api.servers.claimImport, { accessKey: otherKey })).toBeNull();
   const task = await t.mutation(api.servers.claimImport, { accessKey: key });
   expect(task?.status).toBe("cloning");
