@@ -4,9 +4,9 @@ import {
   type AGENT_EFFORTS,
   codexSandboxMode,
   codexServiceTierConfig,
-} from "../convex/lib/agentModel";
-import type { PermissionMode, ServiceTier } from "../convex/lib/validators";
-import { addUsage, ZERO_USAGE } from "../convex/lib/tokenUsage";
+} from "../shared/agentModel";
+import type { PermissionMode, ServiceTier } from "../shared/validators";
+import { addUsage, ZERO_USAGE } from "../shared/tokenUsage";
 import { fromCodexUsage } from "./usage";
 
 type ThreadHandle = { runStreamed(input: Input): Promise<{ events: AsyncIterable<ThreadEvent> }> };

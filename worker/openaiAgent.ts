@@ -1,5 +1,5 @@
 import type { AgentTool } from "./codingTools";
-import { addUsage, ZERO_USAGE, type TokenUsage } from "../convex/lib/tokenUsage";
+import { addUsage, ZERO_USAGE, type TokenUsage } from "../shared/tokenUsage";
 import { fromOpenAIUsage } from "./usage";
 
 const MAX_STEPS = 40;

@@ -1,5 +1,5 @@
-import type { TokenUsage } from "../convex/lib/tokenUsage";
-import { withTotal, ZERO_USAGE } from "../convex/lib/tokenUsage";
+import type { TokenUsage } from "../shared/tokenUsage";
+import { withTotal, ZERO_USAGE } from "../shared/tokenUsage";
 
 export type { TokenUsage };
 

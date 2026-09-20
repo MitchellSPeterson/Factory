@@ -1,10 +1,10 @@
-import { useMutation } from "convex/react";
+import { useMutation } from "@/lib/factory";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";

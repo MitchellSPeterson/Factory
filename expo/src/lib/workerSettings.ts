@@ -1,4 +1,4 @@
-// ponytail: Metro only watches expo/ + convex/. Copy of shared/secrets + serverVariableNames.
+// ponytail: Metro only watches expo/. Copy of shared/secrets + serverVariableNames.
 export const serverVariableNames = [
   "FACTORY_PROVIDER",
   "CURSOR_API_KEY",

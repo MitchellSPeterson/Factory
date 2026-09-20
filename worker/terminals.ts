@@ -1,8 +1,8 @@
 import { statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "../convex/_generated/api";
-import type { Id } from "../convex/_generated/dataModel";
+import { api } from "../shared/mailboxApi";
+import type { Id } from "../shared/ids";
+import type { Mailbox } from "./mailbox/client";
 
 export function openShell({
   cwd,
@@ -94,7 +94,7 @@ export function openShell({
 }
 
 export function startTerminals(
-  client: ConvexHttpClient,
+  client: Mailbox,
   identity: { accessKey: string },
 ) {
   const owner = crypto.randomUUID();

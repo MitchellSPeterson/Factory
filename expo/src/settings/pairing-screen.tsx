@@ -3,23 +3,30 @@ import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme";
-import { pairFromWorker, writeConvexUrl } from "@/lib/convex-url";
+import { pairFromWorker, writeWorkerPairing, type WorkerPairing } from "@/lib/pairing";
 
-export function PairingScreen({ onReady }: { onReady: (url: string) => void }) {
+export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) => void }) {
   const theme = useTheme();
-  const [convexUrl, setConvexUrl] = useState("");
+  const [workerUrl, setWorkerUrl] = useState("");
+  const [token, setToken] = useState("");
   const [host, setHost] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function saveUrl() {
-    const next = convexUrl.trim();
-    if (!next.startsWith("https://") || !next.includes("convex")) {
-      setError("Paste the Convex URL from Mac Settings.");
+  function saveUrl() {
+    const next = workerUrl.trim().replace(/\/$/, "");
+    const key = token.trim();
+    if (!next.startsWith("http://") && !next.startsWith("https://")) {
+      setError("Paste a Worker address from Mac Settings — LAN, Tailscale, or a public tunnel.");
       return;
     }
-    writeConvexUrl(next);
-    onReady(next);
+    if (!key) {
+      setError("Paste the pairing token from Mac Settings.");
+      return;
+    }
+    const pairing = { url: next, token: key };
+    writeWorkerPairing(pairing);
+    onReady(pairing);
   }
 
   async function pair() {
@@ -40,20 +47,30 @@ export function PairingScreen({ onReady }: { onReady: (url: string) => void }) {
         Connect this phone
       </ThemedText>
       <ThemedText themeColor="textSecondary" style={styles.copy}>
-        Type the Convex URL from Mac Settings. On the same Wi-Fi you can type the Mac IP instead.
+        On the same Wi-Fi or tailnet, type the Mac IP. Away from home, paste the tunnel URL and pairing token from Mac Settings.
       </ThemedText>
       <TextInput
-        accessibilityLabel="Convex URL"
+        accessibilityLabel="Worker URL"
         autoCapitalize="none"
         autoCorrect={false}
-        placeholder="https://….convex.cloud"
+        placeholder="http://100.x.x.x:3402 or https://factory.example"
         placeholderTextColor={theme.textSecondary}
-        value={convexUrl}
-        onChangeText={setConvexUrl}
+        value={workerUrl}
+        onChangeText={setWorkerUrl}
         style={[styles.field, { color: theme.text, borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
       />
-      <Pressable accessibilityRole="button" onPress={() => void saveUrl()} style={[styles.button, { backgroundColor: theme.accent }]}>
-        <ThemedText style={styles.buttonLabel}>Use this URL</ThemedText>
+      <TextInput
+        accessibilityLabel="Pairing token"
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="Pairing token"
+        placeholderTextColor={theme.textSecondary}
+        value={token}
+        onChangeText={setToken}
+        style={[styles.field, { color: theme.text, borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
+      />
+      <Pressable accessibilityRole="button" onPress={saveUrl} style={[styles.button, { backgroundColor: theme.accent }]}>
+        <ThemedText style={styles.buttonLabel}>Use this Factory</ThemedText>
       </Pressable>
       <ThemedText themeColor="textSecondary" style={styles.or}>
         or pair by IP

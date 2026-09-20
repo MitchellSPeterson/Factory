@@ -14,17 +14,17 @@ async function git(args: string[]) {
   if (code) throw new Error(stderr);
   return stdout.trim();
 }
-test("worker identity survives restart, is private, and rejects a different deployment", async () => {
+test("worker identity survives restart and is private", async () => {
   const dir = await root();
-  const identity = await loadIdentity(dir, "https://test.convex.cloud");
+  const identity = await loadIdentity(dir);
   expect(await loadIdentity(dir)).toEqual(identity);
   expect((await fs.stat(path.join(dir, ".factory/worker.json"))).mode & 0o777).toBe(0o600);
-  await expect(loadIdentity(dir, "https://different.convex.cloud")).rejects.toThrow("another Convex");
+  expect(identity.pairingToken).toHaveLength(64);
   expect(identity.projectsRoot).toBe(path.join(os.homedir(), "Factory"));
 });
 test("multiline values encrypt for only their destination worker and tampering fails", async () => {
-  const identity = await loadIdentity(await root(), "https://test.convex.cloud");
-  const other = await loadIdentity(await root(), "https://test.convex.cloud");
+  const identity = await loadIdentity(await root());
+  const other = await loadIdentity(await root());
   const value = "private\nmultiline\n" + "x".repeat(8000);
   const cipher = await sealSecret(identity.publicKey, value);
   expect(cipher).not.toContain("private");

@@ -2,13 +2,22 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { randomBytes } from "node:crypto";
-import type { ConvexHttpClient } from "convex/browser";
-import { api } from "../convex/_generated/api";
-import type { Id } from "../convex/_generated/dataModel";
+import { api } from "../shared/mailboxApi";
+import type { Id } from "../shared/ids";
 import { openSecret } from "../shared/secrets";
 import { validateRepository, validateVariableName } from "../shared/managed";
+import type { Mailbox } from "./mailbox/client";
 
-export type WorkerIdentity = { accessKey: string; publicKey: string; privateKey: JsonWebKey; convexUrl: string; projectsRoot: string; name: string; keepAwake?: boolean };
+export type WorkerIdentity = {
+  accessKey: string;
+  publicKey: string;
+  privateKey: JsonWebKey;
+  pairingToken: string;
+  projectsRoot: string;
+  name: string;
+  keepAwake?: boolean;
+  tunnelUrl?: string;
+};
 export function identityPath(root: string) {
   return path.join(root, ".factory", "worker.json");
 }
@@ -18,22 +27,33 @@ export function defaultProjectsRoot() {
 export async function replaceIdentity(root: string) {
   await fs.rm(identityPath(root), { force: true });
 }
-export async function loadIdentity(root: string, convexUrl?: string): Promise<WorkerIdentity> {
+export async function loadIdentity(root: string): Promise<WorkerIdentity> {
   const dir = path.join(root, ".factory");
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const file = identityPath(root);
   try {
-    const saved = JSON.parse(await fs.readFile(file, "utf8")) as WorkerIdentity;
-    if (convexUrl && saved.convexUrl !== convexUrl) throw new Error("This Worker already belongs to another Convex deployment. Replace the Convex account in Settings.");
+    const saved = JSON.parse(await fs.readFile(file, "utf8")) as WorkerIdentity & { convexUrl?: string };
+    if (!saved.pairingToken) {
+      saved.pairingToken = randomBytes(32).toString("hex");
+      delete saved.convexUrl;
+      await fs.writeFile(file, JSON.stringify(saved), { mode: 0o600 });
+    }
     return saved;
   } catch (err) { if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err; }
-  if (!convexUrl) throw new Error("Set a Convex URL in Settings.");
   const keys = await crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
-  const identity: WorkerIdentity = { accessKey: randomBytes(32).toString("hex"), publicKey: JSON.stringify(await crypto.subtle.exportKey("jwk", keys.publicKey)), privateKey: await crypto.subtle.exportKey("jwk", keys.privateKey), convexUrl, name: os.hostname(), projectsRoot: defaultProjectsRoot(), keepAwake: true };
+  const identity: WorkerIdentity = {
+    accessKey: randomBytes(32).toString("hex"),
+    publicKey: JSON.stringify(await crypto.subtle.exportKey("jwk", keys.publicKey)),
+    privateKey: await crypto.subtle.exportKey("jwk", keys.privateKey),
+    pairingToken: randomBytes(32).toString("hex"),
+    name: os.hostname(),
+    projectsRoot: defaultProjectsRoot(),
+    keepAwake: true,
+  };
   await fs.writeFile(file, JSON.stringify(identity), { mode: 0o600, flag: "wx" });
   return identity;
 }
-export async function patchIdentity(root: string, patch: Partial<Pick<WorkerIdentity, "projectsRoot" | "keepAwake" | "name">>) {
+export async function patchIdentity(root: string, patch: Partial<Pick<WorkerIdentity, "projectsRoot" | "keepAwake" | "name" | "tunnelUrl">>) {
   const identity = await loadIdentity(root);
   const next = { ...identity, ...patch };
   await fs.writeFile(identityPath(root), JSON.stringify(next), { mode: 0o600 });
@@ -73,7 +93,7 @@ export async function cloneRepository(projectsRoot: string, projectId: string, r
     return destination;
   } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }
-export async function importTick(client: ConvexHttpClient, identity: WorkerIdentity) {
+export async function importTick(client: Mailbox, identity: WorkerIdentity) {
   const task = await client.mutation(api.servers.claimImport, { accessKey: identity.accessKey });
   if (!task) return;
   let localPath: string | undefined;
@@ -85,7 +105,7 @@ export async function importTick(client: ConvexHttpClient, identity: WorkerIdent
   } catch { error = "Clone failed. Check Contents read permission, token expiry, network and disk space, then retry. Existing files were preserved."; }
   await client.mutation(api.servers.finishImport, { accessKey: identity.accessKey, importId: task._id, attempt: task.attempt, localPath, error });
 }
-export async function environmentFor(client: ConvexHttpClient, identity: WorkerIdentity, projectId?: Id<"projects">) {
+export async function environmentFor(client: Mailbox, identity: WorkerIdentity, projectId?: Id<"projects">) {
   const rows = await client.query(api.servers.readEnvironment, { accessKey: identity.accessKey, projectId });
   const server: Record<string, string> = {};
   const project: Record<string, string> = {};

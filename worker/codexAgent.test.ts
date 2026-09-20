@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { CodexOptions, ThreadOptions, ThreadEvent } from "@openai/codex-sdk";
 import { runCodexAgent, type CodexAgentOptions } from "./codexAgent";
-import { resolveProvider } from "../convex/lib/agentModel";
+import { resolveProvider } from "../shared/agentModel";
 
 function harness(events: ThreadEvent[], status = "finished") {
   let config: CodexOptions | undefined;

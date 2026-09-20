@@ -24,7 +24,7 @@ This is a command runner, not an interactive terminal session. Shell state such 
 
 ## Implementation and reference
 
-The route is `expo/src/app/(drawer)/chats.tsx`. Conversation rendering and controls live in `expo/src/chats/Conversation.tsx`; Project tools live in `expo/src/chats/ProjectTools.tsx`, with shared controls in `expo/src/chats/ui.tsx`. `convex/projectOperations.ts` queues operations and exposes results; `worker/projectOperations.ts` runs them against the Project directory.
+The route is `expo/src/app/(drawer)/chats.tsx`. Conversation rendering and controls live in `expo/src/chats/Conversation.tsx`; Project tools live in `expo/src/chats/ProjectTools.tsx`, with shared controls in `expo/src/chats/ui.tsx`. The Worker mailbox queues operations and exposes results; `worker/projectOperations.ts` runs them against the Project directory.
 
 The conceptual reference was [T3 Code's mobile app](https://github.com/pingdotgg/t3code/tree/main/apps/mobile), especially its thread composer, feed, Git controls, commit sheet, and terminal route. No code was copied from that reference. This implementation adopts the conversation and adjacent tools layout within Factory's existing theme; it does not claim full T3 feature parity.
 

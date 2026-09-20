@@ -22,7 +22,7 @@ The token is stored in this Factory instance and sent directly to `api.github.co
 6. In Factory, expand **Connect with a GitHub App**, enter the public **Client ID** (not App ID), and click sign in.
 7. Open GitHub's device verification page using the displayed link and enter the code. Factory completes sign-in automatically.
 
-The public client ID stays in this browser. Device authorization passes through two stateless Convex actions because GitHub's login endpoints do not support browser CORS. The resulting user access token is stored in this Factory instance. GitHub enforces access as the intersection of the App installation and the authorizing user's permissions. Tokens are not automatically refreshed; reconnect when one expires.
+The public client ID stays in this browser. Device authorization passes through the Worker because GitHub's login endpoints do not support browser CORS. The resulting user access token is stored on this Mac. GitHub enforces access as the intersection of the App installation and the authorizing user's permissions. Tokens are not automatically refreshed; reconnect when one expires.
 
 ## Scope
 

@@ -1,17 +1,13 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { realpath } from "node:fs/promises";
-import type { ConvexHttpClient } from "convex/browser";
-import type { Infer } from "convex/values";
-import { api } from "../convex/_generated/api";
-import {
-  operationResult,
-  projectOperation,
-} from "../convex/lib/projectOperations";
+import { api } from "../shared/mailboxApi";
+import type { OperationResult, ProjectOperation } from "../shared/projectOperations";
+import type { Mailbox } from "./mailbox/client";
 import type { WorkerIdentity } from "./managed";
 
-type Operation = Infer<typeof projectOperation>;
-type Result = Infer<typeof operationResult>;
+type Operation = ProjectOperation;
+type Result = OperationResult;
 type GitBranch = {
   name: string;
   current: boolean;
@@ -564,7 +560,7 @@ export async function executeProjectOperation(
 }
 
 export function startProjectOperations(
-  client: ConvexHttpClient,
+  client: Mailbox,
   identity: WorkerIdentity,
 ) {
   let stopped = false;

@@ -1,4 +1,4 @@
-import { useMutation } from "convex/react";
+import { useMutation } from "@/lib/factory";
 import { useLayoutEffect, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
@@ -14,7 +14,7 @@ import Animated, {
 import { api } from "@/lib/api";
 import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { Id } from "@/lib/dataModel";
 import {
   activitySummary,
   liveWorkLabel,

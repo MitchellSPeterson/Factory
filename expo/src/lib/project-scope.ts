@@ -1,4 +1,4 @@
-import type { Doc, Id } from '../../../convex/_generated/dataModel';
+import type { Doc, Id } from '@/lib/dataModel';
 
 export type ProjectScope =
   | { kind: 'viewAll' }

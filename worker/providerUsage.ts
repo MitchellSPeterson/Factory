@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type { AgentProvider } from "../convex/lib/agentModel";
-import { providerLabel } from "../convex/lib/agentModel";
+import type { AgentProvider } from "../shared/agentModel";
+import { providerLabel } from "../shared/agentModel";
 import type { GrokCatalog } from "./grokAcp";
 
 export type ProviderMeter =

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/lib/factory";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { dockedBottomPad } from "@/lib/keyboardInset";
 import { Fonts } from "@/constants/theme";

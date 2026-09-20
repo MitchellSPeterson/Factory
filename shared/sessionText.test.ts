@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test } from "bun:test";
 import { takeLeadingSkillMentions, withSkillMentions } from "./sessionText";
 
 test("withSkillMentions prefixes missing skill tokens", () => {

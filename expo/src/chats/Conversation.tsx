@@ -1,5 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
+import { useMutation, useQuery } from "@/lib/factory";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -18,12 +17,12 @@ import Markdown from "react-native-markdown-display";
 import { readPickedAttachment } from "./pickedAttachment";
 import * as Clipboard from "expo-clipboard";
 import { api } from "@/lib/api";
-import { withSkillMentions } from "../../../convex/lib/sessionText";
+import { withSkillMentions } from "../../../shared/sessionText";
 import { dockedBottomPad } from "@/lib/keyboardInset";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useTheme } from "@/hooks/use-theme";
 import { Fonts, Colors } from "@/constants/theme";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { Id } from "@/lib/dataModel";
 import { Action, Notice } from "./ui";
 import { ActivityRow, ThinkingRow, WorkGroup } from "./ActivityRow";
 import {
@@ -33,17 +32,30 @@ import {
 } from "./activity";
 import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
 import type { ChatSettings } from "./lastSettings";
-import { canonicalCursorModel } from "../../../convex/lib/agentModel";
+import { canonicalCursorModel } from "../../../shared/agentModel";
 import { ModelMenu, PickerChip, effortLabel, modelTitle } from "./model-picker";
 import { SlashMenu } from "./SlashMenu";
 import { isCompactDraft, slashItems, slashQuery, type SlashItem } from "./composerSlash";
 import {
   DEFAULT_PERMISSION_MODE,
   DEFAULT_SERVICE_TIER,
-} from "../../../convex/lib/validators";
+  type SessionItemKind,
+} from "../../../shared/validators";
+import type { SessionView as MailboxSessionView } from "../../../shared/dataModel";
 
-type SessionView = NonNullable<FunctionReturnType<typeof api.sessions.get>>;
-type Message = SessionView["messages"][number];
+type SessionView = MailboxSessionView & {
+  session: MailboxSessionView["session"] & {
+    provider: ChatSettings["provider"];
+    effort: ChatSettings["effort"];
+    permissionMode?: ChatSettings["permissionMode"];
+    serviceTier?: ChatSettings["serviceTier"];
+  };
+};
+type Message = SessionView["messages"][number] & {
+  role: string;
+  skillSlugs?: string[];
+  kind?: SessionItemKind;
+};
 type Attachment = { id: Id<"_storage">; uri: string; name: string };
 type PickedSkill = { slug: string; title: string };
 type RepoSkill = { slug: string; title: string; description: string };
@@ -196,7 +208,7 @@ function MessageRow({
           {message.text}
         </Markdown>
       )}
-      {message.imageUrls
+      {(message.imageUrls ?? [])
         .filter((url) => url !== null)
         .map((uri, i) => (
           <Image
@@ -232,7 +244,7 @@ export function Conversation({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
-  const view = useQuery(api.sessions.get, sessionId ? { sessionId } : "skip");
+  const view = useQuery<SessionView | null>(api.sessions.get, sessionId ? { sessionId } : "skip");
   const create = useMutation(api.sessions.create);
   const send = useMutation(api.sessions.send);
   const stop = useMutation(api.sessions.stop);

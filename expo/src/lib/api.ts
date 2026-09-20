@@ -1,1 +1,2 @@
-export { api } from '../../../convex/_generated/api';
+export { api } from "../../../shared/mailboxApi";
+export type { Id, Doc } from "./dataModel";

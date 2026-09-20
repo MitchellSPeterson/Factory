@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { CODEX_MODELS } from "../../../convex/lib/agentModel";
+import { CODEX_MODELS } from "../../../shared/agentModel";
 import { DEFAULT_CHAT_SETTINGS, parseLastSettings } from "./lastSettings";
 
 test("defaults to Codex Terra", () => {

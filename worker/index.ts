@@ -1,13 +1,13 @@
 import { startTerminals } from "./terminals";
 import { Agent } from "@cursor/sdk";
-import { ConvexHttpClient } from "convex/browser";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { api } from "../convex/_generated/api";
-import type { Id } from "../convex/_generated/dataModel";
-import { type AGENT_EFFORTS, toModelSelection } from "../convex/lib/agentModel";
+import { api } from "../shared/mailboxApi";
+import type { Id } from "../shared/ids";
+import { type AGENT_EFFORTS, toModelSelection } from "../shared/agentModel";
+import { httpMailbox, mailboxForRoot, type Mailbox } from "./mailbox/client";
 import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
@@ -24,7 +24,7 @@ import { defaultSimRunner, reconcileSimHub } from "./simHub";
 import { startProjectOperations } from "./projectOperations";
 import { startDeviceHub } from "./deviceHub";
 import { fromCursorUsage, type TokenUsage } from "./usage";
-import { ZERO_USAGE } from "../convex/lib/tokenUsage";
+import { ZERO_USAGE } from "../shared/tokenUsage";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -69,14 +69,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function seed(client: ConvexHttpClient) {
+async function seed(client: Mailbox) {
   const skills = await loadSkillFiles(root);
   await client.mutation(api.seed.ensure, { skills });
 }
 
 
 async function reportSessionUsage(
-  client: ConvexHttpClient,
+  client: Mailbox,
   sessionId: Id<"sessions">,
   usage: TokenUsage | null | undefined,
 ) {
@@ -84,7 +84,7 @@ async function reportSessionUsage(
   await client.mutation(api.sessions.recordUsage, { sessionId, usage });
 }
 
-async function mockSession(client: ConvexHttpClient, launch: SessionLaunch) {
+async function mockSession(client: Mailbox, launch: SessionLaunch) {
   await client.mutation(api.sessions.bindAgent, {
     sessionId: launch.sessionId,
     agentId: `mock-${launch.sessionId}`,
@@ -113,7 +113,7 @@ async function materializeImages(images: Array<{ url: string }>): Promise<string
 }
 
 async function waitForSessionPermission(
-  client: ConvexHttpClient,
+  client: Mailbox,
   sessionId: Id<"sessions">,
   requestId: string,
 ): Promise<{ outcome: "selected"; optionId: string } | { outcome: "cancelled" }> {
@@ -129,7 +129,7 @@ async function waitForSessionPermission(
   }
 }
 
-async function runSessionGrok(client: ConvexHttpClient, launch: SessionLaunch) {
+async function runSessionGrok(client: Mailbox, launch: SessionLaunch) {
   const log = createLiveLog(text => client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }));
   try {
     await runGrokAcpSession({
@@ -176,7 +176,7 @@ async function runSessionGrok(client: ConvexHttpClient, launch: SessionLaunch) {
   }
 }
 
-async function runSessionCodex(client: ConvexHttpClient, launch: SessionLaunch) {
+async function runSessionCodex(client: Mailbox, launch: SessionLaunch) {
   const log = createLiveLog(text => client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }));
   try {
     await runCodexAgent({
@@ -203,7 +203,7 @@ async function runSessionCodex(client: ConvexHttpClient, launch: SessionLaunch) 
   }
 }
 
-async function runSessionCursor(client: ConvexHttpClient, launch: SessionLaunch) {
+async function runSessionCursor(client: Mailbox, launch: SessionLaunch) {
   if (!process.env.CURSOR_API_KEY) {
     throw new Error("Set CURSOR_API_KEY in Settings → Worker environment before starting a chat.");
   }
@@ -257,7 +257,7 @@ async function runSessionCursor(client: ConvexHttpClient, launch: SessionLaunch)
   }
 }
 
-async function runSessionClaude(client: ConvexHttpClient, launch: SessionLaunch) {
+async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
   const bin = process.env.CLAUDE_PATH?.trim() || "claude";
   const log = createLiveLog((text) =>
     client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }),
@@ -292,7 +292,7 @@ async function runSessionClaude(client: ConvexHttpClient, launch: SessionLaunch)
   }
 }
 
-async function runSessionOpenAI(client: ConvexHttpClient, launch: SessionLaunch) {
+async function runSessionOpenAI(client: Mailbox, launch: SessionLaunch) {
   const baseUrl = requireEnv("OPENAI_BASE_URL");
   const model = launch.model.trim() || process.env.OPENAI_MODEL?.trim() || "";
   if (model === "") throw new Error("Set a model for the OpenAI-compatible provider.");
@@ -320,7 +320,7 @@ async function runSessionOpenAI(client: ConvexHttpClient, launch: SessionLaunch)
   }
 }
 
-async function executeSession(client: ConvexHttpClient, launch: SessionLaunch) {
+async function executeSession(client: Mailbox, launch: SessionLaunch) {
   if (process.env.FACTORY_MOCK === "1") await mockSession(client, launch);
   else if (launch.provider === "grok") await runSessionGrok(client, launch);
   else if (launch.provider === "cursor") await runSessionCursor(client, launch);
@@ -329,7 +329,7 @@ async function executeSession(client: ConvexHttpClient, launch: SessionLaunch) {
   else await runSessionCodex(client, launch);
 }
 
-async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
+async function tick(client: Mailbox, identity: WorkerIdentity) {
   const queuedSessions = await client.query(api.sessions.listQueued, {});
   for (const sessionId of queuedSessions) {
     const launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: identity.accessKey });
@@ -340,7 +340,7 @@ async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
         stdin: "pipe", stdout: "ignore", stderr: "ignore",
         env: { ...process.env, ...values.server, ...values.project },
       });
-      proc.stdin.write(JSON.stringify({ launch, convexUrl: identity.convexUrl }));
+      proc.stdin.write(JSON.stringify({ launch, workerUrl: `http://127.0.0.1:${process.env.FACTORY_PAIR_PORT || 3402}`, token: identity.pairingToken }));
       proc.stdin.end();
       let exitCode: number | undefined;
       const exited = proc.exited.then((code) => {
@@ -368,25 +368,13 @@ async function tick(client: ConvexHttpClient, identity: WorkerIdentity) {
   }
 }
 async function waitForIdentity() {
-  const urlIndex = process.argv.indexOf("--url");
-  let url = urlIndex >= 0 ? process.argv[urlIndex + 1] : process.env.CONVEX_URL ?? process.env.VITE_CONVEX_URL;
-  for (;;) {
-    try {
-      return await loadIdentity(root, url);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "";
-      if (message.includes("another Convex")) throw error;
-      console.log("Waiting for a Convex URL in Settings.");
-      url = undefined;
-      await Bun.sleep(1500);
-    }
-  }
+  return await loadIdentity(root);
 }
 
 async function main() {
   if (process.argv.includes("--execute-session")) {
-    const payload = JSON.parse(await Bun.stdin.text()) as { launch: SessionLaunch; convexUrl: string };
-    const client = new ConvexHttpClient(payload.convexUrl);
+    const payload = JSON.parse(await Bun.stdin.text()) as { launch: SessionLaunch; workerUrl: string; token: string };
+    const client = httpMailbox(payload.workerUrl, payload.token);
     try {
       await executeSession(client, payload.launch);
     } catch (error) {
@@ -404,7 +392,7 @@ async function main() {
   const stopPairing = await startPairingHub(root);
   const identity = await waitForIdentity();
   if (identity.keepAwake !== false) setKeepAwake(true);
-  const client = new ConvexHttpClient(identity.convexUrl);
+  const client = mailboxForRoot(root, `http://127.0.0.1:${process.env.FACTORY_PAIR_PORT || 3402}`);
   await client.mutation(api.servers.register, { accessKey: identity.accessKey, name: identity.name, publicKey: identity.publicKey, projectsRoot: identity.projectsRoot });
   await seed(client);
   console.log("Factory worker ready.");
@@ -491,4 +479,8 @@ async function main() {
   finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); stopPairing(); setKeepAwake(false); }
 }
 
-void main().catch(() => { console.error("Worker startup failed. Check the deployment connection and worker identity, then restart."); process.exitCode = 1; });
+void main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Worker startup failed. ${message}`);
+  process.exitCode = 1;
+});

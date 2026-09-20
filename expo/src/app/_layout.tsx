@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppearanceProvider } from '@/lib/appearance-context';
-import { ConvexClientProvider } from '@/lib/convex';
+import { FactoryProvider } from '@/lib/factory';
 import { ProjectScopeProvider } from '@/lib/project-scope-context';
 
 SplashScreen.preventAutoHideAsync();
@@ -45,13 +45,13 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ConvexClientProvider>
-        <ProjectScopeProvider>
-          <AppearanceProvider>
+      <AppearanceProvider>
+        <FactoryProvider>
+          <ProjectScopeProvider>
             <ThemedRoot />
-          </AppearanceProvider>
-        </ProjectScopeProvider>
-      </ConvexClientProvider>
+          </ProjectScopeProvider>
+        </FactoryProvider>
+      </AppearanceProvider>
     </GestureHandlerRootView>
   );
 }

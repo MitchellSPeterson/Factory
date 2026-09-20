@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Id } from '../../../convex/_generated/dataModel';
+import type { Id } from '@/lib/dataModel';
 import { inProjectScope, parseScope, scopeLabel, storedValue } from './project-scope';
 
 const factory = { _id: 'jd7factory' as Id<'projects'>, name: 'Factory' };

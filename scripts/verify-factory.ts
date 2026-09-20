@@ -1,6 +1,7 @@
-import { ConvexHttpClient } from "convex/browser";
 import { readFileSync } from "node:fs";
-import { api } from "../convex/_generated/api";
+import { api } from "../shared/mailboxApi";
+import { httpMailbox } from "../worker/mailbox/client";
+import { loadIdentity } from "../worker/managed";
 
 function envFromLocal(): Record<string, string> {
   try {
@@ -17,12 +18,11 @@ function envFromLocal(): Record<string, string> {
 }
 
 const env = { ...envFromLocal(), ...process.env };
-const url = env.CONVEX_URL ?? env.VITE_CONVEX_URL;
-if (!url) throw new Error("CONVEX_URL missing. Run convex dev first.");
-
-const client = new ConvexHttpClient(url);
+const url = (env.FACTORY_WORKER_URL ?? "http://127.0.0.1:3402").replace(/\/$/, "");
+const identity = await loadIdentity(process.cwd());
+const client = httpMailbox(url, identity.pairingToken);
 const projects = await client.query(api.projects.list, {});
-let project = projects.find((row) => row.name === "Factory");
+let project = (projects as Array<{ _id: string; name: string }>).find((row) => row.name === "Factory");
 if (!project) {
   const projectId = await client.mutation(api.projects.create, {
     name: "Factory",
@@ -44,4 +44,4 @@ const sessionId = await client.mutation(api.sessions.create, {
 });
 const view = await client.query(api.sessions.get, { sessionId });
 if (!view) throw new Error("Session missing");
-console.log("verified", { sessionId, status: view.session.status });
+console.log("verified", { sessionId, status: (view as { session: { status: string } }).session.status });

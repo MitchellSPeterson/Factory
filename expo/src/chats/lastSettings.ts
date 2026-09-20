@@ -8,13 +8,13 @@ import {
   PERMISSION_MODES,
   SERVICE_TIERS,
   canonicalCursorModel,
-} from "../../../convex/lib/agentModel";
+} from "../../../shared/agentModel";
 import {
   DEFAULT_PERMISSION_MODE,
   DEFAULT_SERVICE_TIER,
   type PermissionMode,
   type ServiceTier,
-} from "../../../convex/lib/validators";
+} from "../../../shared/validators";
 
 export type ChatSettings = {
   provider: "codex" | "cursor" | "grok" | "claude" | "openai";

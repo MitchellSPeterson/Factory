@@ -7,22 +7,10 @@
 ## Learned Workspace Facts
 
 - CONTEXT.md is the domain glossary. Use its terms (View all, Project scope, Needs Grilling, Workflow, Job, Run, Ask, Lane) and do not invent synonyms.
-- Offline or local model access is via the OpenAI-compatible worker provider (`FACTORY_PROVIDER=openai` + `OPENAI_BASE_URL`), not a Convex replacement.
+- Offline or local model access is via the OpenAI-compatible worker provider (`FACTORY_PROVIDER=openai` + `OPENAI_BASE_URL`).
 - The mobile terminal is a T3-style live PTY (one session per project, native module + worker-hosted PTY), not a command log or output viewer.
-
-<!-- convex-ai-start -->
-
-This project uses [Convex](https://convex.dev) as its backend.
-
-When working on Convex code, **always read
-`convex/_generated/ai/guidelines.md` first** for important guidelines on
-how to correctly use Convex APIs and patterns. The file contains rules that
-override what you may have learned about Convex from training data.
-
-Convex agent skills for common tasks can be installed by running
-`npx convex ai-files install`.
-
-<!-- convex-ai-end -->
+- Pairing hands the phone a Worker URL plus a household token. The phone may be on LAN, a tailnet, or a public tunnel. State lives in the Worker mailbox on this Mac.
+- On web, look for Factory running locally and connect to it; pairing is for phones and other remote devices.
 
 <!-- graft:start -->
 ## Graft — repo context graph

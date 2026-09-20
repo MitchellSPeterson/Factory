@@ -1,5 +1,5 @@
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "../convex/_generated/api";
+import { api } from "../shared/mailboxApi";
+import type { Mailbox } from "./mailbox/client";
 import type { WorkerIdentity } from "./managed";
 
 const SCROLLBACK = 256 * 1024;
@@ -194,7 +194,7 @@ export function spawnShell(
 
 type SocketData = { projectId: string; cwd: string };
 
-export function startPtyHub(client: ConvexHttpClient, identity: WorkerIdentity) {
+export function startPtyHub(client: Mailbox, identity: WorkerIdentity) {
   const port = Number(process.env.FACTORY_PTY_PORT ?? DEFAULT_PORT);
   const sessions = new Map<string, PtySession>();
 

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/lib/factory";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -12,12 +12,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Doc, Id } from "../../../convex/_generated/dataModel";
-import type { Infer } from "convex/values";
-import {
-  operationResult,
-  projectOperation,
-} from "../../../convex/lib/projectOperations";
+import type { Doc, Id } from "@/lib/dataModel";
+import type { OperationResult, ProjectOperation } from "../../../shared/projectOperations";
 import { api } from "@/lib/api";
 import { dockedBottomPad } from "@/lib/keyboardInset";
 import { Fonts } from "@/constants/theme";
@@ -35,9 +31,9 @@ import {
   type GitTab,
 } from "./format";
 
-type Operation = Infer<typeof projectOperation>;
+type Operation = ProjectOperation;
 type Project = Pick<Doc<"projects">, "_id" | "name" | "localPath">;
-type Status = Extract<Infer<typeof operationResult>, { kind: "status" }>;
+type Status = Extract<OperationResult, { kind: "status" }>;
 
 export function GitWorkspace({ project }: { project: Project }) {
   const theme = useTheme();

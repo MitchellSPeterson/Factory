@@ -1,4 +1,4 @@
-import { useQuery } from 'convex/react';
+import { useQuery } from '@/lib/factory';
 import { useNavigation } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
@@ -6,8 +6,8 @@ import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
 import { api } from '@/lib/api';
 import { useTheme } from '@/hooks/use-theme';
 import { useProjectScope } from '@/lib/project-scope-context';
-import { providerLabel } from '../../../../convex/lib/agentModel';
-import type { Doc } from '../../../../convex/_generated/dataModel';
+import { providerLabel } from '../../../../shared/agentModel';
+import type { Doc } from '@/lib/dataModel';
 import {
   formatCheckedAt,
   formatPercent,

@@ -7,7 +7,7 @@ import {
   permissionModeLabel,
   serviceTierDescription,
   serviceTierLabel,
-} from "../../../convex/lib/agentModel";
+} from "../../../shared/agentModel";
 import type { ChatSettings } from "./lastSettings";
 
 export type PickerOptionId = "effort" | "service" | "runtime";

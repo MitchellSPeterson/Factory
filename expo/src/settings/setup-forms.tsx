@@ -1,11 +1,11 @@
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "@/lib/factory";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
-import { pairingBase, writeConvexUrl } from "@/lib/convex-url";
+import { pairingBase } from "@/lib/pairing";
 import { sealSecret, serverVariableNames } from "@/lib/workerSettings";
 import { SettingsGroup, SettingsIcons, SettingsMessage, SettingsRow } from "@/settings/ui";
 
@@ -21,7 +21,6 @@ export function FactorySetup({ publicKey }: { publicKey?: string }) {
   return (
     <>
       <PairPhone />
-      <ConvexGroup />
       <ProviderKeys publicKey={publicKey} setVariable={setVariable} />
       <AddProject createProject={createProject} importRepo={importRepo} github={github} />
       <GitHubGroup
@@ -36,55 +35,94 @@ export function FactorySetup({ publicKey }: { publicKey?: string }) {
 }
 
 function PairPhone() {
-  const [address, setAddress] = useState("");
+  const theme = useTheme();
+  const [status, setStatus] = useState<{ pairing: string; tailscale: string; tunnel: string; token: string }>({
+    pairing: "",
+    tailscale: "",
+    tunnel: "",
+    token: "",
+  });
+  const [tunnel, setTunnel] = useState("");
+  const [message, setMessage] = useState("");
   useEffect(() => {
-    void fetch(`${pairingBase("127.0.0.1")}/status`)
-      .then((response) => response.json())
-      .then((body: unknown) => {
-        if (body && typeof body === "object" && "pairing" in body && typeof body.pairing === "string") {
-          setAddress(body.pairing);
-        }
+    void Promise.all([
+      fetch(`${pairingBase("127.0.0.1")}/status`).then((response) => response.json()),
+      fetch(`${pairingBase("127.0.0.1")}/pair`).then((response) => response.json()),
+    ])
+      .then(([statusBody, pairBody]: [unknown, unknown]) => {
+        const statusRecord = statusBody && typeof statusBody === "object" ? (statusBody as Record<string, unknown>) : {};
+        const pairRecord = pairBody && typeof pairBody === "object" ? (pairBody as Record<string, unknown>) : {};
+        setStatus({
+          pairing: typeof statusRecord.pairing === "string" ? statusRecord.pairing : "",
+          tailscale: typeof statusRecord.tailscale === "string" ? statusRecord.tailscale : "",
+          tunnel: typeof statusRecord.tunnel === "string" ? statusRecord.tunnel : "",
+          token: typeof pairRecord.token === "string" ? pairRecord.token : "",
+        });
+        if (typeof statusRecord.tunnel === "string") setTunnel(statusRecord.tunnel);
       })
-      .catch(() => setAddress(""));
+      .catch(() => {});
   }, []);
   return (
     <SettingsGroup
       title="Pair a phone"
-      footer="On the same Wi-Fi, type this address or the Mac IP on the phone. The Worker hands over the Convex URL.">
+      footer="How a phone learns which Factory. Same Wi-Fi uses the LAN address. A tailnet uses the Tailscale row. Away from home, save a public tunnel URL.">
       <SettingsRow
         icon={SettingsIcons.machine}
-        label="This Mac"
-        value={address || "Start the Worker to see the pairing address."}
+        label="LAN"
+        value={status.pairing || "Start the Worker to see the pairing address."}
         valueMode="middle"
       />
-    </SettingsGroup>
-  );
-}
-
-function ConvexGroup() {
-  const theme = useTheme();
-  const [url, setUrl] = useState("");
-  return (
-    <SettingsGroup title="Convex" footer="Anyone with this URL can use this Factory. It is the household key.">
+      <SettingsRow
+        icon={SettingsIcons.machine}
+        label="Tailscale"
+        value={status.tailscale || "Join this Mac to a tailnet to see an address."}
+        valueMode="middle"
+      />
+      <SettingsRow
+        icon={SettingsIcons.machine}
+        label="Pairing token"
+        value={status.token || "Start the Worker to see the household key."}
+        valueMode="middle"
+      />
       <View style={styles.pad}>
         <TextInput
-          accessibilityLabel="Convex URL"
+          accessibilityLabel="Public tunnel URL"
           autoCapitalize="none"
           autoCorrect={false}
-          placeholder="https://….convex.cloud"
+          placeholder="https://factory.example"
           placeholderTextColor={theme.textSecondary}
-          value={url}
-          onChangeText={setUrl}
+          value={tunnel}
+          onChangeText={setTunnel}
           style={[styles.field, { color: theme.text, borderColor: theme.line }]}
         />
         <Pressable
           accessibilityRole="button"
           onPress={() => {
-            const next = url.trim();
-            if (next.startsWith("https://")) writeConvexUrl(next);
+            void (async () => {
+              try {
+                const response = await fetch(`${pairingBase("127.0.0.1")}/settings`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ tunnelUrl: tunnel.trim() }),
+                });
+                const body: unknown = await response.json();
+                if (!response.ok) {
+                  throw new Error(
+                    body && typeof body === "object" && "error" in body && typeof body.error === "string"
+                      ? body.error
+                      : "Could not save tunnel.",
+                  );
+                }
+                setStatus((current) => ({ ...current, tunnel: tunnel.trim() }));
+                setMessage("Tunnel saved. Pair the phone with that URL and the token from /pair.");
+              } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Could not save tunnel.");
+              }
+            })();
           }}>
-          <ThemedText style={{ color: theme.accent }}>Save URL on this device</ThemedText>
+          <ThemedText style={{ color: theme.accent }}>Save public tunnel</ThemedText>
         </Pressable>
+        {message ? <ThemedText themeColor="textSecondary">{message}</ThemedText> : null}
       </View>
     </SettingsGroup>
   );

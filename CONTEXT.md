@@ -29,7 +29,7 @@ This Mac, as Factory sees it. One Worker per Factory. Offline means this Mac is 
 _Avoid_: Server, agent runner, backend, menu bar
 
 **Pairing**:
-How a phone learns which Factory to use.
+How a phone learns which Factory to use. The phone may be on the same Wi-Fi, a tailnet, or a public tunnel.
 _Avoid_: Device connection, IP setup, login
 
 **Provider**:

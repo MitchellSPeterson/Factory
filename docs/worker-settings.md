@@ -5,12 +5,12 @@
 On this machine, install the Factory dependencies and Git, then start:
 
 ```sh
-bun run worker --url https://YOUR-DEPLOYMENT.convex.cloud
+bun run worker
 ```
 
-The URL is public deployment configuration. Factory saves it and generates a private worker identity under `.factory/worker.json` (file mode 0600). Subsequent starts need only `bun run worker`. Existing `.env.local` configuration remains compatible.
+Factory generates a private worker identity under `.factory/worker.json` (file mode 0600) and stores Sessions in `.factory/mailbox.sqlite`. Existing `.env.local` provider configuration remains compatible.
 
-The worker registers itself with this Factory. Settings shows whether this machine is online. No pairing key is required.
+The worker is this Factory. Settings shows whether this machine is online. Pairing uses the LAN address, a Tailscale address, or a public tunnel plus the pairing token.
 
 Back up `.factory/worker.json` securely. It contains the private key needed to decrypt saved values. Do not commit it. Losing it requires reentering saved variables. Keep this identity outside cloned Project directories. `.factory/` is ignored by Git.
 
@@ -22,7 +22,7 @@ Back up `.factory/worker.json` securely. It contains the private key needed to d
 4. Click **Add Project and clone**. Its status progresses from queued to cloning to ready. If the worker is offline, it picks up queued imports after reconnecting.
 5. Open the Project to see its path or retry a failed clone.
 
-Private repositories require **Contents: read** on the GitHub token/App. The browser encrypts its GitHub token for this machine. Convex holds only the encrypted import credential and deletes it when the import completes or fails. Failed imports require a current GitHub connection to retry.
+Private repositories require **Contents: read** on the GitHub token/App. The browser encrypts its GitHub token for this machine. The Worker holds only the encrypted import credential and deletes it when the import completes or fails. Failed imports require a current GitHub connection to retry.
 
 Repositories clone under the worker's `.factory/projects/<Project ID>` directory. Git chooses the repository's default branch. Clones run without Git hooks, submodule initialization, dependency installation, or project scripts. Credentials are supplied through a temporary askpass helper and never included in the remote URL. A retry preserves an existing matching checkout and refuses to replace another directory/repository. Deleting a Project removes its configuration and encrypted variables, but does not delete its checkout.
 
@@ -39,11 +39,11 @@ Managed Projects stay on this machine. Jobs cannot start until cloning finishes.
 
 Set other application variables under **Project → Project environment** for managed Projects. Values may be multiline. Names are case-sensitive uppercase environment names. Worker/bootstrap and shell-startup variables are reserved.
 
-Values are encrypted in the browser using AES-GCM with the AES key wrapped by this machine's RSA-OAEP public key. Only this machine has the private key. The editor lists variable names and timestamps, not saved values; use Replace to change a value. Neither Convex nor the browser can decrypt stored values.
+Values are encrypted in the browser using AES-GCM with the AES key wrapped by this machine's RSA-OAEP public key. Only this machine has the private key. The editor lists variable names and timestamps, not saved values; use Replace to change a value. The Worker mailbox stores ciphertext; the browser cannot decrypt stored values.
 
 Each new Run loads its settings and starts in a separate child process. Project values are injected into that process; cloud Cursor Runs also receive their Project values through the SDK's `envVars`. Active Runs retain their original configuration. No Project `.env` file is generated. Provider settings override startup environment variables; removing an override restores any startup value that already existed.
 
-Environment variables are available to code and agents executing the Run. Factory retains its existing trusted-operator access model for Workflows, Skills, and Jobs. Run only trusted Projects/Workflows on a worker holding secrets. This editor manages worker and Run settings, not Convex deployment secrets or frontend build-time configuration.
+Environment variables are available to code and agents executing the Run. Factory retains its existing trusted-operator access model for Workflows, Skills, and Jobs. Run only trusted Projects/Workflows on a worker holding secrets. This editor manages Worker and Run settings, not frontend build-time configuration.
 
 ## Tests
 

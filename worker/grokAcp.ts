@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import type { AGENT_EFFORTS } from "../convex/lib/agentModel";
-import type { PermissionMode } from "../convex/lib/validators";
+import type { AGENT_EFFORTS } from "../shared/agentModel";
+import type { PermissionMode } from "../shared/validators";
 import { createAcpClient, type AcpProcess } from "./acpClient";
 import { grokResumeId } from "./grokAgent";
 import type { TokenUsage } from "./usage";

@@ -19,7 +19,7 @@ import {
   CURSOR_MODELS,
   GROK_MODELS,
   OPENAI_MODELS,
-} from "../../../convex/lib/agentModel";
+} from "../../../shared/agentModel";
 import { favoriteId, useFavorites } from "./favorites";
 import type { ChatSettings } from "./lastSettings";
 import {

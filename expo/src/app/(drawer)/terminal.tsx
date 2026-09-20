@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "@/lib/factory";
 import { Drawer } from "expo-router/drawer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Doc, Id } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { useProjectScope } from "@/lib/project-scope-context";
 import { useTheme } from "@/hooks/use-theme";
