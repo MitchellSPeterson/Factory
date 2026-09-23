@@ -11,13 +11,10 @@ export type ProjectOption = Pick<
 
 export function parseScope(
   stored: string,
-  projects: { _id: Id<'projects'> }[] | undefined,
+  _projects?: { _id: Id<'projects'> }[] | undefined,
 ): ProjectScope {
   if (stored === '') return { kind: 'viewAll' };
-  if (projects === undefined) return { kind: 'project', projectId: asProjectId(stored) };
-  const match = projects.find((project) => project._id === stored);
-  if (match) return { kind: 'project', projectId: match._id };
-  return { kind: 'viewAll' };
+  return { kind: 'project', projectId: asProjectId(stored) };
 }
 
 export function storedValue(scope: ProjectScope): string {

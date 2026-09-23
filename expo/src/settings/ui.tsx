@@ -56,6 +56,7 @@ export function SettingsGroup({
 
 export function SettingsRow({
   icon,
+  leading,
   label,
   value,
   detail,
@@ -65,6 +66,7 @@ export function SettingsRow({
   children,
 }: {
   icon?: SettingsIcon;
+  leading?: ReactNode;
   label: string;
   value?: string;
   detail?: string;
@@ -77,7 +79,7 @@ export function SettingsRow({
   return (
     <View style={styles.row}>
       <View style={styles.rowMain}>
-        {icon ? (
+        {leading ? leading : icon ? (
           <SymbolView name={icon} size={22} tintColor={theme.text} />
         ) : null}
         <View style={styles.labelWrap}>

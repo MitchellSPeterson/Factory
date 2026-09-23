@@ -92,6 +92,7 @@ export const api = {
       },
       Id<"projects">
     >("projects.create"),
+    addFolder: ref<{ name: string; localPath: string }, Id<"projects">>("projects.addFolder"),
     update: ref<object, null>("projects.update"),
     remove: ref<object, null>("projects.remove"),
     reportSkills: ref<object, null>("projects.reportSkills"),
@@ -156,6 +157,8 @@ export const api = {
   github: {
     connection: ref<Empty, GithubConnection | null>("github.connection"),
     save: ref<{ login: string; token: string }, null>("github.save"),
+    connect: ref<{ token: string }, { login: string }>("github.connect"),
+    listRepos: ref<Empty, Array<{ repo: string; description: string }>>("github.listRepos"),
     disconnect: ref<Empty, null>("github.disconnect"),
     begin: ref<{ clientId: string }, { deviceCode: string; userCode: string; expiresIn: number; interval: number }>(
       "github.begin",

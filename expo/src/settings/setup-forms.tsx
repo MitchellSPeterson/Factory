@@ -1,4 +1,4 @@
-import { useAction, useMutation, useQuery } from "@/lib/factory";
+import { useMutation, useQuery } from "@/lib/factory";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
@@ -7,29 +7,24 @@ import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { pairingBase } from "@/lib/pairing";
 import { sealSecret, serverVariableNames } from "@/lib/workerSettings";
+import { AddProjectFlow, useOpenAddedProject } from "@/settings/add-project";
 import { SettingsGroup, SettingsIcons, SettingsMessage, SettingsRow } from "@/settings/ui";
 
 export function FactorySetup({ publicKey }: { publicKey?: string }) {
   const github = useQuery(api.github.connection);
-  const createProject = useMutation(api.projects.create);
-  const importRepo = useMutation(api.servers.importRepository);
   const setVariable = useMutation(api.servers.setVariable);
-  const saveGithub = useMutation(api.github.save);
   const disconnectGithub = useMutation(api.github.disconnect);
-  const beginGithub = useAction(api.github.begin);
-  const pollGithub = useAction(api.github.poll);
+  const openAdded = useOpenAddedProject();
   return (
     <>
       <PairPhone />
       <ProviderKeys publicKey={publicKey} setVariable={setVariable} />
-      <AddProject createProject={createProject} importRepo={importRepo} github={github} />
-      <GitHubGroup
-        github={github}
-        saveGithub={saveGithub}
-        disconnectGithub={disconnectGithub}
-        beginGithub={beginGithub}
-        pollGithub={pollGithub}
-      />
+      <SettingsGroup title="Add a Project" footer="Use a folder on this Mac, or clone from GitHub into the Worker folder.">
+        <View style={styles.pad}>
+          <AddProjectFlow onAdded={openAdded} />
+        </View>
+      </SettingsGroup>
+      <GitHubGroup github={github} disconnectGithub={disconnectGithub} />
     </>
   );
 }
@@ -88,6 +83,7 @@ function PairPhone() {
         <TextInput
           accessibilityLabel="Public tunnel URL"
           autoCapitalize="none"
+          autoComplete="off"
           autoCorrect={false}
           placeholder="https://factory.example"
           placeholderTextColor={theme.textSecondary}
@@ -147,6 +143,7 @@ function ProviderKeys({
         <TextInput
           accessibilityLabel="Setting name"
           autoCapitalize="none"
+          autoComplete="off"
           value={name}
           onChangeText={(text) => setName(text as (typeof serverVariableNames)[number])}
           style={[styles.field, { color: theme.text, borderColor: theme.line }]}
@@ -154,6 +151,7 @@ function ProviderKeys({
         <TextInput
           accessibilityLabel="Setting value"
           autoCapitalize="none"
+          autoComplete="new-password"
           autoCorrect={false}
           secureTextEntry
           placeholder="Paste a key or path"
@@ -187,142 +185,14 @@ function ProviderKeys({
   );
 }
 
-function AddProject({
-  createProject,
-  importRepo,
-  github,
-}: {
-  createProject: (args: {
-    name: string;
-    kind: "web" | "expo" | "mixed";
-    localPath: string;
-    githubRepo: string;
-    defaultRuntime: "local";
-  }) => Promise<string>;
-  importRepo: (args: { repo: string; name: string; kind: "web"; sealedToken: string }) => Promise<string>;
-  github: { login: string; token: string } | null | undefined;
-}) {
-  const theme = useTheme();
-  const live = useQuery(api.servers.local);
-  const [name, setName] = useState("");
-  const [localPath, setLocalPath] = useState("");
-  const [repo, setRepo] = useState("");
-  const [message, setMessage] = useState("");
-  return (
-    <SettingsGroup title="Add a Project" footer="Point at a checkout on this Mac, or clone from GitHub into ~/Factory.">
-      <View style={styles.pad}>
-        <TextInput
-          accessibilityLabel="Project name"
-          placeholder="Name"
-          placeholderTextColor={theme.textSecondary}
-          value={name}
-          onChangeText={setName}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
-        />
-        <TextInput
-          accessibilityLabel="Local path"
-          autoCapitalize="none"
-          placeholder="/Users/you/code/app"
-          placeholderTextColor={theme.textSecondary}
-          value={localPath}
-          onChangeText={setLocalPath}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
-        />
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            void (async () => {
-              try {
-                const picked = await pickFolderFromWorker();
-                if (picked) setLocalPath(picked);
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Picker failed.");
-              }
-            })();
-          }}>
-          <ThemedText style={{ color: theme.accent }}>Choose folder on this Mac</ThemedText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            void (async () => {
-              try {
-                await createProject({
-                  name: name.trim() || localPath.split("/").filter(Boolean).at(-1) || "Project",
-                  kind: "web",
-                  localPath: localPath.trim(),
-                  githubRepo: "",
-                  defaultRuntime: "local",
-                });
-                setMessage("Project added.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Could not add Project.");
-              }
-            })();
-          }}>
-          <ThemedText style={{ color: theme.accent }}>Add checkout</ThemedText>
-        </Pressable>
-        <TextInput
-          accessibilityLabel="GitHub repository"
-          autoCapitalize="none"
-          placeholder="owner/repo"
-          placeholderTextColor={theme.textSecondary}
-          value={repo}
-          onChangeText={setRepo}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
-        />
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            void (async () => {
-              try {
-                if (!github?.token) throw new Error("Connect GitHub first.");
-                if (!live?.publicKey) throw new Error("Start the Worker first.");
-                await importRepo({
-                  repo: repo.trim(),
-                  name: name.trim() || repo.trim().split("/")[1] || "Project",
-                  kind: "web",
-                  sealedToken: await sealSecret(live.publicKey, github.token),
-                });
-                setMessage("Clone queued.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Could not clone.");
-              }
-            })();
-          }}>
-          <ThemedText style={{ color: theme.accent }}>Clone from GitHub</ThemedText>
-        </Pressable>
-        {message ? <ThemedText themeColor="textSecondary">{message}</ThemedText> : null}
-      </View>
-    </SettingsGroup>
-  );
-}
-
 function GitHubGroup({
   github,
-  saveGithub,
   disconnectGithub,
-  beginGithub,
-  pollGithub,
 }: {
   github: { login: string; token: string } | null | undefined;
-  saveGithub: (args: { login: string; token: string }) => Promise<null>;
   disconnectGithub: () => Promise<null>;
-  beginGithub: (args: { clientId: string }) => Promise<{
-    deviceCode: string;
-    userCode: string;
-    expiresIn: number;
-    interval: number;
-  }>;
-  pollGithub: (args: { clientId: string; deviceCode: string }) => Promise<{
-    status: "pending" | "slow_down" | "connected";
-    token?: string;
-  }>;
 }) {
   const theme = useTheme();
-  const [clientId, setClientId] = useState("");
-  const [userCode, setUserCode] = useState("");
-  const [message, setMessage] = useState("");
   if (github === undefined) {
     return (
       <SettingsGroup title="GitHub">
@@ -330,68 +200,23 @@ function GitHubGroup({
       </SettingsGroup>
     );
   }
-  if (github) {
+  if (!github) {
     return (
-      <SettingsGroup title="GitHub" footer="Used to clone repositories into ~/Factory.">
-        <SettingsRow icon={SettingsIcons.project} label={github.login} value="Connected" />
-        <View style={styles.pad}>
-          <Pressable accessibilityRole="button" onPress={() => void disconnectGithub()}>
-            <ThemedText style={{ color: theme.danger }}>Disconnect</ThemedText>
-          </Pressable>
-        </View>
+      <SettingsGroup title="GitHub" footer="Connect from Clone from GitHub when you add a Project.">
+        <SettingsMessage>Not connected.</SettingsMessage>
       </SettingsGroup>
     );
   }
   return (
-    <SettingsGroup title="GitHub" footer="Opens GitHub device sign-in. Create a GitHub App with Device Flow and paste its client ID.">
+    <SettingsGroup title="GitHub" footer="Used to list and clone repositories into the Worker folder.">
+      <SettingsRow icon={SettingsIcons.project} label={github.login} value="Connected" />
       <View style={styles.pad}>
-        <TextInput
-          accessibilityLabel="GitHub App client ID"
-          autoCapitalize="none"
-          placeholder="Iv1.…"
-          placeholderTextColor={theme.textSecondary}
-          value={clientId}
-          onChangeText={setClientId}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
-        />
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            void (async () => {
-              try {
-                const started = await beginGithub({ clientId: clientId.trim() });
-                setUserCode(started.userCode);
-                setMessage(`Enter ${started.userCode} at github.com/login/device`);
-                for (;;) {
-                  await new Promise((resolve) => setTimeout(resolve, started.interval * 1000));
-                  const next = await pollGithub({ clientId: clientId.trim(), deviceCode: started.deviceCode });
-                  if (next.status === "connected" && next.token) {
-                    await saveGithub({ login: "github", token: next.token });
-                    setMessage("GitHub connected.");
-                    return;
-                  }
-                }
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "GitHub sign-in failed.");
-              }
-            })();
-          }}>
-          <ThemedText style={{ color: theme.accent }}>Connect GitHub</ThemedText>
+        <Pressable accessibilityRole="button" onPress={() => void disconnectGithub()}>
+          <ThemedText style={{ color: theme.danger }}>Disconnect</ThemedText>
         </Pressable>
-        {userCode ? <ThemedText>Code {userCode}</ThemedText> : null}
-        {message ? <ThemedText themeColor="textSecondary">{message}</ThemedText> : null}
       </View>
     </SettingsGroup>
   );
-}
-
-async function pickFolderFromWorker() {
-  const response = await fetch(`${pairingBase("127.0.0.1")}/pick-folder`, { method: "POST" });
-  const body: unknown = await response.json();
-  if (!body || typeof body !== "object" || !("path" in body) || typeof body.path !== "string") {
-    throw new Error("Open Factory on this Mac to pick a folder.");
-  }
-  return body.path;
 }
 
 const styles = StyleSheet.create({

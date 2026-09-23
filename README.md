@@ -60,7 +60,7 @@ Settings should show this machine as Online. If it says Offline, the worker is n
 
 ## Add a Project
 
-A Project is one git checkout Factory is allowed to work in. Add it in Settings: folder picker, or clone from GitHub. Clones land in `~/Factory` unless you change that folder.
+A Project is one git repository Factory is allowed to work in. Add it from the drawer picker or Settings. Use a folder on this Mac, or clone from GitHub. Clones land in `~/Factory` unless you change that folder in Settings.
 
 The drawer lists Projects. View all shows every Chat. Choosing a Project scopes the list to that repo.
 

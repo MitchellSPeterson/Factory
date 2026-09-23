@@ -5,8 +5,12 @@ A personal app for Sessions in your product repos. You sit here. The Worker does
 ## Language
 
 **Project**:
-A single git repository you develop, including a monorepo that contains Expo and web together.
-_Avoid_: App, workspace, product
+A single git repository on this Mac that Factory is allowed to work in, including a monorepo that contains Expo and web together.
+_Avoid_: App, workspace, product, checkout
+
+**Add a Project**:
+How a git repository becomes a Project. Use a folder already on this Mac, or clone a GitHub repository onto this Mac.
+_Avoid_: Import, add checkout, add workspace
 
 **Project scope**:
 The drawer limited to one chosen Project.

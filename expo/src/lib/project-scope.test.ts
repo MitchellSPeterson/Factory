@@ -16,8 +16,11 @@ test('a known Project id is Project scope', () => {
   });
 });
 
-test('a deleted Project falls back to View all once the list has loaded', () => {
-  expect(parseScope('jd7gone', [factory])).toEqual({ kind: 'viewAll' });
+test('a stored id stays selected when the list has not caught up', () => {
+  expect(parseScope('jd7new', [factory])).toEqual({
+    kind: 'project',
+    projectId: 'jd7new' as Id<'projects'>,
+  });
 });
 
 test('a stored id stays selected while Projects are still loading', () => {

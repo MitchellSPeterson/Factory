@@ -20,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { IconNames } from '@/components/icon-button';
+import { ProjectPicture } from '@/components/project-picture';
 import { ThemedText } from '@/components/themed-text';
 import { Colors } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -108,12 +109,8 @@ export function ProjectSwitcher() {
               transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
             },
           ]}>
-          {currentProject?.name[0] ? (
-            <View style={[styles.glyph, { backgroundColor: theme.subtleHover }]}>
-              <ThemedText type="smallBold" style={styles.glyphLetter}>
-                {currentProject.name[0].toUpperCase()}
-              </ThemedText>
-            </View>
+          {currentProject ? (
+            <ProjectPicture githubRepo={currentProject.githubRepo} name={currentProject.name} />
           ) : (
             <SymbolView name={IconNames.layers} size={16} tintColor={theme.textSecondary} />
           )}
@@ -163,6 +160,7 @@ export function ProjectSwitcher() {
                 <ScopeOption
                   key={project._id}
                   label={project.name}
+                  githubRepo={project.githubRepo}
                   selected={scope.kind === 'project' && scope.projectId === project._id}
                   onPress={() => choose({ kind: 'project', projectId: project._id })}
                 />
@@ -202,10 +200,12 @@ function Chevron({ open, color }: { open: boolean; color: string }) {
 
 function ScopeOption({
   label,
+  githubRepo,
   selected,
   onPress,
 }: {
   label: string;
+  githubRepo?: string;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -224,6 +224,7 @@ function ScopeOption({
           transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
         },
       ]}>
+      {githubRepo !== undefined ? <ProjectPicture githubRepo={githubRepo} name={label} size={20} /> : null}
       <ThemedText type="small" numberOfLines={1} style={styles.optionLabel}>
         {label}
       </ThemedText>
@@ -264,18 +265,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderCurve: 'continuous',
     ...pressMotion,
-  },
-  glyph: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  glyphLetter: {
-    fontSize: 11,
-    lineHeight: 14,
   },
   name: {
     flex: 1,

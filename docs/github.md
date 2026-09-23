@@ -1,6 +1,6 @@
 # GitHub in Factory
 
-Open **Settings → GitHub** and connect your GitHub account. The connection is used to list repositories when adding or editing Projects and to clone them onto this machine.
+Connect GitHub when you add a Project with **Clone from GitHub**. Paste a token. Factory lists repositories that token can see. Type `owner/repo` if the list missed one.
 
 ## Connect with a token
 

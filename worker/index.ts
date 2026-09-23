@@ -1,6 +1,7 @@
 import { startTerminals } from "./terminals";
 import { Agent } from "@cursor/sdk";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -258,16 +259,23 @@ async function runSessionCursor(client: Mailbox, launch: SessionLaunch) {
 }
 
 async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
-  const bin = process.env.CLAUDE_PATH?.trim() || "claude";
+  const localClaude = path.join(os.homedir(), ".local/bin/claude");
+  const bin = process.env.CLAUDE_PATH?.trim() || (existsSync(localClaude) ? localClaude : "claude");
   const log = createLiveLog((text) =>
     client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }),
   );
   try {
+    const agentId = launch.agentId && !launch.agentId.startsWith("claude-")
+      ? launch.agentId
+      : randomUUID();
     await client.mutation(api.sessions.bindAgent, {
       sessionId: launch.sessionId,
-      agentId: `claude-${launch.sessionId}`,
+      agentId,
     });
-    const proc = Bun.spawn([bin, "-p", launch.prompt, "--output-format", "text"], {
+    const args = [bin, "-p", launch.prompt, "--output-format", "text", "--model", launch.model,
+      "--effort", launch.effort === "ultra" ? "max" : launch.effort,
+      ...(launch.agentId === agentId ? ["--resume", agentId] : ["--session-id", agentId])];
+    const proc = Bun.spawn(args, {
       cwd: launch.project.localPath,
       stdout: "pipe",
       stderr: "pipe",
@@ -401,8 +409,27 @@ async function main() {
     return () => {};
   });
   // Imports and heartbeats continue while a long-running agent is active.
-  const heartbeat = setInterval(() => { void client.mutation(api.servers.heartbeat, { accessKey: identity.accessKey }).catch(() => {}); }, 15_000);
-  async function imports() { for (;;) { try { await importTick(client, identity); } catch { console.error("Import synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  const heartbeat = setInterval(() => {
+    void (async () => {
+      const live = await loadIdentity(root);
+      await client.mutation(api.servers.register, {
+        accessKey: live.accessKey,
+        name: live.name,
+        publicKey: live.publicKey,
+        projectsRoot: live.projectsRoot,
+      });
+    })().catch(() => {});
+  }, 15_000);
+  async function imports() {
+    for (;;) {
+      try {
+        await importTick(client, await loadIdentity(root));
+      } catch {
+        console.error("Import synchronization failed; retrying.");
+      }
+      await Bun.sleep(1500);
+    }
+  }
   void imports();
   const stopProjectOperations = startProjectOperations(client, identity);
   const stopTerminals = startTerminals(client, identity);

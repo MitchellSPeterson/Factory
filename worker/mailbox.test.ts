@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { api } from "../shared/mailboxApi";
@@ -146,6 +146,47 @@ test("project operations enqueue, claim, and cancel", async () => {
   });
   const rows = await client.query(api.projectOperations.list, { projectId });
   expect(rows[0]?.state).toBe("done");
+});
+
+test("addFolder requires a git repo and reopens an existing path", async () => {
+  const client = mailbox();
+  const dir = mkdtempSync(path.join(os.tmpdir(), "factory-add-"));
+  temps.push(dir);
+  await expect(
+    client.mutation(api.projects.addFolder, { name: "Nope", localPath: dir }),
+  ).rejects.toThrow("git repository");
+  mkdirSync(path.join(dir, ".git"));
+  writeFileSync(path.join(dir, ".git", "config"), "[remote \"origin\"]\n\turl = git@github.com:acme/app.git\n");
+  const id = await client.mutation(api.projects.addFolder, { name: "App", localPath: dir });
+  expect(await client.mutation(api.projects.addFolder, { name: "Other", localPath: `${dir}/` })).toBe(id);
+  const project = await client.query(api.projects.get, { projectId: id });
+  expect(project?.name).toBe("App");
+  expect(project?.githubRepo).toBe("acme/app");
+});
+
+test("importing the same GitHub repo opens the existing Project", async () => {
+  const client = mailbox();
+  await register(client);
+  const first = await client.mutation(api.servers.importRepository, {
+    accessKey: key,
+    repo: "owner/repo",
+    name: "Repo",
+    kind: "web",
+    sealedToken: sealed,
+  });
+  const again = await client.mutation(api.servers.importRepository, {
+    accessKey: key,
+    repo: "Owner/Repo",
+    name: "Other",
+    kind: "web",
+    sealedToken: sealed,
+  });
+  expect(again).toBe(first);
+});
+
+test("listRepos requires a GitHub connection", async () => {
+  const client = mailbox();
+  await expect(client.action(api.github.listRepos, {})).rejects.toThrow("Connect GitHub");
 });
 
 test("seed skills and github connection", async () => {

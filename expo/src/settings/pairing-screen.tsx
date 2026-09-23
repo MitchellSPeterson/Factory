@@ -52,6 +52,7 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
       <TextInput
         accessibilityLabel="Worker URL"
         autoCapitalize="none"
+        autoComplete="off"
         autoCorrect={false}
         placeholder="http://100.x.x.x:3402 or https://factory.example"
         placeholderTextColor={theme.textSecondary}
@@ -62,6 +63,7 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
       <TextInput
         accessibilityLabel="Pairing token"
         autoCapitalize="none"
+        autoComplete="off"
         autoCorrect={false}
         placeholder="Pairing token"
         placeholderTextColor={theme.textSecondary}
@@ -78,6 +80,7 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
       <TextInput
         accessibilityLabel="Mac IP"
         autoCapitalize="none"
+        autoComplete="off"
         autoCorrect={false}
         placeholder="192.168.1.20"
         placeholderTextColor={theme.textSecondary}

@@ -33,6 +33,20 @@ test("parseLastSettings returns the stored model", () => {
   });
 });
 
+test("parseLastSettings accepts GPT-6 Sol and Luna", () => {
+  for (const model of ["gpt-6-sol", "gpt-6-luna"]) {
+    expect(parseLastSettings(JSON.stringify({ provider: "codex", model, effort: "high" })))
+      .toMatchObject({ provider: "codex", model, effort: "high" });
+  }
+});
+
+test("parseLastSettings accepts Claude Code model aliases", () => {
+  for (const model of ["opus", "sonnet", "haiku"]) {
+    expect(parseLastSettings(JSON.stringify({ provider: "claude", model, effort: "medium" })))
+      .toMatchObject({ provider: "claude", model, effort: "medium" });
+  }
+});
+
 test("parseLastSettings aliases retired Cursor model ids", () => {
   expect(
     parseLastSettings(

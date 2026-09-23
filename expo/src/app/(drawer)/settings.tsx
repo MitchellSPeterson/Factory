@@ -1,10 +1,13 @@
 import { useQuery } from '@/lib/factory';
 import { useNavigation } from 'expo-router';
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View } from 'react-native';
 
+import { ProjectPicture } from '@/components/project-picture';
+import { ThemedText } from '@/components/themed-text';
 import { api } from '@/lib/api';
 import { useTheme } from '@/hooks/use-theme';
+import { pairingBase } from '@/lib/pairing';
 import { useProjectScope } from '@/lib/project-scope-context';
 import { providerLabel } from '../../../../shared/agentModel';
 import type { Doc } from '@/lib/dataModel';
@@ -67,7 +70,7 @@ export default function SettingsPage() {
 
       <SettingsGroup
         title="This machine"
-        footer="This machine clones repositories and runs your chats.">
+        footer="This machine clones repositories and runs your chats. Change Clone into to pick a different parent folder.">
         {live === undefined ? (
           <SettingsMessage>Checking this machine…</SettingsMessage>
         ) : live ? (
@@ -77,12 +80,7 @@ export default function SettingsPage() {
               label={live.name}
               accessory={<StatusValue online={online} />}
             />
-            <SettingsRow
-              icon={SettingsIcons.folder}
-              label="Repositories"
-              value={live.projectsRoot}
-              valueMode="middle"
-            />
+            <CloneFolder path={live.projectsRoot} />
           </>
         ) : (
           <SettingsRow
@@ -137,7 +135,7 @@ export default function SettingsPage() {
             title="Project"
             footer="Settings for the Project selected in the drawer.">
             <SettingsRow
-              icon={SettingsIcons.project}
+              leading={<ProjectPicture githubRepo={project.githubRepo} name={project.name} />}
               label={project.name}
               value={kindLabel(project.kind)}
             />
@@ -178,6 +176,92 @@ export default function SettingsPage() {
       )}
     </ScrollView>
   );
+}
+
+function CloneFolder({ path }: { path: string }) {
+  const theme = useTheme();
+  const [value, setValue] = useState(path);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    setValue(path);
+  }, [path]);
+  return (
+    <View>
+      <SettingsRow icon={SettingsIcons.folder} label="Clone into" />
+      <View style={styles.clonePad}>
+        <TextInput
+          accessibilityLabel="Clone folder"
+          autoCapitalize="none"
+          autoComplete="off"
+          autoCorrect={false}
+          value={value}
+          onChangeText={setValue}
+          style={[styles.cloneField, { color: theme.text, borderColor: theme.line }]}
+        />
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            void (async () => {
+              try {
+                const picked = await pickFolderFromWorker();
+                setValue(picked);
+                await saveProjectsRoot(picked);
+                setMessage("");
+              } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Could not change folder.");
+              }
+            })();
+          }}>
+          <ThemedText style={{ color: theme.accent }}>Choose folder</ThemedText>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            void (async () => {
+              try {
+                await saveProjectsRoot(value.trim());
+                setMessage("Clone folder saved.");
+              } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Could not save.");
+              }
+            })();
+          }}>
+          <ThemedText style={{ color: theme.accent }}>Save</ThemedText>
+        </Pressable>
+        {message ? (
+          <ThemedText themeColor="textSecondary" style={styles.cloneHint}>
+            {message}
+          </ThemedText>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+async function pickFolderFromWorker() {
+  const response = await fetch(`${pairingBase("127.0.0.1")}/pick-folder`, { method: "POST" });
+  const body: unknown = await response.json();
+  if (!body || typeof body !== "object" || !("path" in body) || typeof body.path !== "string") {
+    throw new Error("Open Factory on this Mac to change the clone folder.");
+  }
+  return body.path;
+}
+
+async function saveProjectsRoot(projectsRoot: string) {
+  if (!projectsRoot) throw new Error("Choose a folder.");
+  const response = await fetch(`${pairingBase("127.0.0.1")}/settings`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ projectsRoot }),
+  });
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(
+      body && typeof body === "object" && "error" in body && typeof body.error === "string"
+        ? body.error
+        : "Open Factory on this Mac to change the clone folder.",
+    );
+  }
 }
 
 function UsageMeter({
@@ -353,4 +437,7 @@ const styles = StyleSheet.create({
     paddingBottom: 48,
     gap: 28,
   },
+  clonePad: { paddingHorizontal: 16, paddingBottom: 14, gap: 10 },
+  cloneField: { borderWidth: 1, borderRadius: 10, borderCurve: 'continuous', paddingHorizontal: 12, paddingVertical: 8, fontSize: 15 },
+  cloneHint: { fontSize: 13, lineHeight: 18 },
 });

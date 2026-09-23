@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
+import { githubRepoFromRemote } from "../../shared/addProject";
 import { validateRepository, validateVariableName } from "../../shared/managed";
 import type { ProjectOperation, OperationResult, OperationState } from "../../shared/projectOperations";
 import { addUsage, isZeroUsage, subUsage, ZERO_USAGE, type TokenUsage } from "../../shared/tokenUsage";
@@ -219,6 +220,55 @@ function requireConnection(login: string, token: string) {
     throw new Error("Invalid GitHub connection.");
   }
   return next;
+}
+
+function normalizeLocalPath(localPath: string) {
+  const trimmed = localPath.trim();
+  try {
+    return realpathSync(trimmed);
+  } catch {
+    return path.resolve(trimmed);
+  }
+}
+
+function isGitRepo(localPath: string) {
+  return existsSync(path.join(localPath, ".git"));
+}
+
+function githubRepoFromFolder(localPath: string) {
+  try {
+    const config = readFileSync(path.join(localPath, ".git", "config"), "utf8");
+    const origin = config.match(/\[remote "origin"\][^\[]*url\s*=\s*(.+)/);
+    return origin ? githubRepoFromRemote(origin[1] ?? "") ?? "" : "";
+  } catch {
+    return "";
+  }
+}
+
+function fillGithubRepos(store: Store) {
+  for (const project of store.list("projects")) {
+    if (String(project.githubRepo ?? "").trim()) continue;
+    const localPath = String(project.localPath ?? "").trim();
+    if (!localPath) continue;
+    const repo = githubRepoFromFolder(localPath);
+    if (repo) store.patch(project._id, { githubRepo: repo });
+  }
+}
+
+function findProjectByPath(store: Store, localPath: string) {
+  const wanted = normalizeLocalPath(localPath);
+  return store.list("projects").find((row) => {
+    const current = String(row.localPath ?? "").trim();
+    return current !== "" && normalizeLocalPath(current) === wanted;
+  });
+}
+
+function githubHeaders(token: string) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "Factory",
+  };
 }
 
 const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx) => unknown | Promise<unknown>> = {
@@ -506,6 +556,30 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       defaultRuntime: args.defaultRuntime,
     });
   },
+  "projects.addFolder": (args, { store }) => {
+    const name = String(args.name ?? "").trim();
+    const localPath = String(args.localPath ?? "").trim();
+    if (!name) throw new Error("Name is required");
+    if (!localPath) throw new Error("Choose a folder on this Mac.");
+    const resolved = normalizeLocalPath(localPath);
+    const existing = findProjectByPath(store, resolved);
+    if (existing) {
+      if (!String(existing.githubRepo ?? "").trim()) {
+        const repo = githubRepoFromFolder(resolved);
+        if (repo) store.patch(existing._id, { githubRepo: repo });
+      }
+      return existing._id;
+    }
+    if (!existsSync(resolved)) throw new Error("That folder is not on this Mac.");
+    if (!isGitRepo(resolved)) throw new Error("That folder is not a git repository.");
+    return store.insert("projects", {
+      name,
+      kind: "web",
+      localPath: resolved,
+      githubRepo: githubRepoFromFolder(resolved),
+      defaultRuntime: "local",
+    });
+  },
   "projects.update": (args, { store }) => {
     const project = store.get(String(args.projectId ?? ""));
     if (!project) throw new Error("Project not found");
@@ -561,6 +635,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (old) {
       if (old.publicKey !== publicKey) throw new Error("Worker identity changed. Restore its identity file.");
       store.patch(old._id, { lastSeen: Date.now(), name, projectsRoot });
+      fillGithubRepos(store);
       return old._id;
     }
     return store.insert("servers", { accessKey, name, publicKey, projectsRoot, lastSeen: Date.now() });
@@ -697,7 +772,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     const existing = store
       .list("projects")
       .find((row) => row.serverId === server._id && row.githubRepo === repo);
-    if (existing) throw new Error("This repository is already a Project on this worker.");
+    if (existing) return existing._id;
     const projectId = store.insert("projects", {
       name: name.trim(),
       githubRepo: repo,
@@ -1050,6 +1125,52 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       store.insert("githubConnection", next);
     }
     return null;
+  },
+  "github.connect": async (args, { store }) => {
+    const token = String(args.token ?? "").trim();
+    if (!token) throw new Error("Paste a GitHub token.");
+    const response = await fetch("https://api.github.com/user", { headers: githubHeaders(token) });
+    if (!response.ok) throw new Error("That GitHub token was rejected.");
+    const body: unknown = await response.json();
+    const login =
+      body && typeof body === "object" && "login" in body && typeof body.login === "string"
+        ? body.login
+        : "";
+    const next = requireConnection(login, token);
+    const rows = store.list("githubConnection");
+    if (rows[0]) {
+      store.patch(rows[0]._id, next);
+      for (const extra of rows.slice(1)) store.delete(extra._id);
+    } else {
+      store.insert("githubConnection", next);
+    }
+    return { login: next.login };
+  },
+  "github.listRepos": async (_args, { store }) => {
+    const row = store.list("githubConnection")[0];
+    if (!row) throw new Error("Connect GitHub first.");
+    const repos: Array<{ repo: string; description: string }> = [];
+    for (let page = 1; page <= 3; page++) {
+      const response = await fetch(
+        `https://api.github.com/user/repos?per_page=100&page=${page}&sort=updated&affiliation=owner,collaborator,organization_member`,
+        { headers: githubHeaders(String(row.token)) },
+      );
+      if (!response.ok) throw new Error("Could not list GitHub repositories.");
+      const body: unknown = await response.json();
+      if (!Array.isArray(body) || body.length === 0) break;
+      for (const item of body) {
+        if (!item || typeof item !== "object" || !("full_name" in item) || typeof item.full_name !== "string") {
+          continue;
+        }
+        repos.push({
+          repo: item.full_name,
+          description:
+            "description" in item && typeof item.description === "string" ? item.description : "",
+        });
+      }
+      if (body.length < 100) break;
+    }
+    return repos;
   },
   "github.disconnect": (_args, { store }) => {
     for (const row of store.list("githubConnection")) store.delete(row._id);
