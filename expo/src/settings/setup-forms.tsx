@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@/lib/factory";
+import { useMutation } from "@/lib/factory";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
@@ -7,29 +7,9 @@ import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import { pairingBase } from "@/lib/pairing";
 import { sealSecret, serverVariableNames } from "@/lib/workerSettings";
-import { AddProjectFlow, useOpenAddedProject } from "@/settings/add-project";
 import { SettingsGroup, SettingsIcons, SettingsMessage, SettingsRow } from "@/settings/ui";
 
-export function FactorySetup({ publicKey }: { publicKey?: string }) {
-  const github = useQuery(api.github.connection);
-  const setVariable = useMutation(api.servers.setVariable);
-  const disconnectGithub = useMutation(api.github.disconnect);
-  const openAdded = useOpenAddedProject();
-  return (
-    <>
-      <PairPhone />
-      <ProviderKeys publicKey={publicKey} setVariable={setVariable} />
-      <SettingsGroup title="Add a Project" footer="Use a folder on this Mac, or clone from GitHub into the Worker folder.">
-        <View style={styles.pad}>
-          <AddProjectFlow onAdded={openAdded} />
-        </View>
-      </SettingsGroup>
-      <GitHubGroup github={github} disconnectGithub={disconnectGithub} />
-    </>
-  );
-}
-
-function PairPhone() {
+export function PairPhone() {
   const theme = useTheme();
   const [status, setStatus] = useState<{ pairing: string; tailscale: string; tunnel: string; token: string }>({
     pairing: "",
@@ -58,27 +38,29 @@ function PairPhone() {
       .catch(() => {});
   }, []);
   return (
+    <>
     <SettingsGroup
-      title="Pair a phone"
-      footer="How a phone learns which Factory. Same Wi-Fi uses the LAN address. A tailnet uses the Tailscale row. Away from home, save a public tunnel URL.">
+      title="Addresses"
+      footer="On the same Wi-Fi, pair with the LAN address. On a tailnet, use the Tailscale address. Both need the pairing token.">
       <SettingsRow
-        icon={SettingsIcons.machine}
+        icon={SettingsIcons.wifi}
         label="LAN"
         value={status.pairing || "Start the Worker to see the pairing address."}
         valueMode="middle"
       />
       <SettingsRow
-        icon={SettingsIcons.machine}
+        icon={SettingsIcons.network}
         label="Tailscale"
         value={status.tailscale || "Join this Mac to a tailnet to see an address."}
         valueMode="middle"
       />
       <SettingsRow
-        icon={SettingsIcons.machine}
+        icon={SettingsIcons.key}
         label="Pairing token"
-        value={status.token || "Start the Worker to see the household key."}
-        valueMode="middle"
+        detail={status.token || "Start the Worker to see the household key."}
       />
+    </SettingsGroup>
+    <SettingsGroup title="Away From Home" footer="Save a public tunnel URL, then pair the phone with that URL and the token above.">
       <View style={styles.pad}>
         <TextInput
           accessibilityLabel="Public tunnel URL"
@@ -121,71 +103,83 @@ function PairPhone() {
         {message ? <ThemedText themeColor="textSecondary">{message}</ThemedText> : null}
       </View>
     </SettingsGroup>
+    </>
   );
 }
 
-function ProviderKeys({
+/** One Worker environment value: shows whether it is saved and lets you replace it. */
+export function VariableField({
+  name,
+  label,
+  secret,
+  placeholder,
+  saved,
   publicKey,
-  setVariable,
 }: {
+  name: (typeof serverVariableNames)[number];
+  label: string;
+  secret: boolean;
+  placeholder: string;
+  saved: boolean;
   publicKey?: string;
-  setVariable: (args: { scope: string; name: string; sealed: string }) => Promise<null>;
 }) {
   const theme = useTheme();
-  const [name, setName] = useState<(typeof serverVariableNames)[number]>("CURSOR_API_KEY");
+  const setVariable = useMutation(api.servers.setVariable);
   const [value, setValue] = useState("");
   const [message, setMessage] = useState("");
   return (
-    <SettingsGroup
-      title="Providers"
-      footer="Cursor, Codex, Grok, Claude Code, and OpenAI-compatible. Keys stay on this Worker.">
-      <View style={styles.pad}>
+    <View style={styles.pad}>
+      <View style={styles.fieldHeader}>
+        <ThemedText style={styles.fieldLabel}>{label}</ThemedText>
+        <ThemedText themeColor={saved ? "success" : "textSecondary"} style={styles.fieldStatus}>
+          {saved ? "Saved" : "Not set"}
+        </ThemedText>
+      </View>
+      <View style={styles.fieldRow}>
         <TextInput
-          accessibilityLabel="Setting name"
+          accessibilityLabel={label}
           autoCapitalize="none"
-          autoComplete="off"
-          value={name}
-          onChangeText={(text) => setName(text as (typeof serverVariableNames)[number])}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
-        />
-        <TextInput
-          accessibilityLabel="Setting value"
-          autoCapitalize="none"
-          autoComplete="new-password"
+          autoComplete={secret ? "new-password" : "off"}
           autoCorrect={false}
-          secureTextEntry
-          placeholder="Paste a key or path"
+          secureTextEntry={secret}
+          placeholder={saved ? "Enter a new value to replace it" : placeholder}
           placeholderTextColor={theme.textSecondary}
           value={value}
-          onChangeText={setValue}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
+          onChangeText={(text) => {
+            setValue(text);
+            setMessage("");
+          }}
+          style={[styles.field, { flex: 1, color: theme.text, borderColor: theme.line }]}
         />
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={`Save ${label}`}
+          disabled={!value.trim()}
           onPress={() => {
             void (async () => {
               try {
                 if (!publicKey) throw new Error("Start the Worker first.");
-                if (!(serverVariableNames as readonly string[]).includes(name)) {
-                  throw new Error("Use a supported Worker setting name.");
-                }
-                await setVariable({ scope: "server", name, sealed: await sealSecret(publicKey, value) });
+                await setVariable({ scope: "server", name, sealed: await sealSecret(publicKey, value.trim()) });
                 setValue("");
-                setMessage(`Saved ${name}.`);
+                setMessage("Saved. The Worker picks it up within a minute.");
               } catch (error) {
                 setMessage(error instanceof Error ? error.message : "Could not save.");
               }
             })();
-          }}>
-          <ThemedText style={{ color: theme.accent }}>Save provider setting</ThemedText>
+          }}
+          style={({ pressed }) => [
+            styles.save,
+            { backgroundColor: theme.accent, opacity: !value.trim() ? 0.4 : pressed ? 0.8 : 1 },
+          ]}>
+          <ThemedText style={styles.saveLabel}>Save</ThemedText>
         </Pressable>
-        {message ? <ThemedText themeColor="textSecondary">{message}</ThemedText> : null}
       </View>
-    </SettingsGroup>
+      {message ? <ThemedText themeColor="textSecondary" style={styles.hint}>{message}</ThemedText> : null}
+    </View>
   );
 }
 
-function GitHubGroup({
+export function GitHubGroup({
   github,
   disconnectGithub,
 }: {
@@ -220,6 +214,13 @@ function GitHubGroup({
 }
 
 const styles = StyleSheet.create({
-  pad: { padding: 12, gap: 10 },
-  field: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 15 },
+  pad: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
+  field: { borderWidth: 1, borderRadius: 10, borderCurve: "continuous", paddingHorizontal: 12, paddingVertical: 9, fontSize: 15 },
+  fieldHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  fieldLabel: { fontSize: 15, lineHeight: 20, fontWeight: 500 },
+  fieldStatus: { fontSize: 13, lineHeight: 18 },
+  fieldRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  save: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderCurve: "continuous" },
+  saveLabel: { color: "#ffffff", fontSize: 15, fontWeight: 600 },
+  hint: { fontSize: 13, lineHeight: 18 },
 });

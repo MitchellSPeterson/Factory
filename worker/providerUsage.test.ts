@@ -4,6 +4,7 @@ import {
   locateCodexAuth,
   parseCodexAuth,
   parseCodexUsage,
+  parseClaudeStatsCache,
   parseCursorPeriod,
   parseGrokAuth,
   parseGrokBilling,
@@ -22,6 +23,7 @@ const noLocal: LocalAuth = {
     throw Object.assign(new Error("missing"), { code: "ENOENT" });
   },
   keychain: async () => null,
+  claudeKeychain: async () => null,
 };
 
 test("percentUsed accepts 0-1 fractions and 0-100 percents", () => {
@@ -52,6 +54,24 @@ test("Cursor current-period usage maps remaining cents and reset time", () => {
     percentUsed: 36,
     resetsAt: 1784958141000,
     display: "You've used 36% of your included usage",
+  });
+});
+
+test("Cursor splits Cursor-model and other-model usage in percentage points", () => {
+  const meter = parseCursorPeriod(
+    {
+      billingCycleStart: "1790049595000",
+      billingCycleEnd: "1792641595000",
+      planUsage: { totalSpend: 118, remaining: 6882, limit: 7000, autoPercentUsed: 0.07, apiPercentUsed: 0.64, totalPercentUsed: 0.09 },
+    },
+    1,
+  );
+  expect(meter).toMatchObject({
+    percentUsed: 0.09,
+    windows: [
+      { name: "Cursor models", percentUsed: 0.07, resetsAt: 1792641595000, windowSeconds: 2592000 },
+      { name: "Other models", percentUsed: 0.64, resetsAt: 1792641595000, windowSeconds: 2592000 },
+    ],
   });
 });
 
@@ -133,8 +153,8 @@ test("parseCodexUsage maps session and weekly windows from ChatGPT usage", () =>
     plan: "Plus",
     percentUsed: 30,
     windows: [
-      { name: "Session (5h)", percentUsed: 30, windowSeconds: 18_000, resetsAt: 1_778_114_717_000 },
-      { name: "Weekly (7d)", percentUsed: 39, windowSeconds: 604_800, resetsAt: 1_778_113_934_000 },
+      { name: "Session", percentUsed: 30, windowSeconds: 18_000, resetsAt: 1_778_114_717_000 },
+      { name: "Weekly", percentUsed: 39, windowSeconds: 604_800, resetsAt: 1_778_113_934_000 },
     ],
   });
 });
@@ -153,7 +173,17 @@ test("parseCodexUsage omits reset on an untouched window", () => {
     },
     1,
   );
-  expect(meter?.windows).toEqual([{ name: "Session (5h)", percentUsed: 0, windowSeconds: 18_000 }]);
+  expect(meter?.windows).toEqual([{ name: "Session", percentUsed: 0, windowSeconds: 18_000 }]);
+});
+
+test("Claude Code local activity counts all token categories", () => {
+  expect(parseClaudeStatsCache(JSON.stringify({
+    modelUsage: {
+      opus: { inputTokens: 10, outputTokens: 20, cacheReadInputTokens: 30, cacheCreationInputTokens: 40 },
+      sonnet: { inputTokens: 5, outputTokens: 7 },
+    },
+  }))).toBe(112);
+  expect(parseClaudeStatsCache("invalid")).toBeNull();
 });
 
 test("locateCodexAuth prefers CODEX_HOME then ~/.codex", async () => {
@@ -176,7 +206,7 @@ test("locateCodexAuth prefers CODEX_HOME then ~/.codex", async () => {
   expect(auth).toEqual({ accessToken: "tok", accountId: "user-1" });
 });
 
-test("collectProviderUsage reports nothing without calling the network when nothing is signed in", async () => {
+test("collectProviderUsage shows Claude local activity without calling the network", async () => {
   const report = await collectProviderUsage({
     env: {},
     now: 10,
@@ -186,7 +216,26 @@ test("collectProviderUsage reports nothing without calling the network when noth
       throw new Error("network should not run");
     },
   });
-  expect(report.meters).toEqual([]);
+  expect(report.meters).toEqual([{ provider: "claude", status: "ok", checkedAt: 10 }]);
+});
+
+test("collectProviderUsage reads Claude Code local stats", async () => {
+  const report = await collectProviderUsage({
+    env: { CLAUDE_CONFIG_DIR: "/claude-data" },
+    now: 10,
+    local: {
+      ...noLocal,
+      readFile: async (file) => {
+        if (file === "/claude-data/stats-cache.json") {
+          return JSON.stringify({ modelUsage: { opus: { inputTokens: 100, outputTokens: 50 } } });
+        }
+        throw Object.assign(new Error("missing"), { code: "ENOENT" });
+      },
+    },
+    http: async () => { throw new Error("network should not run"); },
+  });
+  expect(report.meters.find((meter) => meter.provider === "claude"))
+    .toMatchObject({ status: "ok", totalTokens: 150 });
 });
 
 test("collectProviderUsage reads Codex remaining from the local ChatGPT login", async () => {
@@ -286,7 +335,7 @@ test("parseGrokBilling maps weekly included usage and product slices", () => {
     remainingCents: 1250,
     resetsAt: Date.parse("2026-08-10T00:00:00Z"),
     windows: [
-      { name: "Weekly (7d)", percentUsed: 43, windowSeconds: 604_800 },
+      { name: "Weekly", percentUsed: 43, windowSeconds: 604_800 },
       { name: "Grok Build", percentUsed: 87 },
       { name: "Grok Chat", percentUsed: 3 },
       { name: "xAI API", percentUsed: 0 },
@@ -332,5 +381,35 @@ test("collectProviderUsage reads Grok remaining from the local grok login", asyn
   });
   const grok = report.meters.find((meter) => meter.provider === "grok");
   expect(grok).toMatchObject({ status: "ok", plan: "SuperGrok", percentUsed: 12 });
-  expect(grok?.status === "ok" ? grok.windows?.map((window) => window.name) : []).toEqual(["Weekly (7d)", "Grok Build"]);
+  expect(grok?.status === "ok" ? grok.windows?.map((window) => window.name) : []).toEqual(["Weekly", "Grok Build"]);
+});
+
+test("collectProviderUsage reads Claude session and weekly limits from the Claude Code login", async () => {
+  const report = await collectProviderUsage({
+    env: {},
+    now: 10,
+    local: {
+      ...noLocal,
+      claudeKeychain: async () => JSON.stringify({ claudeAiOauth: { accessToken: "ctok", subscriptionType: "pro" } }),
+    },
+    http: async (url, init) => {
+      if (!url.includes("/api/oauth/usage")) throw Object.assign(new Error("skip"), { url });
+      expect(init?.headers).toMatchObject({ Authorization: "Bearer ctok" });
+      return new Response(JSON.stringify({
+        five_hour: { utilization: 62, resets_at: "2026-09-24T18:49:59Z" },
+        seven_day: { utilization: 11, resets_at: "2026-09-30T23:59:59Z" },
+        seven_day_opus: null,
+      }));
+    },
+  });
+  expect(report.meters.find((meter) => meter.provider === "claude")).toEqual({
+    provider: "claude",
+    status: "ok",
+    checkedAt: 10,
+    plan: "Pro",
+    windows: [
+      { name: "Session", percentUsed: 62, resetsAt: Date.parse("2026-09-24T18:49:59Z"), windowSeconds: 18000 },
+      { name: "Weekly", percentUsed: 11, resetsAt: Date.parse("2026-09-30T23:59:59Z"), windowSeconds: 604800 },
+    ],
+  });
 });

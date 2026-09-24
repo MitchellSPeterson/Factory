@@ -2,11 +2,14 @@ import { expect, test } from "bun:test";
 import {
   formatAheadBehind,
   formatCommitAge,
+  describeSync,
   formatFileStatus,
+  parseDiff,
   localBranchName,
   localBranches,
   remoteOnlyBranches,
   shortSha,
+  splitPath,
 } from "./format";
 
 test("formatCommitAge stays relative then falls back to a date", () => {
@@ -32,10 +35,38 @@ test("formatAheadBehind names divergence against upstream", () => {
   expect(formatAheadBehind({})).toBe("no upstream");
 });
 
-test("formatFileStatus colors deletes, untracked, and edits", () => {
-  expect(formatFileStatus(" D")).toEqual({ label: "D", tone: "danger" });
-  expect(formatFileStatus("??")).toEqual({ label: "??", tone: "muted" });
-  expect(formatFileStatus("M ")).toEqual({ label: "M", tone: "success" });
+test("formatFileStatus turns porcelain codes into words", () => {
+  expect(formatFileStatus(" D").label).toBe("Deleted");
+  expect(formatFileStatus("??").label).toBe("New file");
+  expect(formatFileStatus("M ").label).toBe("Modified");
+  expect(formatFileStatus("R ").label).toBe("Renamed");
+  expect(formatFileStatus("UU").label).toBe("Conflict");
+  expect(formatFileStatus("AA").label).toBe("Conflict");
+  expect(splitPath("src/git/format.ts")).toEqual({ name: "format.ts", dir: "src/git" });
+  expect(splitPath("README.md")).toEqual({ name: "README.md", dir: "" });
+});
+
+test("describeSync offers the one action that moves the branch forward", () => {
+  const base = { remotes: ["origin"], upstream: "origin/main" };
+  expect(describeSync({}, false).action).toBeUndefined();
+  expect(describeSync({ remotes: ["origin"] }, false).action?.label).toBe("Publish branch");
+  expect(describeSync({ ...base, gone: true }, false).action?.op).toBe("push");
+  expect(describeSync({ ...base, ahead: 2 }, false).action?.label).toBe("Push 2");
+  expect(describeSync({ ...base, behind: 1 }, false).action?.blocked).toBeUndefined();
+  expect(describeSync({ ...base, behind: 1 }, true).action?.blocked).toBeTruthy();
+  expect(describeSync({ ...base, ahead: 1, behind: 1 }, false).action?.op).toBe("fetch");
+  expect(describeSync(base, false).summary).toBe("Up to date with origin/main.");
+});
+
+test("parseDiff drops headers before the first hunk and counts lines", () => {
+  const diff = parseDiff(
+    "diff --git a/x b/x\nindex 1..2\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n ctx\n",
+  );
+  expect(diff.lines.map((line) => line.kind)).toEqual(["hunk", "del", "add", "ctx"]);
+  expect([diff.added, diff.removed]).toEqual([1, 1]);
+  expect(parseDiff("Binary files differ").lines).toEqual([
+    { text: "Binary files differ", kind: "ctx" },
+  ]);
 });
 
 test("remote-only branches drop remotes that already have a local counterpart", () => {

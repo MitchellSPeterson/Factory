@@ -1,11 +1,10 @@
 import { expect, test } from "bun:test";
-import { CODEX_MODELS } from "../../../shared/agentModel";
 import { DEFAULT_CHAT_SETTINGS, parseLastSettings } from "./lastSettings";
 
 test("defaults to Codex Terra", () => {
   expect(DEFAULT_CHAT_SETTINGS).toEqual({
     provider: "codex",
-    model: CODEX_MODELS[0],
+    model: "gpt-5.6-terra",
     effort: "medium",
     permissionMode: "supervised",
     serviceTier: "standard",
@@ -109,22 +108,7 @@ test("parseLastSettings falls back when the payload is invalid", () => {
   expect(parseLastSettings("not-json")).toEqual(DEFAULT_CHAT_SETTINGS);
   expect(parseLastSettings("[]")).toEqual(DEFAULT_CHAT_SETTINGS);
   expect(
-    parseLastSettings(
-      JSON.stringify({
-        provider: "codex",
-        model: "gpt-does-not-exist",
-        effort: "medium",
-      }),
-    ),
-  ).toEqual(DEFAULT_CHAT_SETTINGS);
-  expect(
-    parseLastSettings(
-      JSON.stringify({
-        provider: "openai",
-        model: "gpt-6-astra",
-        effort: "medium",
-      }),
-    ),
+    parseLastSettings(JSON.stringify({ provider: "codex", model: " ", effort: "medium" })),
   ).toEqual(DEFAULT_CHAT_SETTINGS);
   expect(
     parseLastSettings(

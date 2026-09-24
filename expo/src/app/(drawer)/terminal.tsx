@@ -1,8 +1,11 @@
 import { useMutation, useQuery } from "@/lib/factory";
 import { Drawer } from "expo-router/drawer";
+import * as Clipboard from "expo-clipboard";
+import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,10 +18,12 @@ import { api } from "@/lib/api";
 import { useProjectScope } from "@/lib/project-scope-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
-import { Action, Notice } from "@/chats/ui";
+import { Action } from "@/chats/ui";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { TerminalDisplay } from "@/terminals/TerminalDisplay";
 import { readSelection, writeSelection } from "@/terminals/selection";
+
+const TERMINAL_BG = "#101113";
 
 export default function TerminalPage() {
   const { currentProject, projects } = useProjectScope();
@@ -31,17 +36,17 @@ export default function TerminalPage() {
       ) : currentProject ? (
         <ProjectTerminals key={currentProject._id} project={currentProject} />
       ) : (
-        <View style={styles.empty}>
-          <Text style={[styles.title, { color: theme.text }]}>
-            Choose a Project
-          </Text>
-          <Notice text="Open terminals in a Project's local directory. Your tabs stay here when you leave." />
+        <Empty
+          title="Choose a Project"
+          body="Terminals open in a Project's folder on this Mac. Your tabs stay open when you leave."
+        >
           <ProjectSwitcher />
-        </View>
+        </Empty>
       )}
     </View>
   );
 }
+
 function ProjectTerminals({
   project,
 }: {
@@ -58,6 +63,7 @@ function ProjectTerminals({
   const [error, setError] = useState("");
   const [closing, setClosing] = useState<Id<"terminals"> | null>(null);
   const active = tabs?.find((tab) => tab._id === selected) ?? tabs?.[0];
+  const closingTab = tabs?.find((tab) => tab._id === closing);
   function select(id: Id<"terminals">) {
     setSelected(id);
     writeSelection(project._id, id);
@@ -88,109 +94,150 @@ function ProjectTerminals({
       setError(e instanceof Error ? e.message : "Could not close terminal.");
     }
   }
+  if (tabs === undefined) return <ActivityIndicator style={styles.empty} />;
+  if (!tabs.length)
+    return (
+      <Empty
+        icon
+        title="No terminals open"
+        body={`Open a shell in ${project.localPath}. Tabs and recent output are saved, and shells keep running while this Mac's worker is on.`}
+        error={error}
+      >
+        <Action
+          icon="add"
+          label={pending ? "Opening…" : "Open terminal"}
+          emphasis
+          disabled={pending}
+          onPress={() => void add()}
+        />
+      </Empty>
+    );
   return (
     <View style={styles.root}>
-      <View style={[styles.project, { borderColor: theme.line }]}>
-        <Text style={[styles.title, { color: theme.text }]}>
-          {project.name}
-        </Text>
-        <Text
-          numberOfLines={1}
-          selectable
-          style={{ color: theme.textSecondary, fontSize: 12, flexShrink: 1 }}
-        >
-          {project.localPath}
-        </Text>
-      </View>
       <View style={[styles.tabs, { borderColor: theme.line }]}>
         <ScrollView
           horizontal
+          showsHorizontalScrollIndicator={false}
           style={{ flex: 1 }}
-          contentContainerStyle={{ alignItems: "center", gap: 4 }}
+          contentContainerStyle={styles.tabList}
         >
-          {tabs?.map((tab) => (
-            <View
-              key={tab._id}
-              style={[
-                styles.tab,
-                {
-                  backgroundColor:
-                    active?._id === tab._id
-                      ? theme.backgroundSelected
-                      : "transparent",
-                },
-              ]}
-            >
-              <Pressable
-                accessibilityRole="tab"
-                accessibilityLabel={tab.title}
-                aria-selected={active?._id === tab._id}
-                accessibilityState={{ selected: active?._id === tab._id }}
-                onPress={() => select(tab._id)}
-                style={styles.tabLabel}
+          {tabs.map((tab) => {
+            const on = active?._id === tab._id;
+            return (
+              <View
+                key={tab._id}
+                style={[
+                  styles.tab,
+                  on && { backgroundColor: theme.backgroundSelected },
+                ]}
               >
-                <View
-                  style={[
-                    styles.dot,
-                    {
-                      backgroundColor:
-                        tab.state === "running"
-                          ? theme.success
-                          : theme.textSecondary,
-                    },
-                  ]}
-                />
-                <Text style={{ color: theme.text, fontSize: 13 }}>
-                  {tab.title}
-                </Text>
-              </Pressable>
-              <Action
-                icon="close"
-                label={`Close ${tab.title}`}
-                compact
-                onPress={() => setClosing(tab._id)}
-              />
-            </View>
-          ))}
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityLabel={`${tab.title}, ${stateLabel(tab)}`}
+                  aria-selected={on}
+                  accessibilityState={{ selected: on }}
+                  onPress={() => select(tab._id)}
+                  style={[styles.tabLabel, !on && { paddingRight: 14 }]}
+                >
+                  <View
+                    style={[styles.dot, { backgroundColor: stateColor(tab, theme) }]}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      color: on ? theme.text : theme.textSecondary,
+                      fontSize: 13,
+                      fontWeight: on ? "600" : "500",
+                      maxWidth: 160,
+                    }}
+                  >
+                    {tab.title}
+                  </Text>
+                </Pressable>
+                {on ? (
+                  <Action
+                    icon="close"
+                    label={`Close ${tab.title}`}
+                    compact
+                    onPress={() => setClosing(tab._id)}
+                  />
+                ) : null}
+              </View>
+            );
+          })}
         </ScrollView>
         <Action
           icon="add"
           label="New terminal"
-          disabled={pending || tabs === undefined}
+          compact
+          disabled={pending}
           onPress={() => void add()}
         />
       </View>
-      {error ? <Notice text={error} error /> : null}
-      {closing ? (
-        <View style={styles.confirm}>
-          <Notice text="Close this terminal and stop its running programs?" />
-          <Action label="Cancel" onPress={() => setClosing(null)} />
-          <Action label="Close terminal" onPress={() => void remove(closing)} />
-        </View>
+      {error ? (
+        <Banner tone="danger" text={error} onClose={() => setError("")} />
       ) : null}
-      {tabs === undefined ? (
-        <ActivityIndicator style={styles.empty} />
-      ) : active ? (
-        <TerminalSession key={active._id} tab={active} />
-      ) : (
-        <View style={styles.empty}>
-          <Text style={[styles.title, { color: theme.text }]}>
-            No terminals open
-          </Text>
-          <Notice text="Open a shell to run commands here. Tabs and recent output are saved; shells keep running while the worker is connected." />
+      {closingTab ? (
+        <Banner
+          tone="danger"
+          text={`Close ${closingTab.title}? Anything running in it will stop.`}
+        >
+          <Action label="Cancel" onPress={() => setClosing(null)} />
           <Action
-            icon="add"
-            label="Open terminal"
-            selected
-            disabled={pending}
-            onPress={() => void add()}
+            label="Close"
+            emphasis
+            onPress={() => void remove(closingTab._id)}
           />
-        </View>
-      )}
+        </Banner>
+      ) : null}
+      {active ? (
+        <TerminalSession key={active._id} tab={active} onNew={() => void add()} />
+      ) : null}
     </View>
   );
 }
-function TerminalSession({ tab }: { tab: Doc<"terminals"> }) {
+
+type Theme = ReturnType<typeof useTheme>;
+function live(tab: Doc<"terminals">) {
+  return tab.state === "running" && tab.leaseUntil > Date.now();
+}
+function stateColor(tab: Doc<"terminals">, theme: Theme) {
+  if (live(tab)) return theme.success;
+  if (tab.state === "queued" || tab.state === "running") return theme.accent;
+  return theme.textSecondary;
+}
+function stateLabel(tab: Doc<"terminals">) {
+  if (live(tab)) return "running";
+  if (tab.state === "queued") return "starting";
+  if (tab.state === "running") return "reconnecting";
+  return "exited";
+}
+
+// Keys a phone keyboard can't type. Arrows go raw; letters typed after Ctrl become control codes.
+const KEYS: [label: string, data: string, accessibilityLabel?: string][] = [
+  ["esc", "\u001b", "Escape"],
+  ["tab", "\t", "Tab"],
+  ["^C", "\u0003", "Control C, interrupt"],
+  ["←", "\u001b[D", "Left arrow"],
+  ["↑", "\u001b[A", "Up arrow"],
+  ["↓", "\u001b[B", "Down arrow"],
+  ["→", "\u001b[C", "Right arrow"],
+  ["^D", "\u0004", "Control D, end input"],
+  ["^L", "\u000c", "Control L, clear screen"],
+  ["|", "|"],
+  ["~", "~"],
+  ["/", "/"],
+  ["-", "-"],
+];
+
+function TerminalSession({
+  tab,
+  onNew,
+}: {
+  tab: Doc<"terminals">;
+  onNew: () => void;
+}) {
+  const theme = useTheme();
   const output = useQuery(api.terminals.output, { id: tab._id });
   const send = useMutation(api.terminals.input);
   const resize = useMutation(api.terminals.resize);
@@ -232,7 +279,10 @@ function TerminalSession({ tab }: { tab: Doc<"terminals"> }) {
       void flush();
     };
   }, [send, tab._id]);
-  const onInput = useCallback(
+  const [ctrl, setCtrl] = useState(false);
+  const ctrlRef = useRef(false);
+  ctrlRef.current = ctrl;
+  const sendRaw = useCallback(
     (data: string) => {
       if (!enabled) return;
       if (pending.current.length + data.length > 16_384) {
@@ -243,6 +293,17 @@ function TerminalSession({ tab }: { tab: Doc<"terminals"> }) {
     },
     [enabled],
   );
+  const onInput = useCallback(
+    (data: string) => {
+      if (ctrlRef.current && data.length === 1) {
+        setCtrl(false);
+        const code = data.toUpperCase().charCodeAt(0);
+        if (code >= 64 && code <= 95) return sendRaw(String.fromCharCode(code & 31));
+      }
+      sendRaw(data);
+    },
+    [sendRaw],
+  );
   const onResize = useCallback(
     (cols: number, rows: number) => {
       void resize({ id: tab._id, cols, rows }).catch((e) => {
@@ -251,21 +312,26 @@ function TerminalSession({ tab }: { tab: Doc<"terminals"> }) {
     },
     [resize, tab._id],
   );
+  const touch = Platform.OS !== "web";
   return (
     <View
       style={[
         styles.root,
-        { paddingBottom: Math.max(keyboard, insets.bottom) },
+        { backgroundColor: TERMINAL_BG, paddingBottom: Math.max(keyboard, insets.bottom) },
       ]}
     >
       {tab.state === "queued" ? (
-        <Notice text="Starting shell…" />
+        <Banner tone="busy" text="Starting shell…" />
       ) : tab.state === "exited" ? (
-        <Notice text={tab.message ?? "Shell exited."} />
+        <Banner tone="muted" text={tab.message ?? "This shell has exited."}>
+          <Action icon="add" label="New terminal" onPress={onNew} />
+        </Banner>
       ) : !enabled ? (
-        <Notice text="Worker disconnected. Waiting for connection…" error />
+        <Banner tone="busy" text="Reconnecting to this Mac's worker…" />
       ) : null}
-      {error ? <Notice text={error} error /> : null}
+      {error ? (
+        <Banner tone="danger" text={error} onClose={() => setError("")} />
+      ) : null}
       <TerminalDisplay
         output={output?.output ?? ""}
         outputEnd={output?.outputEnd ?? 0}
@@ -273,60 +339,222 @@ function TerminalSession({ tab }: { tab: Doc<"terminals"> }) {
         onInput={onInput}
         onResize={onResize}
       />
-      <View style={styles.keys}>
-        {[
-          ["Esc", "\u001b"],
-          ["Tab", "\t"],
-          ["Ctrl C", "\u0003"],
-          ["Ctrl D", "\u0004"],
-          ["↑", "\u001b[A"],
-          ["↓", "\u001b[B"],
-        ].map(([label, data]) => (
-          <Action
-            key={label}
-            label={label}
+      {touch ? (
+        <ScrollView
+          horizontal
+          keyboardShouldPersistTaps="always"
+          showsHorizontalScrollIndicator={false}
+          style={[styles.keys, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
+          contentContainerStyle={styles.keyList}
+        >
+          <Key
+            label="ctrl"
+            accessibilityLabel="Control. The next letter you type is sent with Control"
+            on={ctrl}
             disabled={!enabled}
-            onPress={() => onInput(data)}
+            onPress={() => setCtrl((value) => !value)}
           />
-        ))}
-      </View>
+          {KEYS.map(([label, data, a11y]) => (
+            <Key
+              key={label}
+              label={label}
+              accessibilityLabel={a11y ?? label}
+              disabled={!enabled}
+              onPress={() => sendRaw(data)}
+            />
+          ))}
+          <Key
+            label="paste"
+            accessibilityLabel="Paste from clipboard"
+            disabled={!enabled}
+            onPress={() =>
+              void Clipboard.getStringAsync().then((text) => text && sendRaw(text))
+            }
+          />
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
+
+function Key({
+  label,
+  accessibilityLabel,
+  on,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  on?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole={on === undefined ? "button" : "switch"}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: !!disabled, checked: on }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.key,
+        {
+          backgroundColor: on ? theme.accent : pressed ? theme.backgroundSelected : theme.subtleHover,
+          borderColor: on ? theme.accent : theme.line,
+          opacity: disabled ? 0.4 : 1,
+        },
+      ]}
+    >
+      <Text style={{ color: on ? "#ffffff" : theme.text, fontSize: 14, fontWeight: "600" }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function Banner({
+  tone,
+  text,
+  onClose,
+  children,
+}: {
+  tone: "danger" | "busy" | "muted";
+  text: string;
+  onClose?: () => void;
+  children?: React.ReactNode;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      accessibilityRole={tone === "danger" ? "alert" : undefined}
+      accessibilityLiveRegion="polite"
+      style={[styles.banner, { borderColor: theme.line, backgroundColor: theme.background }]}
+    >
+      {tone === "busy" ? (
+        <ActivityIndicator size="small" color={theme.accent} />
+      ) : (
+        <SymbolView
+          name={
+            tone === "danger"
+              ? { ios: "exclamationmark.triangle.fill", android: "warning", web: "warning" }
+              : { ios: "info.circle", android: "info", web: "info" }
+          }
+          size={16}
+          tintColor={tone === "danger" ? theme.danger : theme.textSecondary}
+        />
+      )}
+      <Text
+        selectable
+        style={{ flex: 1, color: tone === "danger" ? theme.danger : theme.text, fontSize: 14 }}
+      >
+        {text}
+      </Text>
+      {children}
+      {onClose ? <Action icon="close" label="Dismiss" compact onPress={onClose} /> : null}
+    </View>
+  );
+}
+
+function Empty({
+  icon,
+  title,
+  body,
+  error,
+  children,
+}: {
+  icon?: boolean;
+  title: string;
+  body: string;
+  error?: string;
+  children?: React.ReactNode;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.empty}>
+      {icon ? (
+        <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSelected }]}>
+          <SymbolView
+            name={{ ios: "terminal", android: "terminal", web: "terminal" }}
+            size={28}
+            tintColor={theme.accent}
+          />
+        </View>
+      ) : null}
+      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+      <Text style={[styles.body, { color: theme.textSecondary }]}>{body}</Text>
+      {error ? <Text style={[styles.body, { color: theme.danger }]}>{error}</Text> : null}
+      {children}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: 0 },
-  project: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  title: { fontSize: 16, fontWeight: "600" },
+  title: { fontSize: 18, fontWeight: "600", textAlign: "center" },
+  body: { fontSize: 14, lineHeight: 20, textAlign: "center" },
   tabs: {
     flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: 1,
     paddingHorizontal: 8,
-    minHeight: 48,
+    paddingVertical: 4,
+    gap: 4,
   },
-  tab: { flexDirection: "row", alignItems: "center", borderRadius: 8 },
+  tabList: { alignItems: "center", gap: 4 },
+  tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    borderCurve: "continuous",
+  },
   tabLabel: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     minHeight: 44,
-    paddingLeft: 12,
+    paddingLeft: 14,
   },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 6,
+    minHeight: 48,
+    borderBottomWidth: 1,
+  },
   empty: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "center",
     alignSelf: "center",
     padding: 24,
-    maxWidth: 460,
+    maxWidth: 440,
     gap: 12,
   },
-  keys: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 8 },
-  confirm: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
+  emptyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  keys: { flexGrow: 0, borderTopWidth: 1 },
+  keyList: { gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
+  key: {
+    minWidth: 44,
+    height: 38,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderRadius: 8,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

@@ -72,7 +72,7 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
           <DrawerLink
             icon="settings"
             label="Settings"
-            focused={pathname === '/settings'}
+            focused={pathname.startsWith('/settings')}
             onPress={() => {
               router.push('/settings');
               props.navigation.closeDrawer();

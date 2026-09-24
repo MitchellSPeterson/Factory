@@ -1,7 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 
-<<<<<<< HEAD
 declare global {
   interface Window {
     ReactNativeWebView?: { postMessage: (data: string) => void };
@@ -72,64 +71,55 @@ const observer = new ResizeObserver(() => {
 });
 observer.observe(document.body);
 fit.fit();
+
+// xterm 6 scrolls on wheel only, so drive touch drags ourselves.
+const element = terminal.element!;
+let touchY: number | null = null;
+let carry = 0;
+element.addEventListener(
+  "touchstart",
+  (event) => {
+    touchY = event.touches.length === 1 ? event.touches[0].clientY : null;
+    carry = 0;
+  },
+  { passive: true },
+);
+element.addEventListener(
+  "touchmove",
+  (event) => {
+    if (touchY === null || event.touches.length !== 1) return;
+    const y = event.touches[0].clientY;
+    carry += touchY - y;
+    touchY = y;
+    const line = element.clientHeight / terminal.rows || 17;
+    const lines = Math.trunc(carry / line);
+    if (!lines) return;
+    carry -= lines * line;
+    event.preventDefault();
+    // Full-screen apps (less, vim) have no scrollback; send arrows like Terminal.app.
+    if (terminal.buffer.active.type === "alternate") {
+      if (enabled)
+        post({ type: "input", data: (lines > 0 ? "\u001b[B" : "\u001b[A").repeat(Math.abs(lines)) });
+    } else terminal.scrollLines(lines);
+  },
+  { passive: false },
+);
+element.addEventListener("touchend", () => (touchY = null));
+
+const latest = document.createElement("button");
+latest.textContent = "↓ Latest";
+latest.setAttribute("aria-label", "Jump to latest output");
+latest.style.cssText =
+  "position:fixed;right:16px;bottom:16px;z-index:10;display:none;padding:8px 14px;border:0;border-radius:999px;background:#8b7cf6;color:#fff;font:600 13px -apple-system,system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.4)";
+latest.addEventListener("click", () => {
+  terminal.scrollToBottom();
+  terminal.focus();
+});
+document.body.appendChild(latest);
+function showLatest() {
+  const buffer = terminal.buffer.active;
+  latest.style.display = buffer.viewportY < buffer.baseY ? "block" : "none";
+}
+terminal.onScroll(showLatest);
+terminal.onWriteParsed(showLatest);
 post({ type: "ready" });
-=======
-function post(value: unknown) {
-  const data = JSON.stringify(value);
-  const bridge: unknown = Reflect.get(window, "ReactNativeWebView");
-  if (bridge !== null && typeof bridge === "object") {
-    const postMessage: unknown = Reflect.get(bridge, "postMessage");
-    if (typeof postMessage === "function") {
-      Reflect.apply(postMessage, bridge, [data]);
-      return;
-    }
-  }
-  window.parent.postMessage(data, "*");
-}
-
-const root = document.getElementById("root");
-if (!root) throw new Error("terminal root is missing");
-
-const term = new Terminal({
-  convertEol: true,
-  cursorBlink: true,
-  fontSize: 13,
-  fontFamily: "ui-monospace, Menlo, monospace",
-  theme: { background: "#181818", foreground: "#ffffff", cursor: "#ffffff" },
-  scrollback: 4000,
-});
-const fit = new FitAddon();
-term.loadAddon(fit);
-term.open(root);
-term.onData((data) => post({ type: "input", data }));
-term.onResize(({ cols, rows }) => post({ type: "resize", cols, rows }));
-
-function apply(raw: unknown) {
-  const text = typeof raw === "string" ? raw : null;
-  if (!text) return;
-  let message: unknown;
-  try {
-    message = JSON.parse(text);
-  } catch {
-    return;
-  }
-  if (!message || typeof message !== "object") return;
-  const type = (message as { type?: unknown }).type;
-  if (type === "write" && typeof (message as { data?: unknown }).data === "string") {
-    term.write((message as { data: string }).data);
-  } else if (type === "clear") {
-    term.reset();
-  } else if (type === "fit") {
-    fit.fit();
-  }
-}
-
-window.addEventListener("message", (event) => apply(event.data));
-document.addEventListener("message", (event) => apply((event as MessageEvent).data));
-new ResizeObserver(() => fit.fit()).observe(document.documentElement);
-queueMicrotask(() => {
-  fit.fit();
-  term.focus();
-  post({ type: "ready", cols: term.cols, rows: term.rows });
-});
->>>>>>> 7ab3869e5c6910ec4f56fd7f967f3c674180989a

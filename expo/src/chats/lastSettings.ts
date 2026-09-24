@@ -1,10 +1,5 @@
 import {
   AGENT_EFFORTS,
-  CLAUDE_MODELS,
-  CODEX_MODELS,
-  CURSOR_MODELS,
-  GROK_MODELS,
-  OPENAI_MODELS,
   PERMISSION_MODES,
   SERVICE_TIERS,
   canonicalCursorModel,
@@ -24,17 +19,9 @@ export type ChatSettings = {
   serviceTier: ServiceTier;
 };
 
-const MODELS: Record<ChatSettings["provider"], readonly string[]> = {
-  codex: CODEX_MODELS,
-  cursor: CURSOR_MODELS,
-  grok: GROK_MODELS,
-  claude: CLAUDE_MODELS,
-  openai: OPENAI_MODELS,
-};
-
 export const DEFAULT_CHAT_SETTINGS: ChatSettings = {
   provider: "codex",
-  model: CODEX_MODELS[0],
+  model: "gpt-5.6-terra",
   effort: "medium",
   permissionMode: DEFAULT_PERMISSION_MODE,
   serviceTier: DEFAULT_SERVICE_TIER,
@@ -64,11 +51,10 @@ export function parseLastSettings(raw: string): ChatSettings {
       return DEFAULT_CHAT_SETTINGS;
     }
     const { provider, model: rawModel, effort } = parsed;
-    if (!isProvider(provider) || typeof rawModel !== "string" || !isEffort(effort)) {
+    if (!isProvider(provider) || typeof rawModel !== "string" || rawModel.trim() === "" || !isEffort(effort)) {
       return DEFAULT_CHAT_SETTINGS;
     }
     const model = provider === "cursor" ? canonicalCursorModel(rawModel) : rawModel;
-    if (!MODELS[provider].includes(model)) return DEFAULT_CHAT_SETTINGS;
     const permissionMode =
       "permissionMode" in parsed && isPermissionMode(parsed.permissionMode)
         ? parsed.permissionMode

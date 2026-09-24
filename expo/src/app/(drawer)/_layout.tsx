@@ -21,6 +21,7 @@ export default function DrawerLayout() {
         title: 'Chats',
       }}>
       <Drawer.Screen name="sessions" options={{ drawerItemStyle: { display: 'none' } }} />
+      <Drawer.Screen name="settings" options={{ headerShown: false }} />
     </Drawer>
   );
 }

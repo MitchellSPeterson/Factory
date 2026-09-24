@@ -33,7 +33,7 @@ import {
 import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
 import type { ChatSettings } from "./lastSettings";
 import { canonicalCursorModel } from "../../../shared/agentModel";
-import { ModelMenu, PickerChip, effortLabel, modelTitle } from "./model-picker";
+import { ModelMenu, PickerChip, effortLabel, modelTitle, useChatModels } from "./model-picker";
 import { SlashMenu } from "./SlashMenu";
 import { isCompactDraft, slashItems, slashQuery, type SlashItem } from "./composerSlash";
 import {
@@ -263,6 +263,10 @@ export function Conversation({
   const [pickedSkills, setPickedSkills] = useState<PickedSkill[]>([]);
   const [picker, setPicker] = useState<null | "model">(null);
   const [settings, setSettings] = useState<ChatSettings>(readLastSettings);
+  const models = useChatModels();
+  const currentModel = models?.find(
+    (row) => row.provider === settings.provider && row.model === settings.model,
+  );
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -299,6 +303,12 @@ export function Conversation({
     view?.session.permissionMode,
     view?.session.serviceTier,
   ]);
+  useEffect(() => {
+    // New chats fall back to an available model when the saved one's provider is off or signed out.
+    const first = models?.[0];
+    if (sessionId || !first || currentModel) return;
+    setSettings((prev) => ({ ...prev, provider: first.provider, model: first.model }));
+  }, [sessionId, models, currentModel]);
   const query = slashQuery(text);
   const items = useMemo(() => {
     return slashItems(
@@ -625,7 +635,7 @@ export function Conversation({
               disabled={uploading || attachments.length >= 4}
             />
             <PickerChip
-              label={`${modelTitle(settings.model)} · ${effortLabel(settings.effort)}`}
+              label={`${currentModel?.title ?? modelTitle(settings.model)} · ${effortLabel(settings.effort)}`}
               icon={settings.provider}
               open={picker === "model"}
               disabled={busy}

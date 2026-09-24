@@ -13,13 +13,8 @@ import {
 import { SymbolView } from "expo-symbols";
 import { useTheme } from "@/hooks/use-theme";
 import { Colors } from "@/constants/theme";
-import {
-  CLAUDE_MODELS,
-  CODEX_MODELS,
-  CURSOR_MODELS,
-  GROK_MODELS,
-  OPENAI_MODELS,
-} from "../../../shared/agentModel";
+import { useQuery } from "@/lib/factory";
+import { api } from "@/lib/api";
 import { favoriteId, useFavorites } from "./favorites";
 import type { ChatSettings } from "./lastSettings";
 import {
@@ -34,12 +29,14 @@ type Rail = "favorites" | Provider;
 type ChatModel = { provider: Provider; model: string; title: string };
 
 const PROVIDER_ICONS = {
+  claude: require("../../assets/providerIcons/claude.png"),
   codex: require("../../assets/providerIcons/ChatGPT.webp"),
   cursor: require("../../assets/providerIcons/cursor.png"),
   grok: require("../../assets/providerIcons/grok-ai-icon.webp"),
 } as const;
 
 const PROVIDER_ICON_FIT = {
+  claude: 0.9,
   codex: 1,
   cursor: 1,
   grok: 0.82,
@@ -47,7 +44,7 @@ const PROVIDER_ICON_FIT = {
 
 export function ProviderMark({ provider, size }: { provider: Provider; size: number }) {
   const theme = useTheme();
-  if (provider === "claude" || provider === "openai") {
+  if (provider === "openai") {
     return (
       <View
         style={{
@@ -56,9 +53,7 @@ export function ProviderMark({ provider, size }: { provider: Provider; size: num
           alignItems: "center",
           justifyContent: "center",
         }}>
-        <Text style={{ color: theme.text, fontSize: size * 0.55, fontWeight: "700" }}>
-          {provider === "claude" ? "C" : "O"}
-        </Text>
+        <Text style={{ color: theme.text, fontSize: size * 0.55, fontWeight: "700" }}>O</Text>
       </View>
     );
   }
@@ -81,7 +76,7 @@ export function ProviderMark({ provider, size }: { provider: Provider; size: num
         style={{
           width: dim,
           height: dim,
-          tintColor: provider === "cursor" ? undefined : theme.text,
+          tintColor: provider === "cursor" || provider === "claude" ? undefined : theme.text,
         }}
       />
     </View>
@@ -123,33 +118,18 @@ export function modelTitle(id: string) {
 
 export { effortLabel } from "./modelOptions";
 
-const CHAT_MODELS: ChatModel[] = [
-  ...CODEX_MODELS.map((model) => ({
-    provider: "codex" as const,
-    model,
-    title: modelTitle(model),
-  })),
-  ...CURSOR_MODELS.map((model) => ({
-    provider: "cursor" as const,
-    model,
-    title: modelTitle(model),
-  })),
-  ...GROK_MODELS.map((model) => ({
-    provider: "grok" as const,
-    model,
-    title: modelTitle(model),
-  })),
-  ...CLAUDE_MODELS.map((model) => ({
-    provider: "claude" as const,
-    model,
-    title: modelTitle(model),
-  })),
-  ...OPENAI_MODELS.map((model) => ({
-    provider: "openai" as const,
-    model,
-    title: modelTitle(model),
-  })),
-];
+/** Models from providers that are switched on and signed in; undefined until the worker reports. */
+export function useChatModels(): ChatModel[] | undefined {
+  const live = useQuery(api.servers.local);
+  return useMemo(() => {
+    if (!live?.providerModels) return undefined;
+    return live.providerModels
+      .filter((entry) => entry.enabled && entry.authenticated)
+      .flatMap((entry) =>
+        entry.models.map((m) => ({ provider: entry.provider, model: m.id, title: m.name })),
+      );
+  }, [live?.providerModels]);
+}
 
 function asProvider(provider: string): Provider {
   if (provider === "grok" || provider === "cursor" || provider === "claude" || provider === "openai") {
@@ -244,7 +224,11 @@ export function ModelMenu({
   const theme = useTheme();
   const { height } = useWindowDimensions();
   const { ids, toggle } = useFavorites();
-  const defaultRail: Rail = asProvider(current.provider);
+  const models = useChatModels();
+  const providers = [...new Set((models ?? []).map((row) => row.provider))];
+  const defaultRail: Rail = providers.includes(asProvider(current.provider))
+    ? asProvider(current.provider)
+    : providers[0] ?? "favorites";
   const [railOverride, setRailOverride] = useState<Rail | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState<PickerOptionId | "models">("models");
@@ -257,7 +241,7 @@ export function ModelMenu({
   }, [visible]);
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return CHAT_MODELS.filter((row) => {
+    return (models ?? []).filter((row) => {
       if (rail === "favorites") return ids.includes(favoriteId(row.provider, row.model));
       if (row.provider !== rail) return false;
       return true;
@@ -268,7 +252,7 @@ export function ModelMenu({
         row.model.toLowerCase().includes(q)
       );
     });
-  }, [rail, ids, query]);
+  }, [models, rail, ids, query]);
   if (!visible) return null;
   const selectedFill =
     theme.background === Colors.dark.background
@@ -375,46 +359,17 @@ export function ModelMenu({
               tintColor={rail === "favorites" ? STAR : theme.text}
             />
           </RailButton>
-          <RailButton
-            label="Codex"
-            selected={rail === "codex"}
-            selectedFill={selectedFill}
-            onPress={() => setRailOverride("codex")}
-          >
-            <ProviderMark provider="codex" size={18} />
-          </RailButton>
-          <RailButton
-            label="Cursor"
-            selected={rail === "cursor"}
-            selectedFill={selectedFill}
-            onPress={() => setRailOverride("cursor")}
-          >
-            <ProviderMark provider="cursor" size={18} />
-          </RailButton>
-          <RailButton
-            label="Grok"
-            selected={rail === "grok"}
-            selectedFill={selectedFill}
-            onPress={() => setRailOverride("grok")}
-          >
-            <ProviderMark provider="grok" size={18} />
-          </RailButton>
-          <RailButton
-            label="Claude"
-            selected={rail === "claude"}
-            selectedFill={selectedFill}
-            onPress={() => setRailOverride("claude")}
-          >
-            <ProviderMark provider="claude" size={18} />
-          </RailButton>
-          <RailButton
-            label="OpenAI"
-            selected={rail === "openai"}
-            selectedFill={selectedFill}
-            onPress={() => setRailOverride("openai")}
-          >
-            <ProviderMark provider="openai" size={18} />
-          </RailButton>
+          {providers.map((provider) => (
+            <RailButton
+              key={provider}
+              label={providerName(provider)}
+              selected={rail === provider}
+              selectedFill={selectedFill}
+              onPress={() => setRailOverride(provider)}
+            >
+              <ProviderMark provider={provider} size={18} />
+            </RailButton>
+          ))}
         </View>
         <View style={styles.main}>
           <ScrollView
@@ -424,9 +379,13 @@ export function ModelMenu({
           >
             {rows.length === 0 ? (
               <Text style={[styles.empty, { color: theme.textSecondary }]}>
-                {rail === "favorites" && !query.trim()
-                  ? "Star a model to pin it here."
-                  : "No matching models."}
+                {models === undefined
+                  ? "Start the worker to load models."
+                  : providers.length === 0
+                    ? "No providers are on and signed in. Check Settings → Providers."
+                    : rail === "favorites" && !query.trim()
+                      ? "Star a model to pin it here."
+                      : "No matching models."}
               </Text>
             ) : (
               rows.map((row) => {

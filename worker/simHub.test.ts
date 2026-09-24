@@ -66,8 +66,8 @@ test("serve-sim uses SERVE_SIM_PATH when set", () => {
     args: ["--list", "-q"],
   });
   expect(serveSimInvocation({}, ["--kill"])).toEqual({
-    command: "npx",
-    args: ["--yes", "@expo/serve-sim", "--kill"],
+    command: path.join(import.meta.dir, "../node_modules/.bin/serve-sim"),
+    args: ["--kill"],
   });
 });
 
@@ -152,4 +152,26 @@ test("boot attaches serve-sim only when preview is wanted", async () => {
   expect(calls).toContain(
     "serve-sim --detach -q --codec mjpeg --host 0.0.0.0 --mjpeg-fps 30 --mjpeg-quality 0.75 --max-dimension 1080",
   );
+});
+
+test("reconcileSimHub does not kill streams it does not own", async () => {
+  const tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), "factory-sim-"));
+  await fs.mkdir(path.join(tmpdir, "serve-sim"));
+  await fs.writeFile(path.join(tmpdir, "serve-sim", "server-AAAA.json"), JSON.stringify({ port: 3400, device: "AAAA" }));
+  const calls: string[] = [];
+  let stopped = false;
+  const runner: SimRunner = {
+    platform: "darwin",
+    tmpdir,
+    env: {},
+    run: async (command, args) => {
+      calls.push([command, ...args].join(" "));
+      return { code: 0, text: args.includes("devices") ? simctl : "" };
+    },
+    startPersistent: () => {},
+    stopPersistent: () => { stopped = true; },
+  };
+  await reconcileSimHub({ wanted: false, commands: [], runner, now: 1 });
+  expect(stopped).toBe(true);
+  expect(calls.some((item) => item.includes("--kill"))).toBe(false);
 });

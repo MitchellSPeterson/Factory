@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { formatCheckedAt, formatPercent, formatReset, formatTokens, formatUsdCents, USAGE_FILL, usageFillColor } from "./format";
+import { formatCheckedAt, formatPercent, formatReset, formatTokens, formatUsdCents, paceLabel, USAGE_FILL, usageFillColor } from "./format";
 
 test("formatUsdCents uses currency with cents", () => {
   expect(formatUsdCents(4500)).toBe("$45.00");
@@ -34,4 +34,15 @@ test("usageFillColor follows consumption pace through the window", () => {
   expect(usageFillColor(95, now, now + 1_000 * 1000, windowSeconds)).toBe(USAGE_FILL.overPace);
   expect(usageFillColor(50, now)).toBe(USAGE_FILL.comfortable);
   expect(usageFillColor(95, now)).toBe(USAGE_FILL.approaching);
+});
+
+test("paceLabel compares usage with elapsed window time", () => {
+  const hour = 3600;
+  // Halfway through a 5h window.
+  const now = 0;
+  const resetsAt = 2.5 * hour * 1000;
+  expect(paceLabel(20, now, resetsAt, 5 * hour)).toBe("Under pace");
+  expect(paceLabel(50, now, resetsAt, 5 * hour)).toBe("On pace");
+  expect(paceLabel(80, now, resetsAt, 5 * hour)).toBe("Over pace");
+  expect(paceLabel(80, now)).toBeUndefined();
 });

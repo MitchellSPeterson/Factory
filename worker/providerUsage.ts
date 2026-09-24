@@ -19,6 +19,7 @@ export type ProviderMeter =
       resetsAt?: number;
       display?: string;
       windows?: UsageWindow[];
+      totalTokens?: number;
     }
   | {
       provider: AgentProvider;
@@ -50,6 +51,7 @@ export type LocalAuth = {
   home?: string;
   readFile?: (file: string) => Promise<string>;
   keychain?: () => Promise<string | null>;
+  claudeKeychain?: () => Promise<string | null>;
 };
 
 type Env = Record<string, string | undefined>;
@@ -140,12 +142,15 @@ function decodeHexUtf8(hex: string): string | null {
   return new TextDecoder().decode(bytes);
 }
 
-export async function readCodexKeychain(run?: () => Promise<{ code: number; stdout: string }>): Promise<string | null> {
+export async function readCodexKeychain(
+  run?: () => Promise<{ code: number; stdout: string }>,
+  service = "Codex Auth",
+): Promise<string | null> {
   const exec =
     run ??
     (async () => {
       if (process.platform !== "darwin") return { code: 1, stdout: "" };
-      const proc = Bun.spawn(["/usr/bin/security", "find-generic-password", "-s", "Codex Auth", "-w"], {
+      const proc = Bun.spawn(["/usr/bin/security", "find-generic-password", "-s", service, "-w"], {
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -222,6 +227,67 @@ export async function locateGrokAuth(opts: { env?: Env; local?: LocalAuth } = {}
   return null;
 }
 
+export function parseClaudeStatsCache(raw: string): number | null {
+  let body: unknown;
+  try {
+    body = JSON.parse(raw) as unknown;
+  } catch {
+    return null;
+  }
+  if (!isRecord(body) || !isRecord(body.modelUsage)) return null;
+  let total = 0;
+  for (const usage of Object.values(body.modelUsage)) {
+    if (!isRecord(usage)) continue;
+    for (const field of ["inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens"]) {
+      const value = numberField(usage[field]);
+      if (value !== undefined && value >= 0) total += value;
+    }
+  }
+  return total;
+}
+
+export type ClaudeAuth = { accessToken: string; plan?: string };
+
+export async function locateClaudeAuth(opts: { env?: Env; local?: LocalAuth } = {}): Promise<ClaudeAuth | null> {
+  const home = opts.local?.home ?? os.homedir();
+  const read = opts.local?.readFile ?? ((file: string) => readFile(file, "utf8"));
+  const configDir = opts.env?.CLAUDE_CONFIG_DIR?.trim() || path.join(home, ".claude");
+  let raw = await read(path.join(configDir, ".credentials.json")).catch(() => null);
+  if (!raw) {
+    raw = await (opts.local?.claudeKeychain ?? (() => readCodexKeychain(undefined, "Claude Code-credentials")))().catch(() => null);
+  }
+  try {
+    const oauth = (JSON.parse(raw ?? "") as { claudeAiOauth?: Record<string, unknown> }).claudeAiOauth;
+    const accessToken = stringField(oauth?.accessToken);
+    if (!accessToken) return null;
+    const plan = stringField(oauth?.subscriptionType);
+    return { accessToken, plan: plan ? titleCase(plan) : undefined };
+  } catch {
+    return null;
+  }
+}
+
+const CLAUDE_WINDOWS: Array<[field: string, name: string, seconds: number]> = [
+  ["five_hour", "Session", 5 * 3600],
+  ["seven_day", "Weekly", 7 * 86400],
+  ["seven_day_opus", "Weekly Opus", 7 * 86400],
+  ["seven_day_sonnet", "Weekly Sonnet", 7 * 86400],
+];
+
+export function parseClaudeUsage(body: unknown, now: number, plan?: string): ProviderMeter | null {
+  if (!isRecord(body)) return null;
+  const windows: UsageWindow[] = [];
+  for (const [field, name, windowSeconds] of CLAUDE_WINDOWS) {
+    const entry = body[field];
+    if (!isRecord(entry)) continue;
+    const percent = numberField(entry.utilization);
+    if (percent === undefined) continue;
+    windows.push({ name, percentUsed: percent, resetsAt: rfc3339Ms(stringField(entry.resets_at)), windowSeconds });
+  }
+  if (windows.length === 0) return null;
+  return { provider: "claude", status: "ok", checkedAt: now, plan, windows };
+}
+
 function pickField(record: Record<string, unknown>, ...names: string[]): unknown {
   for (const name of names) {
     if (record[name] !== undefined) return record[name];
@@ -263,7 +329,7 @@ export function parseGrokBilling(body: unknown, now: number): ProviderMeter | nu
   const weekly = periodType.endsWith("WEEKLY");
   const monthly = periodType.endsWith("MONTHLY");
   const windowSeconds = weekly ? 604_800 : monthly ? 30 * 86_400 : undefined;
-  const windowName = weekly ? "Weekly (7d)" : monthly ? "Monthly" : "Included";
+  const windowName = weekly ? "Weekly" : monthly ? "Monthly" : "Included";
   const resetsAt = rfc3339Ms(
     stringField(period?.end) ?? stringField(pickField(config, "billingPeriodEnd", "billing_period_end")),
   );
@@ -332,7 +398,12 @@ function extractCodexWindow(
   const windowSeconds = limitSeconds && limitSeconds > 0 ? limitSeconds : fallbackSeconds;
   const fresh = limitSeconds !== undefined && resetAfter !== undefined && resetAfter >= limitSeconds;
   const resetEpoch = numberField(window.reset_at);
-  const name = `${fallbackName} (${compactDuration(windowSeconds)})`;
+  // Name by the window's real length: some plans put a 7-day limit in the primary slot.
+  const period = windowSeconds === 18_000 ? "Session" : windowSeconds === 604_800 ? "Weekly" : undefined;
+  const name =
+    fallbackName === "Session" || fallbackName === "Weekly"
+      ? period ?? `${fallbackName} (${compactDuration(windowSeconds)})`
+      : `${fallbackName} (${compactDuration(windowSeconds)})`;
   return {
     name,
     percentUsed: used,
@@ -393,8 +464,17 @@ export function parseCursorPeriod(body: unknown, now: number, plan?: string): Pr
   const limitCents = numberField(usage.limit) ?? numberField(usage.includedSpend);
   const usedCents = numberField(usage.totalSpend) ?? numberField(usage.includedSpend);
   const resetsAt = numberField(body.billingCycleEnd);
+  const cycleStart = numberField(body.billingCycleStart);
+  const windowSeconds = resetsAt && cycleStart ? (resetsAt - cycleStart) / 1000 : undefined;
   const display = stringField(body.displayMessage);
   if (remainingCents === undefined && limitCents === undefined && usedCents === undefined && !display) return null;
+  // Cursor reports percentage points (0.5 = 0.5%), split into its own models (Auto, Composer) and other models.
+  const windows: UsageWindow[] = [];
+  for (const [field, name] of [["autoPercentUsed", "Cursor models"], ["apiPercentUsed", "Other models"]] as const) {
+    const percent = numberField(usage[field]);
+    if (percent !== undefined) windows.push({ name, percentUsed: percent, resetsAt, windowSeconds });
+  }
+  const total = numberField(usage.totalPercentUsed);
   return {
     provider: "cursor",
     status: "ok",
@@ -403,9 +483,10 @@ export function parseCursorPeriod(body: unknown, now: number, plan?: string): Pr
     usedCents,
     remainingCents,
     limitCents,
-    percentUsed: percentUsed(usedCents, limitCents, numberField(usage.totalPercentUsed)),
+    percentUsed: total ?? percentUsed(usedCents, limitCents),
     resetsAt,
     display,
+    ...(windows.length ? { windows } : {}),
   };
 }
 
@@ -662,6 +743,42 @@ async function codexMeter(env: Env, now: number, http: HttpFetch, local?: LocalA
   }
 }
 
+async function claudeMeter(env: Env, now: number, http: HttpFetch, local?: LocalAuth): Promise<ProviderMeter> {
+  const auth = await locateClaudeAuth({ env, local });
+  if (auth) {
+    try {
+      const res = await getJson(http, "https://api.anthropic.com/api/oauth/usage", {
+        Authorization: `Bearer ${auth.accessToken}`,
+        "anthropic-beta": "oauth-2025-04-20",
+      });
+      if (res.status === 401) {
+        return { provider: "claude", status: "error", checkedAt: now, message: "Claude Code sign-in expired. Run any `claude` command to refresh it." };
+      }
+      if (!res.ok) throw new Error(`Claude usage returned ${res.status}.`);
+      const meter = parseClaudeUsage(res.body, now, auth.plan);
+      if (meter) return meter;
+    } catch (error) {
+      return { provider: "claude", status: "error", checkedAt: now, message: error instanceof Error ? error.message : "Claude usage check failed." };
+    }
+  }
+  // No Claude.ai login (API key users): fall back to local token history.
+  const home = local?.home ?? os.homedir();
+  const read = local?.readFile ?? ((file: string) => readFile(file, "utf8"));
+  const configDir = env.CLAUDE_CONFIG_DIR?.trim() || path.join(home, ".claude");
+  try {
+    const totalTokens = parseClaudeStatsCache(await read(path.join(configDir, "stats-cache.json")));
+    if (totalTokens === null) {
+      return { provider: "claude", status: "error", checkedAt: now, message: "Claude Code local activity could not be read." };
+    }
+    return { provider: "claude", status: "ok", checkedAt: now, totalTokens };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { provider: "claude", status: "ok", checkedAt: now };
+    }
+    return { provider: "claude", status: "error", checkedAt: now, message: "Claude Code local activity could not be read." };
+  }
+}
+
 async function grokMeter(env: Env, now: number, http: HttpFetch, local?: LocalAuth): Promise<ProviderMeter> {
   const loginKey = await locateGrokAuth({ env, local });
   if (loginKey) {
@@ -686,6 +803,7 @@ function hasUsage(meter: ProviderMeter): boolean {
   if (meter.status === "error") return true;
   if (meter.status !== "ok") return false;
   return (
+    meter.provider === "claude" ||
     meter.windows !== undefined && meter.windows.length > 0 ||
     meter.remainingCents !== undefined ||
     meter.usedCents !== undefined ||
@@ -706,6 +824,7 @@ export async function collectProviderUsage(opts: {
     await Promise.all([
       cursorMeter(opts.env, now, http),
       codexMeter(opts.env, now, http, opts.local),
+      claudeMeter(opts.env, now, http, opts.local),
       grokMeter(opts.env, now, http, opts.local),
       openaiMeter(opts.env, now, http),
     ])

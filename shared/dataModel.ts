@@ -35,12 +35,21 @@ export type ProviderMeter = {
   limitCents?: number;
   usedCents?: number;
   percentUsed?: number;
+  totalTokens?: number;
   resetsAt?: number;
 };
 
 export type ProviderUsage = {
   checkedAt: number;
   meters: ProviderMeter[];
+};
+
+export type ProviderModels = {
+  provider: AgentProvider;
+  enabled: boolean;
+  authenticated: boolean;
+  models: Array<{ id: string; name: string }>;
+  message?: string;
 };
 
 export type SimDevice = {
@@ -103,7 +112,8 @@ export type Tables = {
     publicKey: string;
     projectsRoot: string;
     lastSeen: number;
-    grokCatalog?: unknown;
+    providerModels?: ProviderModels[];
+    providersDisabled?: AgentProvider[];
     providerUsage?: ProviderUsage;
     simHubWanted?: boolean;
     simHub?: SimHub;
@@ -148,7 +158,8 @@ export type ServerView = {
   publicKey: string;
   projectsRoot: string;
   lastSeen: number;
-  grokCatalog?: unknown;
+  providerModels?: ProviderModels[];
+  providersDisabled?: AgentProvider[];
   providerUsage?: ProviderUsage;
   simHubWanted?: boolean;
   simHub?: SimHub;

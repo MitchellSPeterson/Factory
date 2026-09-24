@@ -74,6 +74,19 @@ export function paceRatio(
   return percentUsed / expected;
 }
 
+export function paceLabel(
+  percentUsed: number,
+  now: number,
+  resetsAt?: number,
+  windowSeconds?: number,
+): string | undefined {
+  const ratio = paceRatio(percentUsed, now, resetsAt, windowSeconds);
+  if (ratio === undefined) return undefined;
+  if (ratio < 0.9) return "Under pace";
+  if (ratio <= 1.1) return "On pace";
+  return "Over pace";
+}
+
 export function usageFillColor(
   percentUsed: number,
   now: number,

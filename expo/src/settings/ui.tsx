@@ -1,5 +1,5 @@
 import { Children, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,16 +17,41 @@ export const SettingsIcons = {
   plan: { ios: 'creditcard', android: 'credit_card', web: 'credit_card' },
   tokens: { ios: 'number', android: 'tag', web: 'tag' },
   warning: { ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' },
+  providers: { ios: 'cpu', android: 'memory', web: 'memory' },
+  phone: { ios: 'iphone', android: 'smartphone', web: 'smartphone' },
+  link: { ios: 'link', android: 'link', web: 'link' },
+  add: { ios: 'plus.circle', android: 'add_circle', web: 'add_circle' },
+  wifi: { ios: 'wifi', android: 'wifi', web: 'wifi' },
+  network: { ios: 'network', android: 'lan', web: 'lan' },
+  key: { ios: 'key', android: 'key', web: 'key' },
 } as const;
 
 export type SettingsIcon = (typeof SettingsIcons)[keyof typeof SettingsIcons];
+
+/** Scrollable settings page body, centred and width-capped on wide screens. */
+export function SettingsScroll({ children }: { children: ReactNode }) {
+  const theme = useTheme();
+  const wide = useWindowDimensions().width >= 768;
+  return (
+    <ScrollView
+      style={{ flex: 1, backgroundColor: theme.sidebar }}
+      contentContainerStyle={[
+        styles.scroll,
+        { paddingHorizontal: wide ? 32 : 16, maxWidth: wide ? 600 : undefined },
+      ]}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="automatic">
+      {children}
+    </ScrollView>
+  );
+}
 
 export function SettingsGroup({
   title,
   footer,
   children,
 }: {
-  title: string;
+  title?: string;
   footer?: string;
   children: ReactNode;
 }) {
@@ -34,9 +59,11 @@ export function SettingsGroup({
   const rows = Children.toArray(children).filter(Boolean);
   return (
     <View style={styles.wrap}>
-      <ThemedText accessibilityRole="header" themeColor="textSecondary" style={styles.title}>
-        {title}
-      </ThemedText>
+      {title ? (
+        <ThemedText accessibilityRole="header" themeColor="textSecondary" style={styles.title}>
+          {title}
+        </ThemedText>
+      ) : null}
       <View style={[styles.group, { backgroundColor: theme.backgroundElement }]}>
         {rows.map((child, index) => (
           <View key={index}>
@@ -63,8 +90,10 @@ export function SettingsRow({
   valueTone = 'textSecondary',
   valueMode = 'tail',
   accessory,
+  onPress,
   children,
 }: {
+  onPress?: () => void;
   icon?: SettingsIcon;
   leading?: ReactNode;
   label: string;
@@ -77,7 +106,11 @@ export function SettingsRow({
 }) {
   const theme = useTheme();
   return (
-    <View style={styles.row}>
+    <Pressable
+      disabled={!onPress}
+      onPress={onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: theme.subtleHover }]}>
       <View style={styles.rowMain}>
         {leading ? leading : icon ? (
           <SymbolView name={icon} size={22} tintColor={theme.text} />
@@ -101,16 +134,19 @@ export function SettingsRow({
             </ThemedText>
           </View>
         ) : null}
+        {onPress ? <SymbolView name={CHEVRON} size={13} tintColor={theme.textSecondary} /> : null}
       </View>
       {children}
       {detail ? (
-        <ThemedText themeColor="textSecondary" style={styles.detail}>
+        <ThemedText selectable themeColor="textSecondary" style={styles.detail}>
           {detail}
         </ThemedText>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
+
+const CHEVRON = { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' } as const;
 
 export function SettingsMessage({ children }: { children: string }) {
   return (
@@ -210,6 +246,13 @@ export function UsageTrack({
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingTop: 16,
+    paddingBottom: 48,
+    gap: 28,
+  },
   wrap: {
     gap: 8,
   },

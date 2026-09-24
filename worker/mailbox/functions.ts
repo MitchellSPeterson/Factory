@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { githubRepoFromRemote } from "../../shared/addProject";
+import { AGENT_PROVIDERS } from "../../shared/agentModel";
 import { validateRepository, validateVariableName } from "../../shared/managed";
 import type { ProjectOperation, OperationResult, OperationState } from "../../shared/projectOperations";
 import { addUsage, isZeroUsage, subUsage, ZERO_USAGE, type TokenUsage } from "../../shared/tokenUsage";
@@ -71,7 +72,8 @@ function toServerView(server: Doc) {
     publicKey: server.publicKey,
     projectsRoot: server.projectsRoot,
     lastSeen: server.lastSeen,
-    grokCatalog: server.grokCatalog,
+    providerModels: server.providerModels,
+    providersDisabled: server.providersDisabled,
     providerUsage: server.providerUsage,
     simHubWanted: server.simHubWanted,
     simHub: server.simHub,
@@ -645,9 +647,18 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     const server = localServer(store);
     return server ? toServerView(server) : null;
   },
-  "servers.reportGrokCatalog": (args, { store }) => {
+  "servers.reportProviderModels": (args, { store }) => {
     const server = requireServer(store, String(args.accessKey ?? ""));
-    store.patch(server._id, { grokCatalog: args.catalog, lastSeen: Date.now() });
+    if (!Array.isArray(args.models) || args.models.length > 8) throw new Error("Invalid provider models.");
+    store.patch(server._id, { providerModels: args.models, lastSeen: Date.now() });
+    return null;
+  },
+  "servers.setProviderEnabled": (args, { store }) => {
+    const server = resolveServer(store, typeof args.accessKey === "string" ? args.accessKey : undefined);
+    const provider = String(args.provider ?? "");
+    if (!(AGENT_PROVIDERS as readonly string[]).includes(provider)) throw new Error("Unknown Factory provider");
+    const rest = ((server.providersDisabled as string[] | undefined) ?? []).filter((p) => p !== provider);
+    store.patch(server._id, { providersDisabled: args.enabled ? rest : [...rest, provider] });
     return null;
   },
   "servers.reportProviderUsage": (args, { store }) => {

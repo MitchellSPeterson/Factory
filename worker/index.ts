@@ -1,7 +1,7 @@
 import { startTerminals } from "./terminals";
 import { Agent } from "@cursor/sdk";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,8 @@ import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
 import { grokResumeId } from "./grokAgent";
-import { probeGrokCatalog, runGrokAcpSession } from "./grokAcp";
+import { runGrokAcpSession } from "./grokAcp";
+import { claudeBin, collectProviderModels } from "./providerModels";
 import { collectProviderUsage } from "./providerUsage";
 import { runOpenAIAgent } from "./openaiAgent";
 import { cursorImagesFromPaths, cursorUserMessage } from "./cursorMessage";
@@ -259,8 +260,7 @@ async function runSessionCursor(client: Mailbox, launch: SessionLaunch) {
 }
 
 async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
-  const localClaude = path.join(os.homedir(), ".local/bin/claude");
-  const bin = process.env.CLAUDE_PATH?.trim() || (existsSync(localClaude) ? localClaude : "claude");
+  const bin = claudeBin();
   const log = createLiveLog((text) =>
     client.mutation(api.sessions.appendMessage, { sessionId: launch.sessionId, text }),
   );
@@ -433,14 +433,18 @@ async function main() {
   void imports();
   const stopProjectOperations = startProjectOperations(client, identity);
   const stopTerminals = startTerminals(client, identity);
-  let lastGrokProbe = 0;
+  let lastProviderProbe = 0;
+  let lastDisabled = "";
   let lastSimHub = 0;
   let lastSimRunning = false;
   let lastSkillsScan = 0;
   const lastSkills = new Map<string, string>();
-  async function grokCatalogTick() {
-    if (Date.now() - lastGrokProbe < 60_000) return;
-    lastGrokProbe = Date.now();
+  async function providerTick() {
+    const disabled = (await client.query(api.servers.paired, { accessKey: identity.accessKey })).providersDisabled ?? [];
+    // Re-probe right away when a provider is toggled in Settings.
+    if (Date.now() - lastProviderProbe < 60_000 && disabled.join() === lastDisabled) return;
+    lastProviderProbe = Date.now();
+    lastDisabled = disabled.join();
     let env: Record<string, string | undefined> = { ...process.env };
     try {
       const values = await environmentFor(client, identity);
@@ -449,10 +453,10 @@ async function main() {
       // Worker environment may be empty until variables are saved.
     }
     try {
-      const catalog = await probeGrokCatalog(env);
-      await client.mutation(api.servers.reportGrokCatalog, { accessKey: identity.accessKey, catalog });
+      const models = await collectProviderModels(env, disabled);
+      await client.mutation(api.servers.reportProviderModels, { accessKey: identity.accessKey, models });
     } catch {
-      console.error("Grok catalog probe failed; retrying.");
+      console.error("Provider model probe failed; retrying.");
     }
     try {
       const usage = await collectProviderUsage({ env });
@@ -502,7 +506,7 @@ async function main() {
       console.error("Device preview synchronization failed; retrying.");
     }
   }
-  try { for (;;) { try { await grokCatalogTick(); await simHubTick(); await skillsTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  try { for (;;) { try { await providerTick(); await simHubTick(); await skillsTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
   finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); stopPairing(); setKeepAwake(false); }
 }
 

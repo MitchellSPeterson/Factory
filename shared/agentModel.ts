@@ -1,16 +1,6 @@
 export const DEFAULT_AGENT_MODEL = "composer-2.5";
 export const DEFAULT_AGENT_EFFORT = "medium";
 
-export const AGENT_MODELS = [
-  "composer-2.5",
-  "composer-2",
-  "default",
-  "grok-4.6",
-  "grok-4.5",
-  "claude-opus-5",
-  "gpt-5.6-sol",
-] as const;
-
 const CURSOR_MODEL_ALIASES: Record<string, string> = {
   "auto-smart": "default",
   auto: "default",
@@ -43,11 +33,6 @@ export function toModelSelection(model: string, effort: string) {
   return { id, params: [{ id: "reasoning_effort", value: effort }] };
 }
 
-export const CODEX_MODELS = ["gpt-5.6-terra", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5"] as const;
-export const GROK_MODELS = ["grok-4.6", "grok-4.5", "grok-build-0.1"] as const;
-export const CLAUDE_MODELS = ["opus", "sonnet", "haiku", "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5"] as const;
-export const OPENAI_MODELS = ["gpt-5.6", "gpt-5.4", "gpt-4.1"] as const;
-export const CURSOR_MODELS = AGENT_MODELS;
 export const AGENT_PROVIDERS = ["cursor", "codex", "grok", "claude", "openai"] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 export function providerLabel(provider?: AgentProvider) {

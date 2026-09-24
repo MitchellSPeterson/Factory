@@ -114,7 +114,7 @@ export function mergeSimStreams(devices: SimDevice[], streams: SimDevice[]): Sim
 export function serveSimInvocation(env: Record<string, string | undefined>, args: string[]): { command: string; args: string[] } {
   const configured = env.SERVE_SIM_PATH?.trim();
   if (configured) return { command: configured, args };
-  return { command: "npx", args: ["--yes", "@expo/serve-sim", ...args] };
+  return { command: path.join(import.meta.dir, "../node_modules/.bin/serve-sim"), args };
 }
 
 export async function readServeSimStates(tmpdir: string): Promise<SimDevice[]> {
@@ -181,8 +181,9 @@ export async function reconcileSimHub(opts: {
       }
     }
   } else if (!opts.wanted && streamsBefore.length > 0) {
-    opts.runner.stopPersistent?.();
-    await runServeSim(opts.runner, ["--kill"], 20_000);
+    // Only stop our own preview: a global --kill also kills the Device Hub's input helper.
+    if (opts.runner.stopPersistent) opts.runner.stopPersistent();
+    else await runServeSim(opts.runner, ["--kill"], 20_000);
     lastStartError = undefined;
     nextStartAt = 0;
   }
@@ -306,7 +307,7 @@ async function startPreview(runner: SimRunner): Promise<string | undefined> {
   if (!started) return "serve-sim timed out while starting.";
   if (started.code !== 0) {
     if (/not found|ENOENT|command not found/i.test(started.text)) {
-      return "serve-sim is not installed. The worker runs `npx @expo/serve-sim` on this machine.";
+      return "serve-sim is not installed. Run `bun install` in the Factory repo.";
     }
     return "serve-sim failed to start. Install Xcode and boot a simulator, then try again.";
   }

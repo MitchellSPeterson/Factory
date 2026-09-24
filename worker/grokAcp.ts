@@ -324,7 +324,7 @@ function permissionParams(params: unknown): {
   return { itemId, title, detail, options };
 }
 
-async function collectCommand(command: string, args: string[], env: Record<string, string>, timeoutMs: number): Promise<{ code: number; text: string } | null> {
+export async function collectCommand(command: string, args: string[], env: Record<string, string>, timeoutMs: number): Promise<{ code: number; text: string } | null> {
   try {
     const proc = Bun.spawn([command, ...args], { env, stdout: "pipe", stderr: "pipe" });
     const text = Promise.all([

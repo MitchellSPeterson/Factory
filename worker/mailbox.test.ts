@@ -201,3 +201,14 @@ test("seed skills and github connection", async () => {
   await client.mutation(api.github.disconnect, {});
   expect(await client.query(api.github.connection, {})).toBeNull();
 });
+
+test("provider toggles persist on the server view", async () => {
+  const client = mailbox();
+  await register(client);
+  await client.mutation(api.servers.setProviderEnabled, { accessKey: key, provider: "claude", enabled: false });
+  await client.mutation(api.servers.setProviderEnabled, { accessKey: key, provider: "claude", enabled: false });
+  expect((await client.query(api.servers.paired, { accessKey: key })).providersDisabled).toEqual(["claude"]);
+  await client.mutation(api.servers.setProviderEnabled, { accessKey: key, provider: "claude", enabled: true });
+  expect((await client.query(api.servers.paired, { accessKey: key })).providersDisabled).toEqual([]);
+  await expect(client.mutation(api.servers.setProviderEnabled, { accessKey: key, provider: "nope", enabled: false })).rejects.toThrow();
+});
