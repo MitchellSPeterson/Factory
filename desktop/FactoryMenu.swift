@@ -50,7 +50,12 @@ func resolveRoot() -> URL? {
 
 final class App: NSObject, NSApplicationDelegate {
   let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-  var children: [Process] = []
+  let status = NSMenuItem(title: "Worker: starting…", action: nil, keyEquivalent: "")
+  var worker: Process?
+  var build: Process?
+  var restarts = 0
+  var stopping = false
+  var generation = 0  // bumped on checkout switch/quit so stale exit handlers do nothing
   var root: URL
 
   init(root: URL) {
@@ -61,6 +66,8 @@ final class App: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     item.button?.title = "F"
     let menu = NSMenu()
+    menu.addItem(status)
+    menu.addItem(NSMenuItem.separator())
     menu.addItem(NSMenuItem(title: "Open Factory", action: #selector(openFactory), keyEquivalent: "o"))
     menu.addItem(NSMenuItem(title: "Settings", action: #selector(openSettings), keyEquivalent: ","))
     menu.addItem(NSMenuItem(title: "Show pairing address", action: #selector(showPair), keyEquivalent: "p"))
@@ -73,11 +80,63 @@ final class App: NSObject, NSApplicationDelegate {
   }
 
   func startServices() {
-    start(["bun", "worker/index.ts"])
-    start(["bun", "--cwd", "expo", "start", "--web"])
+    build = spawn(["bun", "run", "build:web"])
+    superviseWorker()
   }
 
-  func start(_ arguments: [String]) {
+  // Keep one Worker alive, like T3's desktop backend manager: restart with backoff,
+  // and leave an already-running Worker (e.g. `bun run dev:worker`) alone.
+  func superviseWorker() {
+    guard !stopping else { return }
+    let gen = generation
+    var request = URLRequest(url: URL(string: "http://127.0.0.1:3402/health")!)
+    request.timeoutInterval = 2
+    URLSession.shared.dataTask(with: request) { _, response, _ in
+      let healthy = (response as? HTTPURLResponse)?.statusCode == 200
+      DispatchQueue.main.async {
+        guard gen == self.generation else { return }
+        healthy ? self.watchExternalWorker() : self.startWorker()
+      }
+    }.resume()
+  }
+
+  func watchExternalWorker() {
+    status.title = "Worker: running (started outside the menu)"
+    let gen = generation
+    DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+      if gen == self.generation { self.superviseWorker() }
+    }
+  }
+
+  func startWorker() {
+    guard !stopping else { return }
+    let started = Date()
+    let gen = generation
+    guard let process = spawn(["bun", "worker/index.ts"], onExit: { [weak self] in
+      guard let self, !self.stopping, gen == self.generation else { return }
+      if Date().timeIntervalSince(started) > 60 { self.restarts = 0 }
+      self.scheduleRestart()
+    }) else {
+      scheduleRestart()
+      return
+    }
+    worker = process
+    status.title = "Worker: running"
+  }
+
+  func scheduleRestart() {
+    let delay = min(pow(2, Double(restarts)), 30)
+    restarts += 1
+    worker = nil
+    status.title = "Worker: stopped, restarting in \(Int(delay))s"
+    let gen = generation
+    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+      if gen == self.generation { self.superviseWorker() }
+    }
+  }
+
+  @discardableResult
+  func spawn(_ arguments: [String], onExit: (() -> Void)? = nil) -> Process? {
     let process = Process()
     process.currentDirectoryURL = root
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -85,8 +144,14 @@ final class App: NSObject, NSApplicationDelegate {
     process.environment = processEnv()
     process.standardOutput = FileHandle.standardOutput
     process.standardError = FileHandle.standardError
-    try? process.run()
-    children.append(process)
+    if let onExit { process.terminationHandler = { _ in DispatchQueue.main.async(execute: onExit) } }
+    do {
+      try process.run()
+      return process
+    } catch {
+      NSLog("Factory: could not start \(arguments.joined(separator: " ")): \(error)")
+      return nil
+    }
   }
 
   func processEnv() -> [String: String] {
@@ -97,16 +162,19 @@ final class App: NSObject, NSApplicationDelegate {
   }
 
   func stopChildren() {
-    for process in children { process.terminate() }
-    children.removeAll()
+    generation += 1
+    worker?.terminate()
+    build?.terminate()
+    worker = nil
+    build = nil
   }
 
   @objc func openFactory() {
-    NSWorkspace.shared.open(URL(string: "http://localhost:8081")!)
+    NSWorkspace.shared.open(URL(string: "http://localhost:3402")!)
   }
 
   @objc func openSettings() {
-    NSWorkspace.shared.open(URL(string: "http://localhost:8081/settings")!)
+    NSWorkspace.shared.open(URL(string: "http://localhost:3402/settings")!)
   }
 
   @objc func showPair() {
@@ -126,10 +194,12 @@ final class App: NSObject, NSApplicationDelegate {
     guard let next = pickCheckout() else { return }
     stopChildren()
     root = next
+    restarts = 0
     startServices()
   }
 
   @objc func quit() {
+    stopping = true
     stopChildren()
     NSApp.terminate(nil)
   }
@@ -141,6 +211,7 @@ final class App: NSObject, NSApplicationDelegate {
   }
 
   func applicationWillTerminate(_ notification: Notification) {
+    stopping = true
     stopChildren()
   }
 }

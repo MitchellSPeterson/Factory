@@ -59,10 +59,33 @@ async function pickFolder(): Promise<string> {
   return out.trim().replace(/\/$/, "");
 }
 
+// The exported Expo web app (`bun run build:web`). Paths without an extension are
+// app routes, so they get index.html and expo-router takes it from there.
+export async function serveWeb(dir: string, pathname: string) {
+  let file = "";
+  try {
+    file = path.join(dir, decodeURIComponent(pathname));
+  } catch {
+    return json({ error: "Not found." }, 404);
+  }
+  if (!file.startsWith(dir + path.sep)) return json({ error: "Not found." }, 404);
+  if (path.extname(file)) {
+    const asset = Bun.file(file);
+    return (await asset.exists()) ? new Response(asset) : json({ error: "Not found." }, 404);
+  }
+  const index = Bun.file(path.join(dir, "index.html"));
+  if (await index.exists()) return new Response(index);
+  return new Response("Factory web app is not built yet. Run `bun run build:web`, then reload.", {
+    status: 503,
+    headers: { "content-type": "text/plain" },
+  });
+}
+
 export async function startPairingHub(root: string) {
   await loadIdentity(root);
   const store = openMailbox(root);
   const uploads = uploadsDir(root);
+  const webDir = path.join(root, "expo", "dist");
   let server: ReturnType<typeof Bun.serve>;
   try {
     server = Bun.serve({
@@ -156,6 +179,7 @@ export async function startPairingHub(root: string) {
           port: PAIR_PORT,
         });
       }
+      if (request.method === "GET") return serveWeb(webDir, url.pathname);
       return json({ error: "Not found." }, 404);
     },
   });

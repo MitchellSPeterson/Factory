@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { AppState, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton } from '@/components/action-button';
+import { EmptyState } from '@/components/empty-state';
 import { IconButton, IconNames } from '@/components/icon-button';
 import { useTheme } from '@/hooks/use-theme';
 import { connectDeviceHub, hubRequest, parseDevices, type HubDevice } from '@/devices/hub/api';
@@ -115,8 +116,48 @@ export default function DevicesPage() {
   const onScreenshot = useCallback((data: string) => { void shareScreenshot(data).catch(error => { if (mounted.current) setError(String(error)); }); }, []);
   return <View style={{ flex: 1, backgroundColor: theme.sidebar }}>
     <View style={{ flex: 1 }}>
-      {baseUrl && online ? <StreamView baseUrl={baseUrl} selection={selection} onState={setState} onError={setError} onScreenshot={onScreenshot} bind={bind} /> : <View style={{ flex: 1, padding: 24, justifyContent: 'center', gap: 16 }}><Label>{connectionError ? 'Reconnecting to Devices…' : 'Preparing Devices…'}</Label><Label muted>{connectionError || 'Starting the device service and finding your simulators.'}</Label><ActionButton label="Reconnect" variant="ghost" onPress={() => { endpoint.current = null; setConnectionError(''); setRetry(value => value + 1); }} /></View>}
-      {online && (!selected?.booted || paused) && <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: theme.sidebar, justifyContent: 'center', alignItems: 'center', gap: 16 }}><Label>{paused ? 'Preview paused' : 'Choose a running device'}</Label><ActionButton label={paused ? 'Resume preview' : 'Devices'} onPress={() => paused ? setPaused(false) : setDeviceList(true)} /></View>}
+      {baseUrl && online ? (
+        <StreamView baseUrl={baseUrl} selection={selection} onState={setState} onError={setError} onScreenshot={onScreenshot} bind={bind} />
+      ) : (
+        <EmptyState
+          icon="devices"
+          title={connectionError ? 'Reconnecting to Devices…' : 'Preparing Devices…'}
+          body={connectionError || 'Starting the device service and finding your simulators.'}
+          action={
+            <ActionButton
+              label="Reconnect"
+              style={{ alignSelf: 'center' }}
+              onPress={() => {
+                endpoint.current = null;
+                setConnectionError('');
+                setRetry(value => value + 1);
+              }}
+            />
+          }
+        />
+      )}
+      {online && (!selected?.booted || paused) && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            backgroundColor: theme.sidebar,
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: 16,
+            padding: 24,
+          }}>
+          <Label>{paused ? 'Preview paused' : 'Choose a running device'}</Label>
+          <ActionButton
+            label={paused ? 'Resume preview' : 'Devices'}
+            style={{ alignSelf: 'center' }}
+            onPress={() => (paused ? setPaused(false) : setDeviceList(true))}
+          />
+        </View>
+      )}
     </View>
     {error ? <View style={{ padding: 12 }}><Label>{error}</Label></View> : null}
     <View style={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: insets.bottom + 12 }}>

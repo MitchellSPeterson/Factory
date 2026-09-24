@@ -54,7 +54,8 @@ export function Action({
       onPress={onPress}
       style={({ pressed }) => [
         styles.action,
-        emphasis && styles.emphasis,
+        // ponytail: circle size is for icon-only send/stop; labeled CTAs just get the fill
+        compact && emphasis && styles.emphasisIcon,
         {
           backgroundColor:
             !emphasis && pressed && !disabled ? theme.subtleHover : fill,
@@ -81,7 +82,13 @@ export function Action({
       {!compact && (
         <Text
           style={{
-            color: selected ? theme.accent : theme.text,
+            color: emphasis
+              ? disabled
+                ? theme.textSecondary
+                : theme.background
+              : selected
+                ? theme.accent
+                : theme.text,
             fontSize: 13,
             fontWeight: "500",
           }}
@@ -128,7 +135,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
   },
-  emphasis: {
+  emphasisIcon: {
     width: 36,
     height: 36,
     minHeight: 36,
