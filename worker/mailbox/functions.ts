@@ -1017,6 +1017,9 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     ) {
       throw new Error("Enter a worktree name and branch.");
     }
+    if ((operation.kind === "listFiles" || operation.kind === "readFile") && (typeof operation.path !== "string" || operation.path.length > 1024)) {
+      throw new Error("Invalid file path.");
+    }
     if (operation.kind === "removeWorktree" && (!operation.path.trim() || operation.path.length > 1024)) {
       throw new Error("Choose a worktree to remove.");
     }
@@ -1052,6 +1055,9 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       fetch: 5,
       pull: 5,
       push: 5,
+      createPr: 5,
+      listFiles: 10,
+      readFile: 3,
     };
     for (const row of recent) {
       if (row.state === "queued" || row.state === "running") continue;

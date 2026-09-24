@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  parseNumstat,
   executeProjectOperation,
   parseForEachRef,
   parseGitStatus,
@@ -295,4 +296,54 @@ test("commit refuses a branch changed since review", async () => {
     }),
   ).rejects.toThrow("branch changed");
   expect(await git(directory, ["diff", "--cached", "--name-only"])).toBe("");
+});
+
+test("file explorer lists, reads, and stays inside the Project", async () => {
+  const { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } = await import("node:fs");
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "factory-files-")));
+  mkdirSync(path.join(root, "src"));
+  mkdirSync(path.join(root, ".git"));
+  writeFileSync(path.join(root, "src", "a.ts"), "export const a = 1;\n");
+  writeFileSync(path.join(root, "README.md"), "hi");
+  writeFileSync(path.join(root, "blob.bin"), Buffer.from([1, 0, 2]));
+  symlinkSync(os.tmpdir(), path.join(root, "escape"));
+
+  const listed = await executeProjectOperation(root, { kind: "listFiles", path: "" });
+  // Folders first, then files; .git hidden.
+  expect(listed.kind === "files" ? listed.entries.map((e) => e.name) : []).toEqual(["escape", "src", "blob.bin", "README.md"]);
+
+  expect(await executeProjectOperation(root, { kind: "readFile", path: "src/a.ts" }))
+    .toMatchObject({ kind: "file", text: "export const a = 1;\n", size: 20 });
+  expect(await executeProjectOperation(root, { kind: "readFile", path: "blob.bin" }))
+    .toMatchObject({ kind: "file", binary: true });
+  await expect(executeProjectOperation(root, { kind: "readFile", path: "../../etc/passwd" })).rejects.toThrow();
+  await expect(executeProjectOperation(root, { kind: "listFiles", path: "escape" })).rejects.toThrow("Invalid file path.");
+  await rm(root, { recursive: true, force: true });
+});
+
+test("parseNumstat reads counts, renames, and skips binaries", () => {
+  const counts = parseNumstat("3\t1\tsrc/a.ts\0" + "-\t-\tlogo.png\0" + "2\t0\t\0old.ts\0new.ts\0");
+  expect(counts.get("src/a.ts")).toEqual({ added: 3, removed: 1 });
+  expect(counts.has("logo.png")).toBe(false);
+  expect(counts.get("new.ts")).toEqual({ added: 2, removed: 0 });
+});
+
+test("commit onto a new branch and status reports counts and default branch", async () => {
+  const directory = await repo();
+  await writeFile(path.join(directory, "one.txt"), "one\nmore\n");
+  const status = await executeProjectOperation(directory, { kind: "status" });
+  expect(status).toMatchObject({ kind: "status", defaultBranch: "main" });
+  expect(status.kind === "status" && status.files).toEqual([
+    { path: "one.txt", status: " M", added: 1, removed: 0 },
+  ]);
+  await executeProjectOperation(directory, {
+    kind: "commit",
+    paths: ["one.txt"],
+    message: "on a branch",
+    expectedBranch: "main",
+    newBranch: "feature/x",
+  });
+  expect((await git(directory, ["branch", "--show-current"])).trim()).toBe("feature/x");
+  expect((await git(directory, ["log", "-1", "--format=%s"])).trim()).toBe("on a branch");
+  expect((await git(directory, ["log", "-1", "--format=%s", "main"])).trim()).toBe("initial");
 });

@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import {
+  autoCommitMessage,
+  numberDiffLines,
   formatAheadBehind,
   formatCommitAge,
   describeSync,
@@ -81,4 +83,15 @@ test("remote-only branches drop remotes that already have a local counterpart", 
   expect(remoteOnlyBranches(branches).map((item) => item.name)).toEqual([
     "origin/feat",
   ]);
+});
+
+test("autoCommitMessage names the file or shared folder", () => {
+  expect(autoCommitMessage(["expo/src/app/index.tsx"])).toBe("Update index.tsx");
+  expect(autoCommitMessage(["worker/a.ts", "worker/b.ts"])).toBe("Update 2 files in worker");
+  expect(autoCommitMessage(["a.ts", "worker/b.ts"])).toBe("Update 2 files");
+});
+
+test("numberDiffLines follows hunk headers", () => {
+  const { lines } = parseDiff("@@ -10,3 +10,3 @@\n ctx\n-old\n+new\n ctx2");
+  expect(numberDiffLines(lines)).toEqual([undefined, 10, 11, 11, 12]);
 });

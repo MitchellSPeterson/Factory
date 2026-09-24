@@ -27,11 +27,32 @@ async function rpc(client: FactoryClient, kind: "query" | "mutation" | "action",
   return body.value;
 }
 
+// One EventSource per Worker, shared by every query. Browsers allow ~6 HTTP/1.1
+// connections per host; a stream per query used them all and stalled mutations.
+const streams = new Map<string, { source: EventSource; listeners: Set<() => void> }>();
+
 function subscribe(client: FactoryClient, onTick: () => void) {
   if (typeof EventSource !== "undefined") {
-    const source = new EventSource(`${client.url}/events?token=${encodeURIComponent(client.token)}`);
-    source.onmessage = () => onTick();
-    return () => source.close();
+    const url = `${client.url}/events?token=${encodeURIComponent(client.token)}`;
+    let stream = streams.get(url);
+    if (!stream) {
+      const listeners = new Set<() => void>();
+      const source = new EventSource(url);
+      source.onmessage = () => {
+        for (const listener of listeners) listener();
+      };
+      stream = { source, listeners };
+      streams.set(url, stream);
+    }
+    const shared = stream;
+    shared.listeners.add(onTick);
+    return () => {
+      shared.listeners.delete(onTick);
+      if (shared.listeners.size === 0) {
+        shared.source.close();
+        streams.delete(url);
+      }
+    };
   }
   const timer = setInterval(onTick, 500);
   return () => clearInterval(timer);

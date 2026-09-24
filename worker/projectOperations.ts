@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { realpath } from "node:fs/promises";
+import { open, readdir, realpath, stat } from "node:fs/promises";
 import { api } from "../shared/mailboxApi";
-import type { OperationResult, ProjectOperation } from "../shared/projectOperations";
+import type { FileEntry, OperationResult, ProjectOperation } from "../shared/projectOperations";
 import type { Mailbox } from "./mailbox/client";
 import type { WorkerIdentity } from "./managed";
 
@@ -63,6 +63,76 @@ export function validateGitPath(file: string) {
     throw new Error("Invalid repository path.");
   return file;
 }
+const MAX_ENTRIES = 2000;
+// ponytail: previews ride along in projectOperations.list, so keep them small; stream files if bigger reads matter.
+const MAX_PREVIEW = 100_000;
+
+/** Resolve a Project-relative path, refusing anything (including symlinks) that leaves the Project. */
+export async function resolveInside(root: string, rel: string) {
+  if (rel.includes("\0") || path.isAbsolute(rel) || rel.length > 1024) throw new Error("Invalid file path.");
+  const target = await realpath(path.join(root, rel)).catch(() => {
+    throw new Error("That file or folder no longer exists.");
+  });
+  if (target !== root && !target.startsWith(root + path.sep)) throw new Error("Invalid file path.");
+  return target;
+}
+
+export async function listFiles(root: string, rel: string) {
+  const dir = await resolveInside(root, rel);
+  const all = await readdir(dir, { withFileTypes: true });
+  const entries: FileEntry[] = [];
+  for (const item of all) {
+    if (item.name === ".git") continue;
+    const full = path.join(dir, item.name);
+    const info = await stat(full).catch(() => null);
+    if (!info) continue;
+    entries.push(info.isDirectory() ? { name: item.name, dir: true } : { name: item.name, dir: false, size: info.size });
+  }
+  entries.sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name) : a.dir ? -1 : 1));
+  return {
+    kind: "files" as const,
+    path: rel,
+    entries: entries.slice(0, MAX_ENTRIES),
+    ...(entries.length > MAX_ENTRIES ? { truncated: true } : {}),
+  };
+}
+
+export async function readProjectFile(root: string, rel: string) {
+  const file = await resolveInside(root, rel);
+  const info = await stat(file);
+  if (!info.isFile()) throw new Error("That is not a file.");
+  const handle = await open(file, "r");
+  try {
+    const buffer = Buffer.alloc(Math.min(info.size, MAX_PREVIEW));
+    await handle.read(buffer, 0, buffer.length, 0);
+    if (buffer.subarray(0, 8000).includes(0)) return { kind: "file" as const, path: rel, size: info.size, binary: true };
+    return {
+      kind: "file" as const,
+      path: rel,
+      size: info.size,
+      text: buffer.toString("utf8"),
+      ...(info.size > MAX_PREVIEW ? { truncated: true } : {}),
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+/** `git diff --numstat -z` → per-path line counts. Binary files report "-" and are skipped. */
+export function parseNumstat(text: string) {
+  const counts = new Map<string, { added: number; removed: number }>();
+  const parts = text.split("\0");
+  for (let i = 0; i < parts.length; i++) {
+    const [added, removed, file] = parts[i]!.split("\t");
+    if (added === undefined || removed === undefined || file === undefined) continue;
+    // Renames leave the path empty and put old, new in the next two fields.
+    const target = file === "" ? parts[(i += 2)] : file;
+    if (!target || added === "-" || removed === "-") continue;
+    counts.set(target, { added: Number(added), removed: Number(removed) });
+  }
+  return counts;
+}
+
 export function validateBranchName(name: string) {
   const trimmed = name.trim();
   if (
@@ -290,6 +360,8 @@ export async function executeProjectOperation(
   }
   const git = (args: string[], allowed?: number[]) =>
     run(["git", "--no-pager", ...args], allowed);
+  if (operation.kind === "listFiles") return await listFiles(directory, operation.path);
+  if (operation.kind === "readFile") return await readProjectFile(directory, operation.path);
   if (operation.kind === "terminal") {
     const result = await run(
       [process.env.SHELL || "/bin/sh", "-lc", operation.command],
@@ -317,7 +389,7 @@ export async function executeProjectOperation(
       "-z",
       "--untracked-files=all",
     ]);
-    const [symbolic, head, refs, worktrees, log, remotes] = await Promise.all([
+    const [symbolic, head, refs, worktrees, log, remotes, numstat, originHead] = await Promise.all([
       git(["symbolic-ref", "--short", "-q", "HEAD"], [0, 1]),
       git(["rev-parse", "HEAD"], [0, 1, 128]),
       git([
@@ -329,14 +401,22 @@ export async function executeProjectOperation(
       git(["worktree", "list", "--porcelain"]),
       git(["log", "-30", "--format=%H%x00%s%x00%an%x00%ct%x1e"], [0, 128]),
       git(["remote"]),
+      git(["diff", "--numstat", "-z", "HEAD"], [0, 128]),
+      git(["symbolic-ref", "--short", "-q", "refs/remotes/origin/HEAD"], [0, 1, 128]),
     ]);
+    const counts = parseNumstat(numstat.text);
+    const branchNames = parseForEachRef(refs.text).filter((item) => !item.remote).map((item) => item.name);
+    const defaultBranch =
+      originHead.text.trim().replace(/^origin\//, "") ||
+      ["main", "master"].find((name) => branchNames.includes(name));
     const detached = symbolic.code !== 0 || !symbolic.text.trim();
     const branch = detached ? "Detached HEAD" : symbolic.text.trim();
     const current = parseForEachRef(refs.text).find((item) => item.current);
     return {
       kind: "status",
       branch,
-      files: parseGitStatus(status.text),
+      ...(defaultBranch ? { defaultBranch } : {}),
+      files: parseGitStatus(status.text).map((item) => ({ ...item, ...counts.get(item.path) })),
       ...(head.code === 0 && head.text.trim()
         ? { head: head.text.trim() }
         : {}),
@@ -423,6 +503,8 @@ export async function executeProjectOperation(
     const files = operation.paths.map(validateGitPath);
     if (!files.length || !operation.message.trim())
       throw new Error("Select files and enter a commit message.");
+    if (operation.newBranch)
+      await git(["checkout", "-b", validateBranchName(operation.newBranch)]);
     const status = parseGitStatus(
       (await git(["status", "--porcelain=v1", "-z"])).text,
     );
@@ -486,8 +568,9 @@ export async function executeProjectOperation(
     const target = path.resolve(parent, `${path.basename(directory)}-${name}`);
     if (target === directory || !target.startsWith(parent + path.sep))
       throw new Error("Worktree path is outside this Project.");
+    const base = operation.base ? await requireRef(validateBranchName(operation.base)) : undefined;
     const created = operation.createBranch
-      ? await git(["worktree", "add", "-b", branch, target])
+      ? await git(["worktree", "add", "-b", branch, target, ...(base ? [base] : [])])
       : await git(["worktree", "add", target, branch]);
     return {
       kind: "text",
@@ -554,6 +637,14 @@ export async function executeProjectOperation(
       text: pushed.text.trim() || "Pushed.",
       exitCode: 0,
     };
+  }
+  if (operation.kind === "createPr") {
+    // Publish first so GitHub has the branch, then let gh fill title/body from the commits.
+    await git(["push", "-u", "origin", "HEAD"]);
+    const created = await run(["gh", "pr", "create", "--fill"], [0, 1]);
+    const url = created.text.match(/https:\/\/github\.com\/\S+\/pull\/\d+/)?.[0];
+    if (!url) throw new Error(created.text.trim() || "Could not create the pull request.");
+    return { kind: "text", text: url, exitCode: 0 };
   }
   const _exhaustive: never = operation;
   return _exhaustive;

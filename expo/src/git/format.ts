@@ -166,3 +166,30 @@ export function remoteOnlyBranches<
     );
   });
 }
+
+/** Message used when the commit box is left empty: names the file, or the folder the files share. */
+export function autoCommitMessage(paths: string[]) {
+  if (paths.length === 1) return `Update ${splitPath(paths[0]!).name}`;
+  const parts = paths.map((item) => item.split("/").slice(0, -1));
+  const shared: string[] = [];
+  for (let i = 0; parts.every((p) => p[i] !== undefined && p[i] === parts[0]![i]); i++) shared.push(parts[0]![i]!);
+  return shared.length ? `Update ${paths.length} files in ${shared.join("/")}` : `Update ${paths.length} files`;
+}
+
+/** Old/new line numbers for each parsed diff line, read from the hunk headers. */
+export function numberDiffLines(lines: DiffLine[]) {
+  let oldNo = 0;
+  let newNo = 0;
+  return lines.map((line) => {
+    if (line.kind === "hunk") {
+      const match = line.text.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/);
+      oldNo = Number(match?.[1] ?? 0);
+      newNo = Number(match?.[2] ?? 0);
+      return undefined;
+    }
+    if (line.kind === "add") return newNo++;
+    if (line.kind === "del") return oldNo++;
+    oldNo++;
+    return newNo++;
+  });
+}

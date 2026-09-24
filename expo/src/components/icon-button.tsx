@@ -26,6 +26,8 @@ export const IconNames = {
   check: { ios: 'checkmark', android: 'check', web: 'check' },
   layers: { ios: 'square.stack.3d.up.fill', android: 'layers', web: 'layers' },
   trash: { ios: 'trash', android: 'delete', web: 'delete' },
+  more: { ios: 'ellipsis', android: 'more_vert', web: 'more_vert' },
+  folder: { ios: 'folder', android: 'folder_open', web: 'folder_open' },
 } as const;
 
 export type IconName = keyof typeof IconNames;

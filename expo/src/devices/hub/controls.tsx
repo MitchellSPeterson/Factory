@@ -1,6 +1,6 @@
 import { BottomSheet, RNHostView } from '@expo/ui';
 import { useState, type Context, type ReactNode } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, VirtualizedList } from 'react-native';
+import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, VirtualizedList, useWindowDimensions } from 'react-native';
 import { IconButton } from '@/components/icon-button';
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,17 +20,23 @@ export function Label({ children, muted = false }: { children: ReactNode; muted?
   const t = useTheme();
   return <Text selectable style={{ color: muted ? t.textSecondary : t.text, fontSize: 15, lineHeight: 21 }}>{children}</Text>;
 }
-export function Sheet({ title, visible, onClose, children, scroll = true }: { title: string; visible: boolean; onClose: () => void; children: ReactNode; scroll?: boolean }) {
+/** The app's one bottom sheet. `header` replaces the default title + close row (e.g. for back navigation). */
+export function Sheet({ title, visible, onClose, children, scroll = true, header }: { title: string; visible: boolean; onClose: () => void; children: ReactNode; scroll?: boolean; header?: ReactNode }) {
   const t = useTheme();
   const keyboard = useKeyboardHeight();
+  const { height } = useWindowDimensions();
+  // Web: vaul's inner div sizes to content, so a 0-height flex body collapses. Match the 96vh drawer minus its handle.
+  const webBody = Platform.OS === 'web' ? { height: height * 0.96 - 32, flexGrow: 0 } : null;
   return (
     <BottomSheet isPresented={visible} onDismiss={onClose} snapPoints={['half', 'full']} contentPadding={0} containerColor={t.background}>
       <RNHostView>
-        <View style={[styles.sheetBody, keyboard > 0 ? { paddingBottom: keyboard } : null]}>
-          <View style={[styles.sheetHead, { borderColor: t.line }]}>
-            <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text>
-            <IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} />
-          </View>
+        <View style={[styles.sheetBody, webBody, keyboard > 0 ? { paddingBottom: keyboard } : null]}>
+          {header ?? (
+            <View style={[styles.sheetHead, { borderColor: t.line }]}>
+              <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text>
+              <IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} />
+            </View>
+          )}
           <SheetScrollContextReset>
             {scroll
               ? <ScrollView style={styles.sheetFill} keyboardShouldPersistTaps="handled" nestedScrollEnabled contentContainerStyle={styles.content}>{children}</ScrollView>
