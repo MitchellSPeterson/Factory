@@ -146,7 +146,7 @@ function providerName(provider: string) {
   return "Codex";
 }
 
-function MenuCard({ children, maxHeight }: { children: ReactNode; maxHeight: number }) {
+export function MenuCard({ children, maxHeight }: { children: ReactNode; maxHeight: number }) {
   const theme = useTheme();
   const dark = theme.background === Colors.dark.background;
   return (

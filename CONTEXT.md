@@ -43,3 +43,23 @@ _Avoid_: Vendor, model host, backend
 **Device**:
 An iOS Simulator on this Mac. Factory can boot it and stream it so you can watch, tap, and swipe.
 _Avoid_: emulator, phone, preview pane
+
+**Roadmap**:
+The per-Project list of work you plan to do later. You order it by hand.
+_Avoid_: Backlog, board, issues, tickets
+
+**Roadmap Item**:
+One entry on a Roadmap. It is either a Feature or a Fix. It has a Markdown description, Requirements, a status (Idea, Planned, In progress, Done, Dropped), at most one Category, any number of tags, and at most one Release.
+_Avoid_: Ticket, issue, card, task
+
+**Requirement**:
+One line on a Roadmap Item's checklist that says what done means. You can tick it off.
+_Avoid_: Acceptance criteria, subtask
+
+**Category**:
+The area of the product a Roadmap Item belongs to, such as Devices. Each Project has its own Categories. An item has one or none.
+_Avoid_: Epic, area, component
+
+**Release**:
+A named target version for a Project, such as `v1.3`. A Roadmap Item can aim at one.
+_Avoid_: Milestone, version, sprint

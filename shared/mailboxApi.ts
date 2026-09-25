@@ -17,6 +17,7 @@ import type {
   TerminalExchange,
 } from "./dataModel";
 import type { ProjectOperation } from "./projectOperations";
+import type { RoadmapItemPatch, RoadmapKind } from "./roadmap";
 import type { AgentEffort, PermissionMode, ProjectKind, ServiceTier, SessionProvider } from "./validators";
 
 export type ApiFn<Args extends object = object, Result = unknown> = string & {
@@ -46,6 +47,7 @@ export const api = {
         imageIds?: string[];
         skillSlugs?: string[];
         accessKey?: string;
+        roadmapItemId?: string;
       },
       Id<"sessions">
     >("sessions.create"),
@@ -168,6 +170,30 @@ export const api = {
       { clientId: string; deviceCode: string },
       { status: "pending" | "connected" | "slow_down"; token?: string }
     >("github.poll"),
+  },
+  roadmap: {
+    get: ref<
+      { projectId: string },
+      { items: Doc<"roadmapItems">[]; categories: Doc<"roadmapCategories">[]; releases: Doc<"roadmapReleases">[] }
+    >("roadmap.get"),
+    getItem: ref<{ itemId: string }, Doc<"roadmapItems"> | null>("roadmap.getItem"),
+    createItem: ref<{ projectId: string; kind: RoadmapKind; title: string } & RoadmapItemPatch, Id<"roadmapItems">>(
+      "roadmap.createItem",
+    ),
+    updateItem: ref<{ itemId: string; patch: RoadmapItemPatch }, null>("roadmap.updateItem"),
+    // Place itemId right before beforeItemId (null = end). patch applies group changes from a cross-group drag.
+    moveItem: ref<{ itemId: string; beforeItemId: string | null; patch?: RoadmapItemPatch }, null>("roadmap.moveItem"),
+    removeItem: ref<{ itemId: string }, null>("roadmap.removeItem"),
+    renameCategory: ref<{ categoryId: string; name: string }, null>("roadmap.renameCategory"),
+    removeCategory: ref<{ categoryId: string }, null>("roadmap.removeCategory"),
+    updateRelease: ref<{ releaseId: string; name?: string; shipped?: boolean }, null>("roadmap.updateRelease"),
+    moveRelease: ref<{ releaseId: string; beforeReleaseId: string | null }, null>("roadmap.moveRelease"),
+    removeRelease: ref<{ releaseId: string }, null>("roadmap.removeRelease"),
+    // ref: full issue/PR URL, owner/repo#123, or #123 (uses the Project's githubRepo).
+    addLink: ref<{ itemId: string; ref: string }, null>("roadmap.addLink"),
+    removeLink: ref<{ itemId: string; url: string }, null>("roadmap.removeLink"),
+    refreshLinks: ref<{ itemId: string }, null>("roadmap.refreshLinks"),
+    importIssue: ref<{ projectId: string; ref: string }, Id<"roadmapItems">>("roadmap.importIssue"),
   },
   pty: {
     issueTicket: ref<{ projectId: string }, PtyTicket>("pty.issueTicket"),

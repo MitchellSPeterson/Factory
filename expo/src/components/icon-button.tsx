@@ -31,6 +31,22 @@ export const IconNames = {
   chart: { ios: 'chart.bar', android: 'bar_chart', web: 'bar_chart' },
   cpu: { ios: 'cpu', android: 'memory', web: 'memory' },
   computer: { ios: 'desktopcomputer', android: 'computer', web: 'computer' },
+  sparkles: { ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' },
+  wrench: { ios: 'wrench.fill', android: 'build', web: 'build' },
+  dragHandle: { ios: 'line.3.horizontal', android: 'drag_handle', web: 'drag_handle' },
+  link: { ios: 'link', android: 'link', web: 'link' },
+  idea: { ios: 'lightbulb', android: 'lightbulb', web: 'lightbulb' },
+  planned: { ios: 'circle', android: 'radio_button_unchecked', web: 'radio_button_unchecked' },
+  inProgress: { ios: 'circle.lefthalf.filled', android: 'contrast', web: 'contrast' },
+  done: { ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' },
+  dropped: { ios: 'xmark.circle', android: 'cancel', web: 'cancel' },
+  github: { ios: 'arrow.down.circle', android: 'download', web: 'download' },
+  chevronRight: { ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' },
+  pullRequest: { ios: 'arrow.triangle.merge', android: 'merge', web: 'merge' },
+  issue: { ios: 'smallcircle.filled.circle', android: 'adjust', web: 'adjust' },
+  tag: { ios: 'tag', android: 'sell', web: 'sell' },
+  release: { ios: 'shippingbox', android: 'inventory_2', web: 'inventory_2' },
+  category: { ios: 'square.grid.2x2', android: 'category', web: 'category' },
 } as const;
 
 export type IconName = keyof typeof IconNames;

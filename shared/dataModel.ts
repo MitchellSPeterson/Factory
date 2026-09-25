@@ -13,6 +13,8 @@ import type {
   SessionStatus,
 } from "./validators";
 
+import type { RoadmapItemFields } from "./roadmap";
+
 export type Id<Table extends string = string> = string & { readonly __table?: Table };
 
 export type RepoSkill = { slug: string; title: string; description: string };
@@ -90,6 +92,7 @@ export type Tables = {
     serviceTier?: ServiceTier;
     status: SessionStatus | string;
     error?: string;
+    roadmapItemId?: Id<"roadmapItems">;
   };
   sessionMessages: {
     sessionId: Id<"sessions">;
@@ -137,6 +140,9 @@ export type Tables = {
     result?: OperationResult;
     error?: string;
   };
+  roadmapItems: RoadmapItemFields;
+  roadmapCategories: { projectId: Id<"projects">; name: string };
+  roadmapReleases: { projectId: Id<"projects">; name: string; order: number; shipped: boolean };
   skills: {
     slug: string;
     title: string;
@@ -180,6 +186,7 @@ export type SessionView = {
     githubRepo: string;
   };
   messages: Array<Doc<"sessionMessages">>;
+  roadmapItem?: { _id: Id<"roadmapItems">; title: string } | null;
 };
 
 export type GithubConnection = { login: string; token: string };

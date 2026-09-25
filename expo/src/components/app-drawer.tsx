@@ -49,6 +49,15 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
           }}
         />
         <DrawerLink
+          icon="layers"
+          label="Roadmap"
+          focused={pathname === '/roadmap'}
+          onPress={() => {
+            router.push('/roadmap');
+            props.navigation.closeDrawer();
+          }}
+        />
+        <DrawerLink
           icon="git"
           label="Git"
           focused={pathname === '/git'}
@@ -147,6 +156,12 @@ function DesktopSidebar() {
       />
       <ProjectSwitcher />
       <View>
+        <DrawerLink
+          icon="layers"
+          label="Roadmap"
+          focused={pathname === '/roadmap'}
+          onPress={() => router.navigate('/roadmap')}
+        />
         <DrawerLink icon="git" label="Git" focused={pathname === '/git'} onPress={() => router.navigate('/git')} />
         <DrawerLink
           icon="devices"

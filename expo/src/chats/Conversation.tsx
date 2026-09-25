@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from "@/lib/factory";
+import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -34,8 +35,10 @@ import {
 import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
 import type { ChatSettings } from "./lastSettings";
 import { canonicalCursorModel } from "../../../shared/agentModel";
+import { roadmapPrompt } from "../../../shared/roadmap";
 import { ModelMenu, PickerChip, effortLabel, modelTitle, useChatModels } from "./model-picker";
 import { SlashMenu } from "./SlashMenu";
+import { BranchPicker } from "./BranchPicker";
 import { isCompactDraft, slashItems, slashQuery, type SlashItem } from "./composerSlash";
 import {
   DEFAULT_PERMISSION_MODE,
@@ -235,17 +238,26 @@ export function Conversation({
   sessionId,
   projectId,
   projectName,
+  roadmapItemId,
   onCreated,
 }: {
   sessionId: Id<"sessions"> | null;
   projectId: Id<"projects"> | null;
   projectName: string;
+  roadmapItemId?: Id<"roadmapItems"> | null;
   onCreated: (id: Id<"sessions">) => void;
 }) {
   const theme = useTheme();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
   const view = useQuery<SessionView | null>(api.sessions.get, sessionId ? { sessionId } : "skip");
+  // New chat started from a Roadmap Item: load it once to pre-fill the composer (not auto-sent).
+  const roadmapItem = useQuery(
+    api.roadmap.getItem,
+    !sessionId && roadmapItemId ? { itemId: roadmapItemId } : "skip",
+  );
+  const prefilledFor = useRef<string | null>(null);
   const create = useMutation(api.sessions.create);
   const send = useMutation(api.sessions.send);
   const stop = useMutation(api.sessions.stop);
@@ -262,7 +274,7 @@ export function Conversation({
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [pickedSkills, setPickedSkills] = useState<PickedSkill[]>([]);
-  const [picker, setPicker] = useState<null | "model">(null);
+  const [picker, setPicker] = useState<null | "model" | "branch">(null);
   const [settings, setSettings] = useState<ChatSettings>(readLastSettings);
   const models = useChatModels();
   const currentModel = models?.find(
@@ -312,6 +324,11 @@ export function Conversation({
     if (sessionId || !first || currentModel) return;
     setSettings((prev) => ({ ...prev, provider: first.provider, model: first.model }));
   }, [sessionId, models, currentModel]);
+  useEffect(() => {
+    if (!roadmapItem || prefilledFor.current === roadmapItem._id) return;
+    prefilledFor.current = roadmapItem._id;
+    setText(roadmapPrompt(roadmapItem));
+  }, [roadmapItem]);
   const query = slashQuery(text);
   const items = useMemo(() => {
     return slashItems(
@@ -365,7 +382,15 @@ export function Conversation({
     setError("");
     try {
       if (sessionId) await send({ sessionId, ...args });
-      else onCreated(await create({ projectId, ...settings, ...args }));
+      else
+        onCreated(
+          await create({
+            projectId,
+            ...settings,
+            ...args,
+            ...(roadmapItemId ? { roadmapItemId } : {}),
+          }),
+        );
       setText("");
       setAttachments([]);
       setPickedSkills([]);
@@ -458,6 +483,21 @@ export function Conversation({
   });
   return (
     <View style={[styles.root, { paddingBottom: bottomPad }]}>
+      {view?.roadmapItem ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Roadmap item ${view.roadmapItem.title}`}
+          onPress={() => router.push(`/roadmap?item=${view.roadmapItem!._id}`)}
+          style={({ pressed }) => [
+            styles.roadmapChip,
+            { backgroundColor: theme.subtleHover, opacity: pressed ? 0.7 : 1 },
+          ]}
+        >
+          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
+            Roadmap · {view.roadmapItem.title}
+          </Text>
+        </Pressable>
+      ) : null}
       <ScrollView
         ref={scroll}
         style={styles.feed}
@@ -567,6 +607,17 @@ export function Conversation({
             void changeSettings(next);
           }}
         />
+        {projectId && !sessionId ? (
+          <BranchPicker
+            projectId={projectId}
+            open={picker === "branch"}
+            onToggle={() => {
+              if (picker !== "branch") editor.current?.blur();
+              setPicker(picker === "branch" ? null : "branch");
+            }}
+            onClose={() => setPicker(null)}
+          />
+        ) : null}
         <View
           style={[
             styles.composer,
@@ -800,6 +851,15 @@ const styles = StyleSheet.create({
   },
   thumbnail: { width: 60, height: 60, borderRadius: 8 },
   jump: { alignSelf: "center", marginBottom: 8 },
+  roadmapChip: {
+    alignSelf: "center",
+    marginTop: 8,
+    maxWidth: 320,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderCurve: "continuous",
+  },
   skillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   skillChip: {
     minHeight: 28,

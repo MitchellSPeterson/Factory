@@ -4,6 +4,14 @@ import { githubRepoFromRemote } from "../../shared/addProject";
 import { AGENT_PROVIDERS } from "../../shared/agentModel";
 import { validateRepository, validateVariableName } from "../../shared/managed";
 import type { ProjectOperation, OperationResult, OperationState } from "../../shared/projectOperations";
+import {
+  ROADMAP_STATUSES,
+  parseGithubRef,
+  requirementsFromMarkdown,
+  type GithubLink,
+  type RoadmapItemPatch,
+  type RoadmapKind,
+} from "../../shared/roadmap";
 import { addUsage, isZeroUsage, subUsage, ZERO_USAGE, type TokenUsage } from "../../shared/tokenUsage";
 import { takeLeadingSkillMentions, withSkillMentions } from "../../shared/sessionText";
 import {
@@ -273,6 +281,114 @@ function githubHeaders(token: string) {
   };
 }
 
+function requireRoadmapItem(store: Store, itemId: string): Doc {
+  const item = store.get(itemId);
+  if (!item) throw new Error("Roadmap item not found");
+  return item;
+}
+
+function requireGithubConnection(store: Store): Doc {
+  const row = store.list("githubConnection")[0];
+  if (!row) throw new Error("Connect GitHub first.");
+  return row;
+}
+
+function findOrCreateCategory(store: Store, projectId: string, name: string): string {
+  const trimmed = name.trim();
+  const existing = store
+    .list("roadmapCategories")
+    .find((row) => row.projectId === projectId && String(row.name).toLowerCase() === trimmed.toLowerCase());
+  if (existing) return existing._id;
+  return store.insert("roadmapCategories", { projectId, name: trimmed });
+}
+
+function findOrCreateRelease(store: Store, projectId: string, name: string): string {
+  const trimmed = name.trim();
+  const releases = store.list("roadmapReleases").filter((row) => row.projectId === projectId);
+  const existing = releases.find((row) => String(row.name).toLowerCase() === trimmed.toLowerCase());
+  if (existing) return existing._id;
+  const order = releases.length > 0 ? Math.max(...releases.map((row) => Number(row.order))) + 1 : 0;
+  return store.insert("roadmapReleases", { projectId, name: trimmed, order, shipped: false });
+}
+
+// Validates and resolves a RoadmapItemPatch into store-ready field changes for `item`.
+function roadmapPatchChanges(store: Store, item: Doc, patch: RoadmapItemPatch): Record<string, unknown> {
+  const changes: Record<string, unknown> = {};
+  if (patch.kind !== undefined) {
+    if (patch.kind !== "feature" && patch.kind !== "fix") throw new Error("Invalid Roadmap Item kind.");
+    changes.kind = patch.kind;
+  }
+  if (patch.title !== undefined) {
+    const title = patch.title.trim();
+    if (!title) throw new Error("Title is required.");
+    changes.title = title;
+  }
+  if (patch.description !== undefined) changes.description = patch.description;
+  if (patch.status !== undefined) {
+    if (!ROADMAP_STATUSES.includes(patch.status)) throw new Error("Invalid Roadmap Item status.");
+    changes.status = patch.status;
+  }
+  if (patch.tags !== undefined) {
+    changes.tags = [...new Set(patch.tags.map((tag) => tag.trim()).filter((tag) => tag !== ""))];
+  }
+  if (patch.requirements !== undefined) {
+    changes.requirements = patch.requirements.map((requirement) => {
+      const text = requirement.text.trim();
+      if (!text) throw new Error("Requirement text is required.");
+      return { id: requirement.id || crypto.randomUUID(), text, done: Boolean(requirement.done) };
+    });
+  }
+  if (patch.category !== undefined) {
+    const name = patch.category?.trim() ?? "";
+    changes.categoryId = name === "" ? undefined : findOrCreateCategory(store, String(item.projectId), name);
+  }
+  if (patch.release !== undefined) {
+    const name = patch.release?.trim() ?? "";
+    changes.releaseId = name === "" ? undefined : findOrCreateRelease(store, String(item.projectId), name);
+  }
+  return changes;
+}
+
+// ponytail: fractional order between two float siblings loses precision after enough inserts in the same
+// gap. Renormalize all orders in the group to 0,1,2,... if that is ever observed.
+function orderBefore(siblings: Doc[], beforeId: string | null): number {
+  if (beforeId === null) {
+    return siblings.length > 0 ? Math.max(...siblings.map((row) => Number(row.order))) + 1 : 0;
+  }
+  const beforeIndex = siblings.findIndex((row) => row._id === beforeId);
+  if (beforeIndex === -1) throw new Error("Not found");
+  const before = siblings[beforeIndex]!;
+  const prev = siblings[beforeIndex - 1];
+  return prev ? (Number(prev.order) + Number(before.order)) / 2 : Number(before.order) - 1;
+}
+
+async function fetchGithubLink(token: string, repo: string, number: number): Promise<GithubLink> {
+  const response = await fetch(`https://api.github.com/repos/${repo}/issues/${number}`, { headers: githubHeaders(token) });
+  if (response.status === 404 || response.status === 403) {
+    throw new Error("GitHub issue or pull request not found. The connection may need Issues and Pull requests read access.");
+  }
+  if (!response.ok) throw new Error("Could not fetch that GitHub issue or pull request.");
+  const body = (await response.json()) as Record<string, unknown>;
+  const isPr = "pull_request" in body;
+  let state: "open" | "closed" | "merged" = body.state === "closed" ? "closed" : "open";
+  if (isPr && state === "closed") {
+    const prResponse = await fetch(`https://api.github.com/repos/${repo}/pulls/${number}`, { headers: githubHeaders(token) });
+    if (prResponse.ok) {
+      const prBody = (await prResponse.json()) as Record<string, unknown>;
+      if (prBody.merged === true) state = "merged";
+    }
+  }
+  return {
+    url: String(body.html_url ?? `https://github.com/${repo}/issues/${number}`),
+    kind: isPr ? "pr" : "issue",
+    repo,
+    number,
+    title: typeof body.title === "string" ? body.title : undefined,
+    state,
+    fetchedAt: Date.now(),
+  };
+}
+
 const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx) => unknown | Promise<unknown>> = {
   "sessions.list": (_args, { store }) => {
     const sessions = store.list("sessions");
@@ -290,6 +406,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       ...message,
       imageUrls: urlsFor(origin, message.imageIds as string[] | undefined),
     }));
+    const roadmapItem = session.roadmapItemId ? store.get(String(session.roadmapItemId)) : null;
     return {
       session,
       project: {
@@ -300,6 +417,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
         githubRepo: project.githubRepo,
       },
       messages,
+      roadmapItem: roadmapItem ? { _id: roadmapItem._id, title: roadmapItem.title } : null,
     };
   },
   "sessions.create": (args, { store }) => {
@@ -314,6 +432,11 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (project.serverId && project.cloneStatus !== "ready") {
       throw new Error("Wait for the Project to finish cloning before starting a Session.");
     }
+    let roadmapItem: Doc | undefined;
+    if (typeof args.roadmapItemId === "string" && args.roadmapItemId) {
+      roadmapItem = store.get(args.roadmapItemId) ?? undefined;
+      if (!roadmapItem || roadmapItem.projectId !== project._id) throw new Error("Roadmap item not found");
+    }
     const sessionId = store.insert("sessions", {
       projectId: project._id,
       title: titleFrom(text, imageIds.length, skillSlugs[0] ?? ""),
@@ -323,6 +446,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       permissionMode: args.permissionMode ?? DEFAULT_PERMISSION_MODE,
       serviceTier: args.serviceTier ?? DEFAULT_SERVICE_TIER,
       status: "queued",
+      roadmapItemId: roadmapItem?._id,
     });
     store.insert("sessionMessages", {
       sessionId,
@@ -332,6 +456,12 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       skillSlugs: skillSlugs.length > 0 ? skillSlugs : undefined,
       createdAt: Date.now(),
     });
+    if (roadmapItem) {
+      store.patch(roadmapItem._id, {
+        sessionIds: [...((roadmapItem.sessionIds as string[] | undefined) ?? []), sessionId],
+        ...(roadmapItem.status === "idea" || roadmapItem.status === "planned" ? { status: "in_progress" } : {}),
+      });
+    }
     return sessionId;
   },
   "sessions.generateUploadUrl": (_args, { origin, token }) =>
@@ -382,6 +512,14 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   },
   "sessions.remove": (args, { store, uploads }) => {
     const session = requireSession(store, String(args.sessionId ?? ""));
+    if (session.roadmapItemId) {
+      const item = store.get(String(session.roadmapItemId));
+      if (item) {
+        store.patch(item._id, {
+          sessionIds: ((item.sessionIds as string[] | undefined) ?? []).filter((id) => id !== session._id),
+        });
+      }
+    }
     for (const message of sessionMessages(store, session._id)) {
       for (const imageId of (message.imageIds as string[] | undefined) ?? []) {
         try {
@@ -603,8 +741,8 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (!project) throw new Error("Project not found");
     requireProjectServer(store, project, typeof args.accessKey === "string" ? args.accessKey : undefined);
     if (project.cloneStatus === "cloning") throw new Error("Wait for cloning to finish before removing this Project.");
-    for (const row of store.list("projectImports").filter((item) => item.projectId === args.projectId)) {
-      store.delete(row._id);
+    for (const table of ["projectImports", "roadmapItems", "roadmapCategories", "roadmapReleases"]) {
+      for (const row of store.list(table).filter((item) => item.projectId === args.projectId)) store.delete(row._id);
     }
     if (project.serverId) {
       for (const row of store
@@ -1226,6 +1364,202 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (data.error === "access_denied") throw new Error("GitHub sign-in was declined.");
     if (data.error === "expired_token") throw new Error("The code expired. Start GitHub sign-in again.");
     throw new Error("GitHub sign-in failed. Check your App settings and try again.");
+  },
+  "roadmap.get": (args, { store }) => {
+    const projectId = String(args.projectId ?? "");
+    const items = store
+      .list("roadmapItems")
+      .filter((row) => row.projectId === projectId)
+      .sort((a, b) => Number(a.order) - Number(b.order));
+    const categories = store
+      .list("roadmapCategories")
+      .filter((row) => row.projectId === projectId)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    const releases = store
+      .list("roadmapReleases")
+      .filter((row) => row.projectId === projectId)
+      .sort((a, b) => Number(a.order) - Number(b.order));
+    return { items, categories, releases };
+  },
+  "roadmap.getItem": (args, { store }) => store.get(String(args.itemId ?? "")),
+  "roadmap.createItem": (args, { store }) => {
+    const project = requireProject(store, String(args.projectId ?? ""));
+    const patch = args as RoadmapItemPatch & { kind?: RoadmapKind; title?: string };
+    if (patch.kind === undefined) throw new Error("Kind is required.");
+    if (patch.title === undefined || !patch.title.trim()) throw new Error("Title is required.");
+    const items = store.list("roadmapItems").filter((row) => row.projectId === project._id);
+    const order = items.length > 0 ? Math.max(...items.map((row) => Number(row.order))) + 1 : 0;
+    const fields: Record<string, unknown> = {
+      projectId: project._id,
+      kind: patch.kind,
+      title: patch.title.trim(),
+      description: "",
+      status: "idea",
+      tags: [],
+      requirements: [],
+      links: [],
+      sessionIds: [],
+      order,
+    };
+    Object.assign(fields, roadmapPatchChanges(store, { ...fields, _id: "", _creationTime: 0 } as Doc, patch));
+    return store.insert("roadmapItems", fields);
+  },
+  "roadmap.updateItem": (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.itemId ?? ""));
+    const changes = roadmapPatchChanges(store, item, asRecord(args.patch) as RoadmapItemPatch);
+    store.patch(item._id, changes);
+    return null;
+  },
+  "roadmap.moveItem": (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.itemId ?? ""));
+    const changes = args.patch !== undefined ? roadmapPatchChanges(store, item, asRecord(args.patch) as RoadmapItemPatch) : {};
+    const siblings = store
+      .list("roadmapItems")
+      .filter((row) => row.projectId === item.projectId && row._id !== item._id)
+      .sort((a, b) => Number(a.order) - Number(b.order));
+    const beforeItemId = args.beforeItemId == null ? null : String(args.beforeItemId);
+    let order: number;
+    try {
+      order = orderBefore(siblings, beforeItemId);
+    } catch {
+      throw new Error("Roadmap item not found");
+    }
+    store.patch(item._id, { ...changes, order });
+    return null;
+  },
+  "roadmap.removeItem": (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.itemId ?? ""));
+    for (const session of store.list("sessions").filter((row) => row.roadmapItemId === item._id)) {
+      store.patch(session._id, { roadmapItemId: undefined });
+    }
+    store.delete(item._id);
+    return null;
+  },
+  "roadmap.renameCategory": (args, { store }) => {
+    const category = store.get(String(args.categoryId ?? ""));
+    if (!category) throw new Error("Category not found");
+    const name = String(args.name ?? "").trim();
+    if (!name) throw new Error("Name is required.");
+    store.patch(category._id, { name });
+    return null;
+  },
+  "roadmap.removeCategory": (args, { store }) => {
+    const category = store.get(String(args.categoryId ?? ""));
+    if (!category) throw new Error("Category not found");
+    for (const item of store.list("roadmapItems").filter((row) => row.categoryId === category._id)) {
+      store.patch(item._id, { categoryId: undefined });
+    }
+    store.delete(category._id);
+    return null;
+  },
+  "roadmap.updateRelease": (args, { store }) => {
+    const release = store.get(String(args.releaseId ?? ""));
+    if (!release) throw new Error("Release not found");
+    const changes: Record<string, unknown> = {};
+    if (args.name !== undefined) {
+      const name = String(args.name).trim();
+      if (!name) throw new Error("Name is required.");
+      changes.name = name;
+    }
+    if (args.shipped !== undefined) changes.shipped = Boolean(args.shipped);
+    store.patch(release._id, changes);
+    return null;
+  },
+  "roadmap.moveRelease": (args, { store }) => {
+    const release = store.get(String(args.releaseId ?? ""));
+    if (!release) throw new Error("Release not found");
+    const siblings = store
+      .list("roadmapReleases")
+      .filter((row) => row.projectId === release.projectId && row._id !== release._id)
+      .sort((a, b) => Number(a.order) - Number(b.order));
+    const beforeReleaseId = args.beforeReleaseId == null ? null : String(args.beforeReleaseId);
+    let order: number;
+    try {
+      order = orderBefore(siblings, beforeReleaseId);
+    } catch {
+      throw new Error("Release not found");
+    }
+    store.patch(release._id, { order });
+    return null;
+  },
+  "roadmap.removeRelease": (args, { store }) => {
+    const release = store.get(String(args.releaseId ?? ""));
+    if (!release) throw new Error("Release not found");
+    for (const item of store.list("roadmapItems").filter((row) => row.releaseId === release._id)) {
+      store.patch(item._id, { releaseId: undefined });
+    }
+    store.delete(release._id);
+    return null;
+  },
+  "roadmap.addLink": async (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.itemId ?? ""));
+    const project = requireProject(store, String(item.projectId));
+    const connection = requireGithubConnection(store);
+    const parsed = parseGithubRef(String(args.ref ?? ""), String(project.githubRepo ?? ""));
+    if (!parsed) throw new Error("Enter a GitHub issue/PR URL, owner/repo#123, or #123.");
+    const link = await fetchGithubLink(String(connection.token), parsed.repo, parsed.number);
+    const links = ((item.links as GithubLink[] | undefined) ?? []).filter((row) => row.url !== link.url);
+    store.patch(item._id, { links: [...links, link] });
+    return null;
+  },
+  "roadmap.removeLink": (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.itemId ?? ""));
+    const links = ((item.links as GithubLink[] | undefined) ?? []).filter((row) => row.url !== String(args.url ?? ""));
+    store.patch(item._id, { links });
+    return null;
+  },
+  "roadmap.refreshLinks": async (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.itemId ?? ""));
+    const connection = requireGithubConnection(store);
+    const links = (item.links as GithubLink[] | undefined) ?? [];
+    const refreshed: GithubLink[] = [];
+    for (const link of links) refreshed.push(await fetchGithubLink(String(connection.token), link.repo, link.number));
+    store.patch(item._id, { links: refreshed });
+    return null;
+  },
+  "roadmap.importIssue": async (args, { store }) => {
+    const project = requireProject(store, String(args.projectId ?? ""));
+    const connection = requireGithubConnection(store);
+    const parsed = parseGithubRef(String(args.ref ?? ""), String(project.githubRepo ?? ""));
+    if (!parsed) throw new Error("Enter a GitHub issue URL, owner/repo#123, or #123.");
+    const response = await fetch(`https://api.github.com/repos/${parsed.repo}/issues/${parsed.number}`, {
+      headers: githubHeaders(String(connection.token)),
+    });
+    if (response.status === 404 || response.status === 403) {
+      throw new Error("GitHub issue not found. The connection may need Issues read access.");
+    }
+    if (!response.ok) throw new Error("Could not fetch that GitHub issue.");
+    const body = (await response.json()) as Record<string, unknown>;
+    if ("pull_request" in body) throw new Error("That is a pull request, not an issue.");
+    const labels = Array.isArray(body.labels) ? body.labels : [];
+    const labelNames = labels
+      .map((label) => (typeof label === "string" ? label : String((label as Record<string, unknown>)?.name ?? "")))
+      .filter((name) => name !== "");
+    const kind: RoadmapKind = labelNames.some((name) => /bug|fix/i.test(name)) ? "fix" : "feature";
+    const description = typeof body.body === "string" ? body.body : "";
+    const items = store.list("roadmapItems").filter((row) => row.projectId === project._id);
+    const order = items.length > 0 ? Math.max(...items.map((row) => Number(row.order))) + 1 : 0;
+    const link: GithubLink = {
+      url: String(body.html_url ?? `https://github.com/${parsed.repo}/issues/${parsed.number}`),
+      kind: "issue",
+      repo: parsed.repo,
+      number: parsed.number,
+      title: typeof body.title === "string" ? body.title : undefined,
+      state: body.state === "closed" ? "closed" : "open",
+      fetchedAt: Date.now(),
+    };
+    return store.insert("roadmapItems", {
+      projectId: project._id,
+      kind,
+      title: (typeof body.title === "string" ? body.title.trim() : "") || "Untitled",
+      description,
+      status: "idea",
+      tags: labelNames,
+      requirements: requirementsFromMarkdown(description).map((requirement) => ({ ...requirement, id: crypto.randomUUID() })),
+      links: [link],
+      sessionIds: [],
+      order,
+    });
   },
   "pty.issueTicket": (args, { store }) => {
     const project = requireProject(store, String(args.projectId ?? ""));

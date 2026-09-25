@@ -202,6 +202,101 @@ test("seed skills and github connection", async () => {
   expect(await client.query(api.github.connection, {})).toBeNull();
 });
 
+async function makeProject(client: Mailbox, name = "App") {
+  return client.mutation(api.projects.create, {
+    name,
+    kind: "web",
+    localPath: `/tmp/${name}`,
+    githubRepo: "acme/app",
+    defaultRuntime: "local",
+  });
+}
+
+test("roadmap items are created and listed in order", async () => {
+  const client = mailbox();
+  const projectId = await makeProject(client);
+  const first = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "First" });
+  const second = await client.mutation(api.roadmap.createItem, { projectId, kind: "fix", title: "  Second  " });
+  const { items, categories, releases } = await client.query(api.roadmap.get, { projectId });
+  expect(items.map((item) => item._id)).toEqual([first, second]);
+  expect(items[1]?.title).toBe("Second");
+  expect(items[0]?.status).toBe("idea");
+  expect(items[0]?.tags).toEqual([]);
+  expect(categories).toEqual([]);
+  expect(releases).toEqual([]);
+  await expect(client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "  " })).rejects.toThrow(
+    "Title is required.",
+  );
+});
+
+test("moveItem reorders to the middle, start, and end", async () => {
+  const client = mailbox();
+  const projectId = await makeProject(client);
+  const a = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "A" });
+  const b = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "B" });
+  const c = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "C" });
+
+  // Move C between A and B.
+  await client.mutation(api.roadmap.moveItem, { itemId: c, beforeItemId: b });
+  let items = (await client.query(api.roadmap.get, { projectId })).items;
+  expect(items.map((item) => item._id)).toEqual([a, c, b]);
+
+  // Move B to the start.
+  await client.mutation(api.roadmap.moveItem, { itemId: b, beforeItemId: a });
+  items = (await client.query(api.roadmap.get, { projectId })).items;
+  expect(items.map((item) => item._id)).toEqual([b, a, c]);
+
+  // Move A to the end.
+  await client.mutation(api.roadmap.moveItem, { itemId: a, beforeItemId: null });
+  items = (await client.query(api.roadmap.get, { projectId })).items;
+  expect(items.map((item) => item._id)).toEqual([b, c, a]);
+});
+
+test("category find-or-create is case-insensitive and removeCategory clears items", async () => {
+  const client = mailbox();
+  const projectId = await makeProject(client);
+  const itemId = await client.mutation(api.roadmap.createItem, {
+    projectId,
+    kind: "feature",
+    title: "Item",
+    category: "Devices",
+  });
+  const otherId = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "Other" });
+  await client.mutation(api.roadmap.updateItem, { itemId: otherId, patch: { category: "devices" } });
+  const before = await client.query(api.roadmap.get, { projectId });
+  expect(before.categories).toHaveLength(1);
+  const categoryId = before.categories[0]!._id;
+  expect(before.items.every((item) => item.categoryId === categoryId)).toBe(true);
+
+  await client.mutation(api.roadmap.removeCategory, { categoryId });
+  const after = await client.query(api.roadmap.get, { projectId });
+  expect(after.categories).toEqual([]);
+  expect(after.items.every((item) => item.categoryId === undefined)).toBe(true);
+});
+
+test("sessions.create with roadmapItemId sets in_progress and tracks the session", async () => {
+  const client = mailbox();
+  const projectId = await makeProject(client);
+  const itemId = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "Item" });
+  const sessionId = await client.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "Build it",
+    roadmapItemId: itemId,
+  });
+  const item = await client.query(api.roadmap.getItem, { itemId });
+  expect(item?.status).toBe("in_progress");
+  expect(item?.sessionIds).toEqual([sessionId]);
+  const view = await client.query(api.sessions.get, { sessionId });
+  expect(view?.roadmapItem).toEqual({ _id: itemId, title: "Item" });
+
+  await client.mutation(api.sessions.remove, { sessionId });
+  const itemAfter = await client.query(api.roadmap.getItem, { itemId });
+  expect(itemAfter?.sessionIds).toEqual([]);
+});
+
 test("provider toggles persist on the server view", async () => {
   const client = mailbox();
   await register(client);

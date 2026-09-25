@@ -36,7 +36,7 @@ export default function ChatsPage() {
   const theme = useTheme();
   const navigation = useNavigation();
   const router = useRouter();
-  const params = useLocalSearchParams<{ session?: string; new?: string }>();
+  const params = useLocalSearchParams<{ session?: string; new?: string; roadmapItem?: string }>();
   const sessions = useQuery(api.sessions.list);
   const removeSession = useMutation(api.sessions.remove);
   const { scope, projects, currentProject } = useProjectScope();
@@ -82,15 +82,15 @@ export default function ChatsPage() {
   const showList = desktop ? false : wide || !showingConversation;
   function open(id: Id<"sessions">) {
     setPanel(null);
-    router.setParams({ session: id, new: undefined });
+    router.setParams({ session: id, new: undefined, roadmapItem: undefined });
   }
   function newChat() {
     setPanel(null);
-    router.setParams({ session: undefined, new: "1" });
+    router.setParams({ session: undefined, new: "1", roadmapItem: undefined });
   }
   function closeChat() {
     setPanel(null);
-    router.setParams({ session: undefined, new: undefined });
+    router.setParams({ session: undefined, new: undefined, roadmapItem: undefined });
   }
   async function deleteChat(id: Id<"sessions">) {
     try {
@@ -351,6 +351,11 @@ export default function ChatsPage() {
                 sessionId={selected?.session._id ?? null}
                 projectId={projectId}
                 projectName={project?.name ?? ""}
+                roadmapItemId={
+                  !selected && creating
+                    ? (params.roadmapItem as Id<"roadmapItems"> | undefined)
+                    : undefined
+                }
                 onCreated={open}
               />
             </View>
