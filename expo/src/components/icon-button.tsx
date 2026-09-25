@@ -28,6 +28,9 @@ export const IconNames = {
   trash: { ios: 'trash', android: 'delete', web: 'delete' },
   more: { ios: 'ellipsis', android: 'more_vert', web: 'more_vert' },
   folder: { ios: 'folder', android: 'folder_open', web: 'folder_open' },
+  chart: { ios: 'chart.bar', android: 'bar_chart', web: 'bar_chart' },
+  cpu: { ios: 'cpu', android: 'memory', web: 'memory' },
+  computer: { ios: 'desktopcomputer', android: 'computer', web: 'computer' },
 } as const;
 
 export type IconName = keyof typeof IconNames;
@@ -59,14 +62,18 @@ export function IconButton({
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={(state) => [
         styles.button,
         filled
           ? { backgroundColor: theme.text }
           : { backgroundColor: theme.subtleHover },
-        pressed && !disabled && styles.pressed,
+        state.pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
         style,
+        // Web pointer hover; callers often pass a transparent background.
+        !filled &&
+          !disabled &&
+          (state as { hovered?: boolean }).hovered && { backgroundColor: theme.subtleHover },
       ]}>
       <SymbolView name={IconNames[icon]} size={20} tintColor={color} />
     </Pressable>

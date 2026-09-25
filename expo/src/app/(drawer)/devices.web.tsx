@@ -15,6 +15,11 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function DevicesPage() {
+  return <DevicesView />;
+}
+
+/** The Device preview; `embedded` skips the screen header (the chat side panel has its own). */
+export function DevicesView({ embedded }: { embedded?: boolean }) {
   const theme = useTheme();
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
@@ -43,6 +48,7 @@ export default function DevicesPage() {
   }, [current, selected]);
 
   useLayoutEffect(() => {
+    if (embedded) return;
     navigation.setOptions({
       title: current?.name ?? 'Devices',
       headerRight: () => (
@@ -55,7 +61,7 @@ export default function DevicesPage() {
         </View>
       ),
     });
-  }, [navigation, current?.name]);
+  }, [embedded, navigation, current?.name]);
 
   async function run(label: string, work: () => Promise<unknown>) {
     setBusy(label);
@@ -130,6 +136,19 @@ export default function DevicesPage() {
 
   return (
     <View style={[styles.shell, { backgroundColor: theme.background }]}>
+      {embedded ? (
+        <View style={[styles.embedBar, { borderBottomColor: theme.line }]}>
+          <ThemedText type="small" numberOfLines={1} style={styles.embedName}>
+            {current?.name ?? 'No Device selected'}
+          </ThemedText>
+          <IconButton
+            icon="devices"
+            accessibilityLabel="Simulators"
+            onPress={() => setListOpen(true)}
+            style={{ backgroundColor: 'transparent' }}
+          />
+        </View>
+      ) : null}
       {current?.streamUrl ? (
         <DeviceScreen
           name={current.name}
@@ -287,6 +306,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
     minHeight: 0,
   },
+  embedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 14,
+    paddingRight: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  embedName: { flex: 1, fontWeight: 600 },
   empty: {
     flex: 1,
     minHeight: 0,

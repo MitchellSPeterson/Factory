@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ProjectPicture } from '@/components/project-picture';
 import { ThemedText } from '@/components/themed-text';
+import { useDesktop } from '@/hooks/use-desktop';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import type { ProviderMeter } from '@/lib/dataModel';
@@ -27,6 +28,7 @@ export default function SettingsPage() {
   const github = useQuery(api.github.connection);
   const { scope, currentProject } = useProjectScope();
   const [now, setNow] = useState(Date.now());
+  const desktop = useDesktop();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15_000);
@@ -47,51 +49,57 @@ export default function SettingsPage() {
         onPress={() => router.push('/settings/machine')}
       />
 
-      <SettingsGroup title="AI">
-        <SettingsRow
-          icon={SettingsIcons.providers}
-          label="Providers"
-          value={live?.providerModels ? `${ready} ready` : undefined}
-          onPress={() => router.push('/settings/providers')}
-        />
-        <SettingsRow
-          icon={SettingsIcons.chart}
-          label="Usage"
-          value={tightest ? `${providerLabel(tightest.meter.provider)} · ${tightest.summary}` : undefined}
-          onPress={() => router.push('/settings/usage')}
-        />
-      </SettingsGroup>
+      {/* Desktop lists these sections in the left column already. */}
+      {!desktop && (
+        <>
+          <SettingsGroup title="AI">
+            <SettingsRow
+              icon={SettingsIcons.providers}
+              label="Providers"
+              value={live?.providerModels ? `${ready} ready` : undefined}
+              onPress={() => router.push('/settings/providers')}
+            />
+            <SettingsRow
+              icon={SettingsIcons.chart}
+              label="Usage"
+              value={tightest ? `${providerLabel(tightest.meter.provider)} · ${tightest.summary}` : undefined}
+              onPress={() => router.push('/settings/usage')}
+            />
+          </SettingsGroup>
 
-      <SettingsGroup title="Projects">
-        {scope.kind === 'project' && currentProject ? (
-          <SettingsRow
-            leading={<ProjectPicture githubRepo={currentProject.githubRepo} name={currentProject.name} />}
-            label={currentProject.name}
-            value="Current"
-            onPress={() => router.push('/settings/projects')}
-          />
-        ) : (
-          <SettingsRow
-            icon={SettingsIcons.project}
-            label="All Projects"
-            onPress={() => router.push('/settings/projects')}
-          />
-        )}
-        <SettingsRow
-          icon={SettingsIcons.link}
-          label="GitHub"
-          value={github === undefined ? undefined : github ? github.login : 'Not connected'}
-          onPress={() => router.push('/settings/projects')}
-        />
-      </SettingsGroup>
+          <SettingsGroup title="Projects">
+            {scope.kind === 'project' && currentProject ? (
+              <SettingsRow
+                leading={<ProjectPicture githubRepo={currentProject.githubRepo} name={currentProject.name} />}
+                label={currentProject.name}
+                value="Current"
+                onPress={() => router.push('/settings/projects')}
+              />
+            ) : (
+              <SettingsRow
+                icon={SettingsIcons.project}
+                label="All Projects"
+                onPress={() => router.push('/settings/projects')}
+              />
+            )}
+            <SettingsRow
+              icon={SettingsIcons.link}
+              label="GitHub"
+              value={github === undefined ? undefined : github ? github.login : 'Not connected'}
+              onPress={() => router.push('/settings/projects')}
+            />
+          </SettingsGroup>
 
-      <SettingsGroup title="Devices">
-        <SettingsRow
-          icon={SettingsIcons.phone}
-          label="Pair a Phone"
-          onPress={() => router.push('/settings/pairing')}
-        />
-      </SettingsGroup>
+          <SettingsGroup title="Devices">
+            <SettingsRow
+              icon={SettingsIcons.phone}
+              label="Pair a Phone"
+              onPress={() => router.push('/settings/pairing')}
+            />
+          </SettingsGroup>
+
+        </>
+      )}
 
       <AppearanceSwitcher />
     </SettingsScroll>

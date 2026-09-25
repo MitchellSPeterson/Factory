@@ -4,7 +4,6 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   BackHandler,
   Modal,
@@ -13,16 +12,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, {
-  css,
-  cubicBezier,
-  useReducedMotion,
-} from "react-native-reanimated";
 import type { Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { inProjectScope } from "@/lib/project-scope";
@@ -31,104 +24,13 @@ import { useTheme } from "@/hooks/use-theme";
 import { Action } from "@/chats/ui";
 import { Conversation } from "@/chats/Conversation";
 import { chatHeaderTitleMaxWidth } from "@/chats/headerTitleLayout";
-import { ProviderMark } from "@/chats/model-picker";
 import { TerminalPanel } from "@/chats/TerminalPanel";
 import { FilesPanel } from "@/chats/FilesPanel";
 import { GitSheet } from "@/git/GitSheet";
 import { IconButton, IconNames, type IconName } from "@/components/icon-button";
-
-const pulse = css.keyframes({
-  "0%, 100%": { opacity: 1 },
-  "50%": { opacity: 0.55 },
-});
-const motion = css.create({
-  pulse: {
-    animationName: pulse,
-    animationDuration: "1.6s",
-    animationTimingFunction: cubicBezier(0.77, 0, 0.175, 1),
-    animationIterationCount: "infinite",
-  },
-});
-
-function StatusDot({ color, running }: { color: string; running: boolean }) {
-  const reduced = useReducedMotion();
-  return (
-    <Animated.View
-      style={[
-        styles.dot,
-        { backgroundColor: color },
-        running && !reduced ? motion.pulse : null,
-      ]}
-    />
-  );
-}
-
-function ChatRow({
-  title,
-  projectName,
-  provider,
-  status,
-  selected,
-  statusColor,
-  onOpen,
-  onDelete,
-}: {
-  title: string;
-  projectName?: string;
-  provider: "codex" | "cursor" | "grok" | "claude" | "openai";
-  status: string;
-  selected: boolean;
-  statusColor: string;
-  onOpen: () => void;
-  onDelete: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${title}${projectName ? `, ${projectName}` : ""}, ${status}`}
-      accessibilityHint="Hold to delete"
-      accessibilityActions={[{ name: "delete", label: "Delete" }]}
-      accessibilityState={{ selected }}
-      onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === "delete") onDelete();
-      }}
-      onPress={onOpen}
-      onLongPress={onDelete}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: selected
-            ? theme.backgroundSelected
-            : pressed
-              ? theme.subtleHover
-              : "transparent",
-        },
-      ]}
-    >
-      <View style={styles.rowBody}>
-        <ProviderMark provider={provider} size={18} />
-        <View style={styles.rowCopy}>
-          <Text
-            numberOfLines={2}
-            style={[styles.rowTitle, { color: theme.text }]}
-          >
-            {title}
-          </Text>
-          {projectName ? (
-            <Text
-              numberOfLines={1}
-              style={[styles.projectName, { color: theme.textSecondary }]}
-            >
-              {projectName}
-            </Text>
-          ) : null}
-        </View>
-        <StatusDot color={statusColor} running={status === "running"} />
-      </View>
-    </Pressable>
-  );
-}
+import { ChatList } from "@/chats/ChatList";
+import { ToolPanel, type ToolTab } from "@/chats/ToolPanel";
+import { useDesktop } from "@/hooks/use-desktop";
 
 export default function ChatsPage() {
   const theme = useTheme();
@@ -138,7 +40,6 @@ export default function ChatsPage() {
   const sessions = useQuery(api.sessions.list);
   const removeSession = useMutation(api.sessions.remove);
   const { scope, projects, currentProject } = useProjectScope();
-  const [search, setSearch] = useState("");
   const [draftProject, setDraftProject] = useState<Id<"projects"> | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [lastPanel, setLastPanel] = useState<Panel | null>(null);
@@ -162,6 +63,7 @@ export default function ChatsPage() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const wide = width >= 1000;
+  const desktop = useDesktop();
   const sideBySide = width >= 1280;
   const scoped = useMemo(
     () =>
@@ -170,11 +72,6 @@ export default function ChatsPage() {
       ),
     [sessions, scope],
   );
-  const filtered = scoped.filter((row) =>
-    `${row.session.title} ${row.projectName}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
   const selected = scoped.find((row) => row.session._id === params.session);
   const creating = params.new === "1";
   const showingConversation = !!selected || creating;
@@ -182,7 +79,7 @@ export default function ChatsPage() {
   const projectId =
     selected?.session.projectId ?? currentProject?._id ?? draftProject;
   const project = projects?.find((item) => item._id === projectId);
-  const showList = wide || !showingConversation;
+  const showList = desktop ? false : wide || !showingConversation;
   function open(id: Id<"sessions">) {
     setPanel(null);
     router.setParams({ session: id, new: undefined });
@@ -224,17 +121,19 @@ export default function ChatsPage() {
     trailingActionCount,
     centered: process.env.EXPO_OS === "ios",
   });
+  // Desktop keeps the chat title; its panel sits beside the chat instead of replacing it.
+  const fullPanel = desktop ? null : panel;
   const chatTitle =
-    panel === "terminal"
+    fullPanel === "terminal"
       ? "Terminal"
-      : panel === "files"
+      : fullPanel === "files"
         ? "Files"
         : selected?.session.title ?? (creating ? "New chat" : "Chats");
   useLayoutEffect(() => {
     navigation.setOptions({
       title: chatTitle,
       headerTitle:
-        panel === "terminal" || panel === "files"
+        fullPanel === "terminal" || fullPanel === "files"
           ? () => (
               <View style={styles.terminalTitle}>
                 <Text
@@ -285,7 +184,9 @@ export default function ChatsPage() {
               style={{ backgroundColor: "transparent" }}
             />
           )
-        : () => <DrawerToggleButton tintColor={theme.text} />,
+        : desktop
+          ? () => null
+          : () => <DrawerToggleButton tintColor={theme.text} />,
       headerRight:
         hasHeaderActions
           ? () => (
@@ -301,18 +202,39 @@ export default function ChatsPage() {
                       : { backgroundColor: "transparent" }
                   }
                 />
+                {desktop &&
+                  ([
+                    { id: "git", icon: "git", label: "Git" },
+                    { id: "terminal", icon: "terminal", label: "Terminal" },
+                    { id: "device", icon: "devices", label: "Device" },
+                  ] as const).map((item) => (
+                    <IconButton
+                      key={item.id}
+                      icon={item.icon}
+                      accessibilityLabel={item.label}
+                      disabled={item.id !== "device" && !project}
+                      onPress={() => togglePanel(item.id)}
+                      style={
+                        panel === item.id
+                          ? { backgroundColor: theme.backgroundSelected }
+                          : { backgroundColor: "transparent" }
+                      }
+                    />
+                  ))}
+                {(!desktop || selected) && (
                 <View ref={moreRef} collapsable={false}>
                   <IconButton
                     icon="more"
                     accessibilityLabel="More"
                     onPress={openMenu}
                     style={
-                      panel === "terminal"
+                      panel === "terminal" && !desktop
                         ? { backgroundColor: theme.backgroundSelected }
                         : { backgroundColor: "transparent" }
                     }
                   />
                 </View>
+                )}
               </View>
             )
           : () => null,
@@ -326,6 +248,7 @@ export default function ChatsPage() {
     selected,
     chatTitle,
     creating,
+    desktop,
     selected?.session.title,
     project?.name,
     showingConversation,
@@ -335,6 +258,15 @@ export default function ChatsPage() {
     titleMaxWidth,
     wide,
   ]);
+  useEffect(() => {
+    if (!desktop || !panel) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setPanel(null);
+    }
+    // Capture phase: RN-web TextInputs stop keydown from bubbling.
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [desktop, panel]);
   useEffect(() => {
     if (!inChat) return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -362,71 +294,11 @@ export default function ChatsPage() {
             },
           ]}
         >
-          <TextInput
-            accessibilityLabel="Search chats"
-            placeholder="Search conversations…"
-            placeholderTextColor={theme.textSecondary}
-            value={search}
-            onChangeText={setSearch}
-            style={[
-              styles.search,
-              {
-                backgroundColor: theme.backgroundElement,
-                color: theme.text,
-                borderColor: theme.line,
-              },
-            ]}
+          <ChatList
+            selectedId={selected?.session._id}
+            onOpen={open}
+            onDelete={(id, title) => setClosing({ id, title })}
           />
-          <ScrollView
-            contentContainerStyle={styles.list}
-            keyboardShouldPersistTaps="handled"
-          >
-            {sessions === undefined ? (
-              <ActivityIndicator color={theme.accent} />
-            ) : !filtered.length ? (
-              <View style={styles.listEmpty}>
-                <Text
-                  style={{
-                    color: theme.textSecondary,
-                    fontSize: 14,
-                    lineHeight: 22,
-                  }}
-                >
-                  {search
-                    ? "No conversations match your search."
-                    : "Start a conversation to work with an agent in a Project."}
-                </Text>
-              </View>
-            ) : (
-              filtered.map((row) => (
-                <ChatRow
-                  key={row.session._id}
-                  title={row.session.title}
-                  provider={row.session.provider}
-                  projectName={
-                    scope.kind === "viewAll" ? row.projectName : undefined
-                  }
-                  status={row.session.status}
-                  selected={row.session._id === selected?.session._id}
-                  statusColor={
-                    row.session.status === "running" ||
-                    row.session.status === "queued"
-                      ? theme.accent
-                      : row.session.status === "failed"
-                        ? theme.danger
-                        : theme.textSecondary
-                  }
-                  onOpen={() => open(row.session._id)}
-                  onDelete={() =>
-                    setClosing({
-                      id: row.session._id,
-                      title: row.session.title,
-                    })
-                  }
-                />
-              ))
-            )}
-          </ScrollView>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="New chat"
@@ -471,7 +343,7 @@ export default function ChatsPage() {
               style={{
                 flex: 1,
                 minWidth: 0,
-                display: panel && !sideBySide ? "none" : "flex",
+                display: fullPanel && !sideBySide ? "none" : "flex",
               }}
             >
               <Conversation
@@ -482,7 +354,19 @@ export default function ChatsPage() {
                 onCreated={open}
               />
             </View>
-            {lastPanel && project && (
+            {desktop ? (
+              <ToolPanel
+                project={project}
+                tab={lastPanel ?? "files"}
+                open={!!panel}
+                onTab={(next) => {
+                  setLastPanel(next);
+                  setPanel(next);
+                }}
+                onClose={() => setPanel(null)}
+              />
+            ) : null}
+            {!desktop && lastPanel && project && (
               <View
                 style={[
                   styles.tools,
@@ -521,6 +405,8 @@ export default function ChatsPage() {
         anchor={menuAnchor}
         onClose={() => setMenuAnchor(null)}
         items={[
+          // Desktop shows Terminal and Git as header buttons.
+          ...(desktop ? [] : ([
           {
             label: panel === "terminal" ? "Close terminal" : "Open terminal",
             icon: "terminal",
@@ -533,6 +419,7 @@ export default function ChatsPage() {
             disabled: !project,
             onPress: () => setGitOpen(true),
           },
+          ] satisfies MenuItem[])),
           ...(selected
             ? [
                 {
@@ -601,7 +488,7 @@ export default function ChatsPage() {
     </View>
   );
 }
-type Panel = "terminal" | "files";
+type Panel = ToolTab;
 
 type MenuItem = {
   label: string;
@@ -691,24 +578,6 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 16 },
   root: { flex: 1, flexDirection: "row", minHeight: 0 },
   listPane: { borderRightWidth: 1 },
-  search: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    height: 42,
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 13,
-  },
-  list: { paddingHorizontal: 8, paddingBottom: 88, gap: 4 },
-  listEmpty: { padding: 16, gap: 8 },
-  row: { padding: 14, borderRadius: 12, borderCurve: "continuous" },
-  rowBody: { flexDirection: "row", alignItems: "center", gap: 10 },
-  rowCopy: { flex: 1, minWidth: 0, gap: 4 },
-  rowTitle: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
-  projectName: { fontSize: 11 },
-  dot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",

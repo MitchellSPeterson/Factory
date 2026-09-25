@@ -47,7 +47,7 @@ export default function TerminalPage() {
   );
 }
 
-function ProjectTerminals({
+export function ProjectTerminals({
   project,
 }: {
   project: Pick<Doc<"projects">, "_id" | "name" | "localPath">;

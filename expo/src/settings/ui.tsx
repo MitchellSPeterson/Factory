@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 're
 import { SymbolView } from 'expo-symbols';
 
 import { ThemedText } from '@/components/themed-text';
+import { useDesktop } from '@/hooks/use-desktop';
 import { useTheme } from '@/hooks/use-theme';
 import type { ThemeColor } from '@/constants/theme';
 import { useAppearance } from '@/lib/appearance-context';
@@ -32,12 +33,14 @@ export type SettingsIcon = (typeof SettingsIcons)[keyof typeof SettingsIcons];
 export function SettingsScroll({ children }: { children: ReactNode }) {
   const theme = useTheme();
   const wide = useWindowDimensions().width >= 768;
+  const desktop = useDesktop();
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.sidebar }}
       contentContainerStyle={[
         styles.scroll,
         { paddingHorizontal: wide ? 32 : 16, maxWidth: wide ? 600 : undefined },
+        desktop && { alignSelf: 'flex-start', maxWidth: 680 },
       ]}
       keyboardShouldPersistTaps="handled"
       contentInsetAdjustmentBehavior="automatic">

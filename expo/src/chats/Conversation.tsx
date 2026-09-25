@@ -20,6 +20,7 @@ import { api } from "@/lib/api";
 import { withSkillMentions } from "../../../shared/sessionText";
 import { dockedBottomPad } from "@/lib/keyboardInset";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
+import { useDesktop } from "@/hooks/use-desktop";
 import { useTheme } from "@/hooks/use-theme";
 import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "@/lib/dataModel";
@@ -267,6 +268,8 @@ export function Conversation({
   const currentModel = models?.find(
     (row) => row.provider === settings.provider && row.model === settings.model,
   );
+  const editor = useRef<TextInput>(null);
+  const desktop = useDesktop();
   const scroll = useRef<ScrollView>(null);
   const follow = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -610,6 +613,7 @@ export function Conversation({
             </View>
           ) : null}
           <TextInput
+            ref={editor}
             accessibilityLabel="Message"
             placeholder={
               busy
@@ -618,11 +622,28 @@ export function Conversation({
             }
             placeholderTextColor={theme.textSecondary}
             value={text}
+            onFocus={() => setPicker(null)}
             onChangeText={(next) => {
               if (slashQuery(next) !== null) setPicker(null);
               setText(next);
             }}
             multiline
+            autoFocus={desktop}
+            onKeyPress={(event) => {
+              if (!desktop) return;
+              // Desktop keyboard: Enter sends (or picks the top / item), ⇧Enter is a newline, ⌘/ opens models.
+              const key = event.nativeEvent as unknown as KeyboardEvent;
+              if (key.key === "Enter" && !key.shiftKey && !key.isComposing) {
+                event.preventDefault();
+                if (slashOpen && items[0]) pickSlash(items[0]);
+                else void submit();
+              } else if (key.key === "/" && (key.metaKey || key.ctrlKey)) {
+                event.preventDefault();
+                if (!busy) setPicker(picker === "model" ? null : "model");
+              } else if (key.key === "Escape" && picker) {
+                setPicker(null);
+              }
+            }}
             maxLength={16000}
             style={[styles.editor, { color: theme.text }]}
           />
@@ -639,7 +660,10 @@ export function Conversation({
               icon={settings.provider}
               open={picker === "model"}
               disabled={busy}
-              onPress={() => setPicker(picker === "model" ? null : "model")}
+              onPress={() => {
+                if (picker !== "model") editor.current?.blur();
+                setPicker(picker === "model" ? null : "model");
+              }}
             />
             <View style={{ flex: 1 }} />
             {uploading || pending ? (

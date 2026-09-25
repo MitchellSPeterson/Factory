@@ -68,12 +68,13 @@ const DONE: Partial<Record<Operation["kind"], string>> = {
   push: "Pushed",
 };
 
-export function GitWorkspace({ project }: { project: Project }) {
+/** `compact` forces the single-column layout, e.g. inside a chat's side panel. */
+export function GitWorkspace({ project, compact }: { project: Project; compact?: boolean }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
   const { width } = useWindowDimensions();
-  const wide = width >= 1000;
+  const wide = !compact && width >= 1000;
   const rows = useQuery(api.projectOperations.list, { projectId: project._id });
   const enqueue = useMutation(api.projectOperations.enqueue);
   const [openedAt] = useState(() => Date.now());

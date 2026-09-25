@@ -1,4 +1,6 @@
 import { Codex, type CodexOptions, type Input, type ThreadOptions, type ThreadEvent } from "@openai/codex-sdk";
+import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   type AGENT_EFFORTS,
@@ -36,6 +38,12 @@ export type CodexAgentOptions = {
   createClient?: (options: CodexOptions) => CodexClient;
 };
 
+// The SDK's bundled binary lags the installed CLI, which owns the model list the picker shows.
+function codexBin(env: Record<string, string>) {
+  const local = path.join(os.homedir(), ".local/bin/codex");
+  return env.CODEX_PATH || (existsSync(local) ? local : undefined);
+}
+
 export async function runCodexAgent(opts: CodexAgentOptions) {
   const mode = opts.mode ?? "stage";
   if (opts.runtime !== "local") throw new Error(mode === "session" ? "Codex requires a local Session on this machine." : "Codex requires a local Run on this machine.");
@@ -63,7 +71,7 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
   const codex = (opts.createClient ?? (options => new Codex(options)))({
     apiKey: env.CODEX_API_KEY || env.OPENAI_API_KEY || undefined,
     baseUrl: env.CODEX_BASE_URL || undefined,
-    codexPathOverride: env.CODEX_PATH || undefined,
+    codexPathOverride: codexBin(env),
     env,
     config,
   });
@@ -92,6 +100,7 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
   for await (const event of events) {
     if (event.type === "thread.started") await opts.onThreadId(event.thread_id);
     if (event.type === "error" || event.type === "turn.failed") {
+      console.error("Codex failed:", event.type === "error" ? event.message : event.error.message);
       throw new Error(mode === "session" ? "Codex Session failed. Check Codex authentication, model access, and worker configuration." : "Codex Run failed. Check Codex authentication, model access, and worker configuration.");
     }
     if (event.type === "turn.completed") {

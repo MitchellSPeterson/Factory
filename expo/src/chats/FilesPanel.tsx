@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 
-import { Fonts } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
 import { useMutation, useQuery } from "@/lib/factory";
+import { CodeView } from "./CodeView";
 import { formatBytes, parentPath } from "./files";
 
 const icons = {
@@ -96,7 +96,11 @@ export function FilesPanel({
                 accessibilityRole="button"
                 accessibilityLabel={`${entry.dir ? "Folder" : "File"} ${entry.name}`}
                 onPress={() => (entry.dir ? setDir(next) : setFile(next))}
-                style={({ pressed }) => [styles.entry, pressed && { backgroundColor: theme.subtleHover }]}>
+                style={(state) => [
+                  styles.entry,
+                  state.pressed && { backgroundColor: theme.subtleHover },
+                  (state as { hovered?: boolean }).hovered && { backgroundColor: theme.subtleHover },
+                ]}>
                 <SymbolView
                   name={entry.dir ? icons.folder : icons.file}
                   size={18}
@@ -125,18 +129,15 @@ export function FilesPanel({
             Binary file · {formatBytes(shown.result.size)}. It can’t be previewed.
           </Text>
         ) : (
-          <ScrollView contentContainerStyle={styles.fileBody}>
+          // CodeView owns scrolling, so the web viewer's scrollbars stay on screen.
+          <View style={styles.root}>
             {shown.result.truncated ? (
               <Text style={[styles.note, { color: theme.textSecondary }]}>
                 Showing the first 100 KB of {formatBytes(shown.result.size)}.
               </Text>
             ) : null}
-            <ScrollView horizontal>
-              <Text selectable style={[styles.code, { color: theme.text }]}>
-                {shown.result.text}
-              </Text>
-            </ScrollView>
-          </ScrollView>
+            <CodeView path={file ?? ""} text={shown.result.text ?? ""} />
+          </View>
         )
       ) : !failed ? (
         <View style={styles.center}>
@@ -171,9 +172,7 @@ const styles = StyleSheet.create({
   },
   name: { flex: 1, fontSize: 15 },
   size: { fontSize: 12, fontVariant: ["tabular-nums"] },
-  fileBody: { padding: 12, paddingBottom: 48, gap: 8 },
-  note: { fontSize: 12 },
-  code: { fontFamily: Fonts?.mono, fontSize: 12, lineHeight: 18 },
+  note: { fontSize: 12, paddingHorizontal: 12, paddingVertical: 8 },
   message: { fontSize: 13, lineHeight: 19, padding: 16 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
 });
