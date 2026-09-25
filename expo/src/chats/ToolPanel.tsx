@@ -6,8 +6,6 @@ export type ToolPanelProps = {
   project?: ProjectOption;
   tab: ToolTab;
   open: boolean;
-  onTab: (tab: ToolTab) => void;
-  onClose: () => void;
 };
 
 /** Desktop web only (ToolPanel.web.tsx); phones keep the full-screen panels in chats.tsx. */

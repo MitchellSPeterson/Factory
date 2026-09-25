@@ -359,11 +359,6 @@ export default function ChatsPage() {
                 project={project}
                 tab={lastPanel ?? "files"}
                 open={!!panel}
-                onTab={(next) => {
-                  setLastPanel(next);
-                  setPanel(next);
-                }}
-                onClose={() => setPanel(null)}
               />
             ) : null}
             {!desktop && lastPanel && project && (

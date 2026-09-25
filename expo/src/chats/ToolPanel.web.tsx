@@ -1,24 +1,17 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { DevicesView } from "@/app/(drawer)/devices.web";
 import { ProjectTerminals } from "@/app/(drawer)/terminal";
 import { FilesPanel } from "@/chats/FilesPanel";
 import { Notice } from "@/chats/ui";
-import { IconButton } from "@/components/icon-button";
 import { GitWorkspace } from "@/git/GitWorkspace";
 import { useTheme } from "@/hooks/use-theme";
 import type { ToolPanelProps, ToolTab } from "./ToolPanel";
 
 export type { ToolTab } from "./ToolPanel";
 
-const TABS: { id: ToolTab; label: string }[] = [
-  { id: "files", label: "Files" },
-  { id: "git", label: "Git" },
-  { id: "terminal", label: "Terminal" },
-  { id: "device", label: "Device" },
-];
 const WIDTH_KEY = "factory.toolPanelWidth";
 const MIN_WIDTH = 360;
 // Sidebar (280) + the narrowest chat column worth keeping.
@@ -34,7 +27,7 @@ function savedWidth() {
 }
 
 /** Codex-style right panel: slides out beside the chat, drag its left edge to resize. */
-export function ToolPanel({ project, tab, open, onTab, onClose }: ToolPanelProps) {
+export function ToolPanel({ project, tab, open }: ToolPanelProps) {
   const theme = useTheme();
   const reduced = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
@@ -103,45 +96,6 @@ export function ToolPanel({ project, tab, open, onTab, onClose }: ToolPanelProps
         style={[styles.handle, { cursor: "col-resize" } as object]}
       />
       <View style={[styles.inner, { width }]}>
-        <View style={[styles.bar, { borderBottomColor: theme.line }]}>
-          {TABS.map((item) => {
-            const active = item.id === tab;
-            return (
-              <Pressable
-                key={item.id}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                onPress={() => onTab(item.id)}
-                style={(state) => [
-                  styles.tab,
-                  {
-                    backgroundColor: active
-                      ? theme.backgroundSelected
-                      : (state as { hovered?: boolean }).hovered
-                        ? theme.subtleHover
-                        : "transparent",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    { color: active ? theme.text : theme.textSecondary },
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-          <View style={{ flex: 1 }} />
-          <IconButton
-            icon="close"
-            accessibilityLabel="Close panel"
-            onPress={onClose}
-            style={styles.close}
-          />
-        </View>
         {/* Iframes (terminal, device) would swallow the drag, so they sit out while resizing. */}
         <View style={[styles.body, dragging && ({ pointerEvents: "none" } as object)]}>
           {visited.map((id) => (
@@ -166,23 +120,6 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   inner: { flex: 1, minHeight: 0 },
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    height: 44,
-    paddingHorizontal: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  tab: {
-    height: 30,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    justifyContent: "center",
-  },
-  tabLabel: { fontSize: 13, fontWeight: "500" },
-  close: { width: 32, height: 32, backgroundColor: "transparent" },
   body: { flex: 1, minHeight: 0 },
   page: { flex: 1, minHeight: 0 },
 });
