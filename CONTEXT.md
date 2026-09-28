@@ -63,3 +63,19 @@ _Avoid_: Epic, area, component
 **Release**:
 A named target version for a Project, such as `v1.3`. A Roadmap Item can aim at one.
 _Avoid_: Milestone, version, sprint
+
+**Build**:
+The Helix Loop run over one Roadmap Item. A Planner splits the item into Checkpoints, each with a test plan and, if it changes what you see, an HTML prototype. Each Checkpoint gets failing tests first, then an implementation, must pass every Gate, and ends in a commit on the Build's own branch and worktree. You stop it twice: to approve the plan, and to try the finished Build.
+_Avoid_: Pipeline, run, job, loop
+
+**Checkpoint**:
+One small, ordered slice of a Build that you can review in minutes. You approve the list before any code is written. Feedback on the finished Build becomes new Checkpoints.
+_Avoid_: Step, subtask, milestone
+
+**Gate**:
+A hard stop a Checkpoint must pass before it is committed: Behavior (the Project's check command), UI (a visual and a behavior reviewer compare the running app to the prototype; skipped when the Checkpoint changes no UI), and Review (two adversarial reviewer Sessions, every finding fixed). A failed Gate sends the findings to a fresh fixer Session, then every Gate runs again.
+_Avoid_: Check, stage, review step
+
+**Notes**:
+Feedback you gave on a Build. Every later prompt in that Build includes it, and the agent records the general lesson in the repo's LEARNINGS.md, which every future agent reads.
+_Avoid_: Memory, comments

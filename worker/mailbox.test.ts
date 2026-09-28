@@ -297,6 +297,69 @@ test("sessions.create with roadmapItemId sets in_progress and tracks the session
   expect(itemAfter?.sessionIds).toEqual([]);
 });
 
+test("builds.create plans and advances through planApproved", async () => {
+  const client = mailbox();
+  const projectId = await makeProject(client);
+  const itemId = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "Add search" });
+  const agent = { provider: "grok" as const, model: "grok-4.6", effort: "medium" as const };
+  const buildId = await client.mutation(api.builds.create, {
+    roadmapItemId: itemId,
+    checkCommand: "bun test",
+    agent,
+    reviewers: [agent, agent],
+  });
+  let build = await client.query(api.builds.get, { buildId });
+  expect(build?.status).toBe("running");
+  expect(build?.step).toEqual({ kind: "plan" });
+  expect(build?.branch).toBe("build/add-search");
+  expect((await client.query(api.roadmap.getItem, { itemId }))?.status).toBe("in_progress");
+  expect((await client.query(api.builds.list, { projectId })).map((row) => row._id)).toEqual([buildId]);
+
+  await client.mutation(api.builds.send, {
+    buildId,
+    event: { kind: "planned", checkpoints: [{ title: "Step 1", description: "", tests: "search returns matches", ui: false }] },
+  });
+  build = await client.query(api.builds.get, { buildId });
+  expect(build?.step).toEqual({ kind: "approvePlan" });
+  expect(build?.status).toBe("waiting");
+
+  await client.mutation(api.builds.send, {
+    buildId,
+    event: { kind: "planApproved", checkpoints: [{ title: "Step 1", description: "", tests: "search returns matches", ui: false }] },
+  });
+  build = await client.query(api.builds.get, { buildId });
+  expect(build?.step).toEqual({ kind: "writeTests" });
+  expect(build?.checkpoints[0]?.status).toBe("active");
+
+  await expect(client.mutation(api.builds.send, { buildId: "missing", event: { kind: "resume" } })).rejects.toThrow(
+    "Build not found",
+  );
+});
+
+test("sessions.create with cwd runs in the worktree, not the Project folder", async () => {
+  const client = mailbox();
+  const projectId = await client.mutation(api.projects.create, {
+    name: "App",
+    kind: "web",
+    localPath: "/tmp/app",
+    githubRepo: "",
+    defaultRuntime: "local",
+  });
+  const sessionId = await client.mutation(api.sessions.create, {
+    projectId,
+    provider: "grok",
+    model: "grok-4.6",
+    effort: "medium",
+    text: "Build it",
+    cwd: "/tmp/app-build-1",
+    title: "Build · Plan",
+  });
+  expect(await client.query(api.sessions.list, {})).toEqual([]);
+  expect((await client.query(api.sessions.get, { sessionId }))?.session.title).toBe("Build · Plan");
+  const launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: key });
+  expect(launch?.project.localPath).toBe("/tmp/app-build-1");
+});
+
 test("provider toggles persist on the server view", async () => {
   const client = mailbox();
   await register(client);

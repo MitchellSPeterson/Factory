@@ -13,6 +13,7 @@ import type {
   SessionStatus,
 } from "./validators";
 
+import type { BuildFields } from "./helix";
 import type { RoadmapItemFields } from "./roadmap";
 
 export type Id<Table extends string = string> = string & { readonly __table?: Table };
@@ -93,6 +94,7 @@ export type Tables = {
     status: SessionStatus | string;
     error?: string;
     roadmapItemId?: Id<"roadmapItems">;
+    cwd?: string; // a Build's worktree
   };
   sessionMessages: {
     sessionId: Id<"sessions">;
@@ -142,6 +144,7 @@ export type Tables = {
   };
   roadmapItems: RoadmapItemFields;
   roadmapCategories: { projectId: Id<"projects">; name: string };
+  builds: BuildFields;
   roadmapReleases: { projectId: Id<"projects">; name: string; order: number; shipped: boolean };
   skills: {
     slug: string;

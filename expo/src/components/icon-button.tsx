@@ -47,6 +47,10 @@ export const IconNames = {
   tag: { ios: 'tag', android: 'sell', web: 'sell' },
   release: { ios: 'shippingbox', android: 'inventory_2', web: 'inventory_2' },
   category: { ios: 'square.grid.2x2', android: 'category', web: 'category' },
+  loop: { ios: 'arrow.triangle.2.circlepath', android: 'sync', web: 'sync' },
+  review: { ios: 'person.2', android: 'rate_review', web: 'rate_review' },
+  person: { ios: 'person.fill', android: 'person', web: 'person' },
+  commit: { ios: 'checkmark.seal.fill', android: 'verified', web: 'verified' },
 } as const;
 
 export type IconName = keyof typeof IconNames;

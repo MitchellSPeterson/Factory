@@ -1,13 +1,15 @@
 import { startTerminals } from "./terminals";
 import { Agent } from "@cursor/sdk";
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { api } from "../shared/mailboxApi";
+import type { Doc, SessionView } from "../shared/dataModel";
 import type { Id } from "../shared/ids";
 import { type AGENT_EFFORTS, toModelSelection } from "../shared/agentModel";
+import { implementPrompt, parsePlan, parseVerdict, planPrompt, reviewPrompt, testsPrompt, uiReviewPrompt, type Verdict } from "../shared/helix";
 import { httpMailbox, mailboxForRoot, type Mailbox } from "./mailbox/client";
 import { codingTools } from "./codingTools";
 import { createLiveLog } from "./liveLog";
@@ -23,7 +25,7 @@ import { loadSkillFiles } from "./seedSkills";
 import { environmentFor, importTick, loadIdentity, type WorkerIdentity } from "./managed";
 import { setKeepAwake, startPairingHub } from "./pairing";
 import { defaultSimRunner, reconcileSimHub } from "./simHub";
-import { startProjectOperations } from "./projectOperations";
+import { executeProjectOperation, startProjectOperations } from "./projectOperations";
 import { startDeviceHub } from "./deviceHub";
 import { fromCursorUsage, type TokenUsage } from "./usage";
 import { ZERO_USAGE } from "../shared/tokenUsage";
@@ -274,6 +276,9 @@ async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
     });
     const args = [bin, "-p", launch.prompt, "--output-format", "text", "--model", launch.model,
       "--effort", launch.effort === "ultra" ? "max" : launch.effort,
+      // full-access never blocks on a permission prompt; -p has no tty to show one on anyway. Other modes are left
+      // to the CLI's own default (fine for a human watching; not wired here for the "ask" case).
+      ...(launch.permissionMode === "full-access" ? ["--permission-mode", "bypassPermissions"] : []),
       ...(launch.agentId === agentId ? ["--resume", agentId] : ["--session-id", agentId])];
     const proc = Bun.spawn(args, {
       cwd: launch.project.localPath,
@@ -375,6 +380,296 @@ async function tick(client: Mailbox, identity: WorkerIdentity) {
     }
   }
 }
+// check and commit run shell/git commands directly (no Session), so a slow one must not be started twice by the
+// next 1.5s tick, and must not block other Builds from advancing in the same tick.
+const buildStepsInFlight = new Set<Id<"builds">>();
+
+function lastAssistantText(view: SessionView | null): string {
+  const last = view?.messages.filter((m) => m.role === "assistant" && (m.kind === undefined || m.kind === "message")).at(-1);
+  return String(last?.text ?? "");
+}
+
+function existingGuides(worktree: string): string {
+  return ["CONTEXT.md", "AGENTS.md", "CLAUDE.md", "docs/adr", "LEARNINGS.md", "DESIGN.md"]
+    .filter((name) => existsSync(path.join(worktree, name)))
+    .join(", ");
+}
+
+// ponytail: no existing shell helper is both timeout-capped at 15 minutes and truncated to 4000 chars; the closest
+// (executeProjectOperation's internal run()) is hardcoded to 2 minutes. This is the minimal one for the check gate.
+async function runCheckCommand(command: string, cwd: string): Promise<{ pass: boolean; output: string }> {
+  if (command.trim() === "") return { pass: true, output: "" };
+  try {
+    const proc = Bun.spawn(["sh", "-c", command], { cwd, stdout: "pipe", stderr: "pipe" });
+    const text = Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]).then(
+      ([out, err]) => `${out}\n${err}`,
+    );
+    const timed = await Promise.race([
+      proc.exited.then(async (code) => ({ code, text: await text })),
+      Bun.sleep(15 * 60_000).then(() => null),
+    ]);
+    if (timed === null) {
+      proc.kill();
+      return { pass: false, output: "Check command timed out after 15 minutes." };
+    }
+    return { pass: timed.code === 0, output: timed.text.slice(-4000) };
+  } catch (error) {
+    return { pass: false, output: error instanceof Error ? error.message : "Check command failed to run." };
+  }
+}
+
+async function runGitCommit(cwd: string, message: string): Promise<string> {
+  const add = Bun.spawn(["git", "add", "-A"], { cwd, stdout: "ignore", stderr: "pipe" });
+  if ((await add.exited) !== 0) throw new Error((await new Response(add.stderr).text()).trim() || "git add failed.");
+  const status = Bun.spawn(["git", "status", "--porcelain"], { cwd, stdout: "pipe", stderr: "ignore" });
+  const dirty = (await new Response(status.stdout).text()).trim() !== "";
+  await status.exited;
+  if (dirty) {
+    const commit = Bun.spawn(["git", "commit", "-m", message], { cwd, stdout: "pipe", stderr: "pipe" });
+    if ((await commit.exited) !== 0) {
+      throw new Error((await new Response(commit.stderr).text()).trim() || "git commit failed.");
+    }
+  }
+  const rev = Bun.spawn(["git", "rev-parse", "--short", "HEAD"], { cwd, stdout: "pipe", stderr: "pipe" });
+  const sha = (await new Response(rev.stdout).text()).trim();
+  if ((await rev.exited) !== 0 || !sha) throw new Error("Could not read the commit sha.");
+  return sha;
+}
+
+async function ensureWorktree(
+  client: Mailbox,
+  identity: WorkerIdentity,
+  build: Doc<"builds">,
+  project: Doc<"projects">,
+): Promise<string> {
+  const slug = build.branch.replace(/^build\//, "") || "build";
+  for (let attempt = 1; attempt <= 20; attempt++) {
+    const suffix = attempt === 1 ? "" : `-${attempt}`;
+    const name = `${slug}${suffix}`;
+    const branch = `${build.branch}${suffix}`;
+    try {
+      await executeProjectOperation(project.localPath, { kind: "createWorktree", name, branch, createBranch: true });
+      const worktree = path.resolve(path.dirname(project.localPath), `${path.basename(project.localPath)}-${name}`);
+      await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, worktree });
+      return worktree;
+    } catch {
+      // Branch or worktree path already exists (e.g. a retried build); try the next suffix.
+    }
+  }
+  throw new Error("Could not create a worktree: too many naming collisions.");
+}
+
+async function startBuildStep(
+  client: Mailbox,
+  identity: WorkerIdentity,
+  build: Doc<"builds">,
+  worktree: string,
+): Promise<void> {
+  const step = build.step;
+  if (step.kind === "plan" || step.kind === "writeTests" || step.kind === "implement" || step.kind === "review") {
+    const item = await client.query(api.roadmap.getItem, { itemId: build.roadmapItemId });
+    if (!item) throw new Error("Roadmap Item not found.");
+    if (step.kind === "plan") {
+      // ponytail: a crash between sessions.create and builds.mark leaves an orphan queued Session; the next tick
+      // (started still false) creates another. Rare and harmless — worst case two Plan Sessions in the UI.
+      const sessionId = await client.mutation(api.sessions.create, {
+        projectId: build.projectId,
+        provider: build.agent.provider,
+        model: build.agent.model,
+        effort: build.agent.effort,
+        permissionMode: "full-access",
+        text: planPrompt(item, build, step.feedback),
+        cwd: worktree,
+        title: step.feedback ? "Build · Replan" : "Build · Plan",
+        roadmapItemId: build.roadmapItemId,
+        accessKey: identity.accessKey,
+      });
+      await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds: [sessionId] });
+      return;
+    }
+    if (step.kind === "writeTests") {
+      // ponytail: same crash window as the plan Step above.
+      const sessionId = await client.mutation(api.sessions.create, {
+        projectId: build.projectId,
+        provider: build.agent.provider,
+        model: build.agent.model,
+        effort: build.agent.effort,
+        permissionMode: "full-access",
+        text: testsPrompt(item, build),
+        cwd: worktree,
+        title: `Build · Tests ${build.current + 1}`,
+        roadmapItemId: build.roadmapItemId,
+        accessKey: identity.accessKey,
+      });
+      await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds: [sessionId] });
+      return;
+    }
+    if (step.kind === "implement") {
+      // Always a fresh Session — never resumed, even for a fixer.
+      const sessionId = await client.mutation(api.sessions.create, {
+        projectId: build.projectId,
+        provider: build.agent.provider,
+        model: build.agent.model,
+        effort: build.agent.effort,
+        permissionMode: "full-access",
+        text: implementPrompt(item, build, step.message),
+        cwd: worktree,
+        title: `Build · ${step.message ? "Fix" : "Implement"} ${build.current + 1}`,
+        roadmapItemId: build.roadmapItemId,
+        accessKey: identity.accessKey,
+      });
+      await client.mutation(api.builds.mark, {
+        accessKey: identity.accessKey,
+        buildId: build._id,
+        checkpointSessionId: sessionId,
+        started: true,
+        sessionIds: [sessionId],
+      });
+      return;
+    }
+    // review
+    const cp = build.checkpoints[build.current]!;
+    const guides = existingGuides(worktree);
+    const sessionIds: Id<"sessions">[] = [];
+    for (const [i, reviewer] of build.reviewers.entries()) {
+      // ponytail: same crash window; a lost mark here would leave one reviewer Session untracked.
+      const sessionId = await client.mutation(api.sessions.create, {
+        projectId: build.projectId,
+        provider: reviewer.provider,
+        model: reviewer.model,
+        effort: reviewer.effort,
+        permissionMode: "full-access",
+        text: reviewPrompt(cp, guides),
+        cwd: worktree,
+        title: `Build · ${build.current + 1} · Reviewer ${i === 0 ? "A" : "B"}`,
+        roadmapItemId: build.roadmapItemId,
+        accessKey: identity.accessKey,
+      });
+      sessionIds.push(sessionId);
+    }
+    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds });
+    return;
+  }
+  if (step.kind === "uiReview") {
+    const cp = build.checkpoints[build.current]!;
+    const roles = ["visual", "behavior"] as const;
+    const sessionIds: Id<"sessions">[] = [];
+    for (const [i, role] of roles.entries()) {
+      const reviewer = build.reviewers[i]!;
+      // ponytail: same crash window as the review Step above.
+      const sessionId = await client.mutation(api.sessions.create, {
+        projectId: build.projectId,
+        provider: reviewer.provider,
+        model: reviewer.model,
+        effort: reviewer.effort,
+        permissionMode: "full-access",
+        text: uiReviewPrompt(cp, role),
+        cwd: worktree,
+        title: `Build · UI review ${build.current + 1} · ${role === "visual" ? "Visual" : "Behavior"}`,
+        roadmapItemId: build.roadmapItemId,
+        accessKey: identity.accessKey,
+      });
+      sessionIds.push(sessionId);
+    }
+    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds });
+    return;
+  }
+  if (step.kind === "check") {
+    if (buildStepsInFlight.has(build._id)) return;
+    buildStepsInFlight.add(build._id);
+    void (async () => {
+      try {
+        const { pass, output } = await runCheckCommand(build.checkCommand, worktree);
+        await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "checked", pass, output } });
+      } catch (error) {
+        await client.mutation(api.builds.send, {
+          buildId: build._id,
+          event: { kind: "failed", error: error instanceof Error ? error.message : "Check command failed." },
+        });
+      } finally {
+        buildStepsInFlight.delete(build._id);
+      }
+    })();
+    return;
+  }
+  if (step.kind === "commit") {
+    if (buildStepsInFlight.has(build._id)) return;
+    buildStepsInFlight.add(build._id);
+    void (async () => {
+      try {
+        const cp = build.checkpoints[build.current]!;
+        const message = `${cp.title}\n\nBuild: ${build.title}, Checkpoint ${build.current + 1}/${build.checkpoints.length}`;
+        const sha = await runGitCommit(worktree, message);
+        await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "committed", sha } });
+      } catch (error) {
+        await client.mutation(api.builds.send, {
+          buildId: build._id,
+          event: { kind: "failed", error: error instanceof Error ? error.message : "Commit failed." },
+        });
+      } finally {
+        buildStepsInFlight.delete(build._id);
+      }
+    })();
+    return;
+  }
+  // approvePlan / finalReview / done: the Worker has nothing to do; the page or advance() moves these along.
+}
+
+async function pollBuildStep(client: Mailbox, build: Doc<"builds">): Promise<void> {
+  if (build.sessionIds.length === 0) return;
+  const statuses = await Promise.all(build.sessionIds.map((sessionId) => client.query(api.sessions.getStatus, { sessionId })));
+  const failedAt = statuses.findIndex((status) => status === "failed" || status === "stopped" || status === null);
+  if (failedAt !== -1) {
+    const view = await client.query(api.sessions.get, { sessionId: build.sessionIds[failedAt]! });
+    await client.mutation(api.builds.send, {
+      buildId: build._id,
+      event: { kind: "failed", error: `${view?.session.title ?? "Session"} failed` },
+    });
+    return;
+  }
+  if (!statuses.every((status) => status === "idle")) return;
+  const views = await Promise.all(build.sessionIds.map((sessionId) => client.query(api.sessions.get, { sessionId })));
+  const texts = views.map((view) => lastAssistantText(view));
+  const step = build.step;
+  if (step.kind === "plan") {
+    const checkpoints = parsePlan(texts[0] ?? "");
+    if (!checkpoints) {
+      await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "failed", error: "The planner didn't return a plan." } });
+      return;
+    }
+    await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "planned", checkpoints } });
+  } else if (step.kind === "writeTests") {
+    await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "testsWritten" } });
+  } else if (step.kind === "implement") {
+    await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "implemented" } });
+  } else if (step.kind === "uiReview" || step.kind === "review") {
+    const verdicts = texts.map((text) => parseVerdict(text));
+    if (verdicts.some((verdict) => verdict === null)) {
+      await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "failed", error: "A reviewer didn't return a verdict." } });
+      return;
+    }
+    await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "reviewed", verdicts: verdicts as Verdict[] } });
+  }
+}
+
+async function buildsTick(client: Mailbox, identity: WorkerIdentity) {
+  const builds = await client.query(api.builds.listActive, { accessKey: identity.accessKey });
+  for (const build of builds) {
+    try {
+      const project = await client.query(api.projects.get, { projectId: build.projectId });
+      if (!project) throw new Error("Project not found.");
+      const worktree = build.worktree ?? (await ensureWorktree(client, identity, build, project));
+      if (!build.started) await startBuildStep(client, identity, build, worktree);
+      else await pollBuildStep(client, build);
+    } catch (error) {
+      await client.mutation(api.builds.send, {
+        buildId: build._id,
+        event: { kind: "failed", error: error instanceof Error ? error.message : "Build step failed." },
+      });
+    }
+  }
+}
+
 async function waitForIdentity() {
   return await loadIdentity(root);
 }
@@ -506,7 +801,7 @@ async function main() {
       console.error("Device preview synchronization failed; retrying.");
     }
   }
-  try { for (;;) { try { await providerTick(); await simHubTick(); await skillsTick(); await tick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
+  try { for (;;) { try { await providerTick(); await simHubTick(); await skillsTick(); await tick(client, identity); await buildsTick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
   finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); stopPairing(); setKeepAwake(false); }
 }
 

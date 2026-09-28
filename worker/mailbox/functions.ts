@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, unlin
 import path from "node:path";
 import { githubRepoFromRemote } from "../../shared/addProject";
 import { AGENT_PROVIDERS } from "../../shared/agentModel";
+import { advance, branchFor, type BuildEvent, type BuildFields, type Checkpoint } from "../../shared/helix";
 import { validateRepository, validateVariableName } from "../../shared/managed";
 import type { ProjectOperation, OperationResult, OperationState } from "../../shared/projectOperations";
 import {
@@ -287,6 +288,12 @@ function requireRoadmapItem(store: Store, itemId: string): Doc {
   return item;
 }
 
+function requireBuild(store: Store, buildId: string): Doc {
+  const build = store.get(buildId);
+  if (!build) throw new Error("Build not found");
+  return build;
+}
+
 function requireGithubConnection(store: Store): Doc {
   const row = store.list("githubConnection")[0];
   if (!row) throw new Error("Connect GitHub first.");
@@ -391,7 +398,8 @@ async function fetchGithubLink(token: string, repo: string, number: number): Pro
 
 const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx) => unknown | Promise<unknown>> = {
   "sessions.list": (_args, { store }) => {
-    const sessions = store.list("sessions");
+    // Build Sessions (the only ones with a cwd) live on their Build's page, not in the Sessions list.
+    const sessions = store.list("sessions").filter((session) => !session.cwd);
     return sessions.map((session) => {
       const project = typeof session.projectId === "string" ? store.get(session.projectId) : null;
       return { session, projectName: project?.name ?? "missing" };
@@ -437,9 +445,11 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       roadmapItem = store.get(args.roadmapItemId) ?? undefined;
       if (!roadmapItem || roadmapItem.projectId !== project._id) throw new Error("Roadmap item not found");
     }
+    const givenTitle = typeof args.title === "string" ? args.title.trim() : "";
+    const cwd = typeof args.cwd === "string" && args.cwd.trim() !== "" ? args.cwd.trim() : undefined;
     const sessionId = store.insert("sessions", {
       projectId: project._id,
-      title: titleFrom(text, imageIds.length, skillSlugs[0] ?? ""),
+      title: givenTitle !== "" ? givenTitle : titleFrom(text, imageIds.length, skillSlugs[0] ?? ""),
       provider: args.provider,
       model: String(args.model).trim(),
       effort: args.effort,
@@ -447,6 +457,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       serviceTier: args.serviceTier ?? DEFAULT_SERVICE_TIER,
       status: "queued",
       roadmapItemId: roadmapItem?._id,
+      cwd,
     });
     store.insert("sessionMessages", {
       sessionId,
@@ -572,7 +583,8 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
         serverId: project.serverId,
         name: project.name,
         kind: project.kind,
-        localPath: project.localPath,
+        // A Build's Session runs in its worktree, not the Project folder.
+        localPath: (session.cwd as string | undefined) ?? project.localPath,
         githubRepo: project.githubRepo,
       },
     };
@@ -741,7 +753,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (!project) throw new Error("Project not found");
     requireProjectServer(store, project, typeof args.accessKey === "string" ? args.accessKey : undefined);
     if (project.cloneStatus === "cloning") throw new Error("Wait for cloning to finish before removing this Project.");
-    for (const table of ["projectImports", "roadmapItems", "roadmapCategories", "roadmapReleases"]) {
+    for (const table of ["projectImports", "roadmapItems", "roadmapCategories", "roadmapReleases", "builds"]) {
       for (const row of store.list(table).filter((item) => item.projectId === args.projectId)) store.delete(row._id);
     }
     if (project.serverId) {
@@ -1560,6 +1572,65 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       sessionIds: [],
       order,
     });
+  },
+  "builds.list": (args, { store }) => {
+    const projectId = String(args.projectId ?? "");
+    return store.list("builds").filter((row) => row.projectId === projectId);
+  },
+  "builds.get": (args, { store }) => store.get(String(args.buildId ?? "")),
+  "builds.create": (args, { store }) => {
+    const item = requireRoadmapItem(store, String(args.roadmapItemId ?? ""));
+    const project = requireProject(store, String(item.projectId));
+    const checkCommand = String(args.checkCommand ?? "");
+    const title = String(item.title ?? "");
+    const buildId = store.insert("builds", {
+      projectId: project._id,
+      roadmapItemId: item._id,
+      title,
+      branch: branchFor(title),
+      checkCommand,
+      agent: args.agent,
+      reviewers: args.reviewers,
+      notes: [],
+      checkpoints: [],
+      current: 0,
+      step: { kind: "plan" },
+      started: false,
+      sessionIds: [],
+      status: "running",
+    });
+    if (item.status === "idea" || item.status === "planned") {
+      store.patch(item._id, { status: "in_progress" });
+    }
+    return buildId;
+  },
+  "builds.send": (args, { store }) => {
+    const build = requireBuild(store, String(args.buildId ?? ""));
+    const { _id: _keep, _creationTime: _time, ...fields } = build;
+    const result = advance(fields as BuildFields, args.event as BuildEvent);
+    store.patch(build._id, result);
+    return null;
+  },
+  // Worker only: Builds whose status is running (a Step whose Build is done always moves status off "running").
+  "builds.listActive": (args, { store }) => {
+    requireServer(store, String(args.accessKey ?? ""));
+    return store.list("builds").filter((row) => row.status === "running");
+  },
+  "builds.mark": (args, { store }) => {
+    requireServer(store, String(args.accessKey ?? ""));
+    const build = requireBuild(store, String(args.buildId ?? ""));
+    const changes: Record<string, unknown> = {};
+    if (args.started !== undefined) changes.started = args.started;
+    if (args.sessionIds !== undefined) changes.sessionIds = args.sessionIds;
+    if (args.worktree !== undefined) changes.worktree = args.worktree;
+    if (typeof args.checkpointSessionId === "string") {
+      const checkpointSessionId = args.checkpointSessionId;
+      changes.checkpoints = (build.checkpoints as Checkpoint[]).map((cp, i) =>
+        i === build.current ? { ...cp, sessionId: checkpointSessionId } : cp,
+      );
+    }
+    store.patch(build._id, changes);
+    return null;
   },
   "pty.issueTicket": (args, { store }) => {
     const project = requireProject(store, String(args.projectId ?? ""));

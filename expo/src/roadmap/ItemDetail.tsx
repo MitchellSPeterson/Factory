@@ -33,6 +33,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { Fonts } from "@/constants/theme";
 import { Action, Notice } from "@/chats/ui";
 import { IconButton, IconNames, type IconName } from "@/components/icon-button";
+import { SendToBuildDialog } from "@/build/SendToBuildDialog";
 import { Popover } from "./Popover";
 import {
   EASE_OUT,
@@ -64,6 +65,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
   const item = useQuery(api.roadmap.getItem, { itemId });
   const board = useQuery(api.roadmap.get, item ? { projectId: item.projectId } : "skip");
   const sessions = useQuery(api.sessions.list);
+  const builds = useQuery(api.builds.list, item ? { projectId: item.projectId } : "skip");
   const updateItem = useMutation(api.roadmap.updateItem);
   const removeItem = useMutation(api.roadmap.removeItem);
   const removeLink = useMutation(api.roadmap.removeLink);
@@ -76,6 +78,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [buildDialog, setBuildDialog] = useState(false);
 
   useEffect(() => {
     if (!item) return;
@@ -145,6 +148,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
   const prMerged = item.links.some((l) => l.kind === "pr" && l.state === "merged");
   const suggestDone = !isClosed(item.status) && (allRequirementsDone || prMerged);
   const linkedSessions = (sessions ?? []).filter((row) => item.sessionIds.includes(row.session._id));
+  const existingBuild = (builds ?? []).find((b) => b.roadmapItemId === item._id && b.status !== "stopped");
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -174,6 +178,14 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
             label="Start Session"
             emphasis
             onPress={() => router.push({ pathname: "/chats", params: { new: "1", roadmapItem: item._id } })}
+          />
+          <Action
+            label={existingBuild ? "Open Build" : "Send to Build"}
+            onPress={() =>
+              existingBuild
+                ? router.push({ pathname: "/build", params: { build: existingBuild._id } })
+                : setBuildDialog(true)
+            }
           />
           <Popover
             items={[
@@ -381,6 +393,15 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
         title={item.title}
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => void doDelete()}
+      />
+      <SendToBuildDialog
+        visible={buildDialog}
+        roadmapItemId={item._id}
+        onClose={() => setBuildDialog(false)}
+        onCreated={(id) => {
+          setBuildDialog(false);
+          router.push({ pathname: "/build", params: { build: id } });
+        }}
       />
     </ScrollView>
   );

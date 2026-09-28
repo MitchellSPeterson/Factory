@@ -16,6 +16,7 @@ import type {
   TerminalClaim,
   TerminalExchange,
 } from "./dataModel";
+import type { AgentPick, BuildEvent } from "./helix";
 import type { ProjectOperation } from "./projectOperations";
 import type { RoadmapItemPatch, RoadmapKind } from "./roadmap";
 import type { AgentEffort, PermissionMode, ProjectKind, ServiceTier, SessionProvider } from "./validators";
@@ -48,6 +49,9 @@ export const api = {
         skillSlugs?: string[];
         accessKey?: string;
         roadmapItemId?: string;
+        // Builds only: run in this worktree instead of the Project folder, under this title.
+        cwd?: string;
+        title?: string;
       },
       Id<"sessions">
     >("sessions.create"),
@@ -194,6 +198,24 @@ export const api = {
     removeLink: ref<{ itemId: string; url: string }, null>("roadmap.removeLink"),
     refreshLinks: ref<{ itemId: string }, null>("roadmap.refreshLinks"),
     importIssue: ref<{ projectId: string; ref: string }, Id<"roadmapItems">>("roadmap.importIssue"),
+  },
+  builds: {
+    list: ref<{ projectId: string }, Doc<"builds">[]>("builds.list"),
+    get: ref<{ buildId: string }, Doc<"builds"> | null>("builds.get"),
+    // Starts planning. The Roadmap Item moves to In progress.
+    create: ref<
+      { roadmapItemId: string; checkCommand: string; agent: AgentPick; reviewers: [AgentPick, AgentPick] },
+      Id<"builds">
+    >("builds.create"),
+    // Runs helix advance(). The page sends planApproved/approved/feedback/resume/stop; the Worker sends the rest.
+    send: ref<{ buildId: string; event: BuildEvent }, null>("builds.send"),
+    // Worker only: Builds whose status is running and whose Step is not done.
+    listActive: ref<{ accessKey: string }, Doc<"builds">[]>("builds.listActive"),
+    // Worker only: bookkeeping that is not a state change.
+    mark: ref<
+      { accessKey: string; buildId: string; started?: boolean; sessionIds?: string[]; worktree?: string; checkpointSessionId?: string },
+      null
+    >("builds.mark"),
   },
   pty: {
     issueTicket: ref<{ projectId: string }, PtyTicket>("pty.issueTicket"),

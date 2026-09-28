@@ -1,0 +1,7 @@
+# Builds are orchestrated by the Worker, and every Gate is a Session
+
+A Build (our version of Shopify's Helix Loop) is one `builds` row in the mailbox. `shared/helix.ts` `advance()` is a pure state machine; the Worker's `buildsTick` performs each Step's side effect and feeds the result back as an event. The planner, the test writer, the implementer, each fixer, and every reviewer are ordinary Sessions running in the Build's worktree (`sessions.cwd`), so every Provider, permission, usage meter, and the chat view work for Builds with no extra code, and each Gate's evidence is a Session you can open. The Behavior Gate and the commit are plain processes the Worker runs, so no model decides whether tests passed. Each fix is a fresh Session so the fixer isn't anchored on the attempt that failed.
+
+We considered an external orchestrator (Helix itself, or a long-running agent that drives the loop and is held in it by Stop hooks). We rejected it because it would bypass the mailbox, so the phone couldn't see or steer it. The Worker plays the hook's role: a Step only ends when the Worker says so.
+
+The costs: verdicts are parsed from a fenced JSON block in the Session's last reply. The UI Gate's reviewers launch the app and take their own screenshots, because Projects have no preview command; a reviewer that can't run the app reports a blocker, which pauses the Build after repeated failures. Lessons live in the repo's `LEARNINGS.md`, written by the agents themselves, so they reach future Builds only once the branch is merged.
