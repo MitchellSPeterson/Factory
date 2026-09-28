@@ -1,11 +1,11 @@
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { DrawerToggleButton } from 'expo-router/drawer';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
+import { useCSSVariable } from 'uniwind';
 
 import { DrawerLink } from '@/components/app-drawer';
 import type { IconName } from '@/components/icon-button';
 import { useDesktop } from '@/hooks/use-desktop';
-import { useTheme } from '@/hooks/use-theme';
 
 // Deep links and reloads keep the Settings root underneath, so Back always works.
 export const unstable_settings = { initialRouteName: 'index' };
@@ -20,19 +20,22 @@ const sections: { href: string; label: string; icon: IconName }[] = [
 ];
 
 export default function SettingsLayout() {
-  const theme = useTheme();
   const desktop = useDesktop();
   const pathname = usePathname();
   const router = useRouter();
+  const [foreground, surface] = useCSSVariable(['--color-foreground', '--color-surface']) as (
+    | string
+    | undefined
+  )[];
   const stack = (
     <Stack
       screenOptions={{
-        headerTintColor: theme.text,
-        headerStyle: { backgroundColor: theme.sidebar },
+        headerTintColor: foreground,
+        headerStyle: { backgroundColor: surface },
         headerShadowVisible: false,
         headerTitleStyle: { fontWeight: '600' },
         headerBackButtonDisplayMode: 'minimal',
-        contentStyle: { backgroundColor: theme.sidebar },
+        contentStyle: { backgroundColor: surface },
         // Desktop: sections are peers picked from the left column, not a drill-down.
         ...(desktop && { headerBackVisible: false, animation: 'none' }),
       }}>
@@ -40,7 +43,7 @@ export default function SettingsLayout() {
         name="index"
         options={{
           title: desktop ? 'General' : 'Settings',
-          headerLeft: desktop ? () => null : () => <DrawerToggleButton tintColor={theme.text} />,
+          headerLeft: desktop ? () => null : () => <DrawerToggleButton tintColor={foreground} />,
         }}
       />
       <Stack.Screen name="providers/index" options={{ title: 'Providers' }} />
@@ -53,8 +56,8 @@ export default function SettingsLayout() {
   );
   if (!desktop) return stack;
   return (
-    <View style={[styles.split, { backgroundColor: theme.sidebar }]}>
-      <View style={[styles.nav, { borderColor: theme.line }]}>
+    <View className="flex-1 flex-row bg-surface">
+      <View className="w-[220px] pt-16 px-2.5 gap-0.5 border-r border-border">
         {sections.map((section) => (
           <DrawerLink
             key={section.href}
@@ -69,13 +72,7 @@ export default function SettingsLayout() {
           />
         ))}
       </View>
-      <View style={styles.content}>{stack}</View>
+      <View className="flex-1 min-w-0">{stack}</View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  split: { flex: 1, flexDirection: 'row' },
-  nav: { width: 220, paddingTop: 64, paddingHorizontal: 10, gap: 2, borderRightWidth: 1 },
-  content: { flex: 1, minWidth: 0 },
-});

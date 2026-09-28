@@ -4,96 +4,95 @@ import {
   type DrawerContentComponentProps,
 } from 'expo-router/drawer';
 import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Item } from 'panelui-native/components/item';
+import { Text } from 'panelui-native/primitives/text';
+import { useCSSVariable } from 'uniwind';
 
 import { ChatList } from '@/chats/ChatList';
 import { IconNames, type IconName } from '@/components/icon-button';
 import { ProjectSwitcher } from '@/components/project-switcher';
-import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
 import { useDesktop } from '@/hooks/use-desktop';
-import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import type { Id } from '@/lib/dataModel';
 import { useMutation } from '@/lib/factory';
 
 export function FactoryDrawer(props: DrawerContentComponentProps) {
-  const theme = useTheme();
   const pathname = usePathname();
   if (useDesktop()) return <DesktopSidebar />;
 
   return (
     <DrawerContentScrollView
       {...props}
-      contentContainerStyle={styles.scroll}
-      style={{ backgroundColor: theme.sidebar }}>
-      <SafeAreaView style={styles.safe} edges={['left', 'right']}>
-        <View style={styles.brand}>
-          <ThemedText type="heading" style={styles.mark}>
-            Factory
-          </ThemedText>
-        </View>
+      contentContainerStyle={{ flexGrow: 1 }}
+      className="bg-surface">
+      <SafeAreaView className="flex-1 gap-4 px-2.5 pb-2.5" edges={['left', 'right']}>
+        <Text className="px-2 py-1.5 text-[22px] font-semibold leading-7 tracking-tight text-foreground">
+          Factory
+        </Text>
         <ProjectSwitcher />
-        <ThemedText type="eyebrow" themeColor="textSecondary" style={styles.navLabel}>
+        <Text className="px-2.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Work
-        </ThemedText>
-        <DrawerLink
-          icon="sessions"
-          label="Chats"
-          focused={pathname === '/chats'}
-          onPress={() => {
-            router.push('/chats');
-            props.navigation.closeDrawer();
-          }}
-        />
-        <DrawerLink
-          icon="layers"
-          label="Roadmap"
-          focused={pathname === '/roadmap'}
-          onPress={() => {
-            router.push('/roadmap');
-            props.navigation.closeDrawer();
-          }}
-        />
-        <DrawerLink
-          icon="loop"
-          label="Build"
-          focused={pathname === '/build'}
-          onPress={() => {
-            router.push('/build');
-            props.navigation.closeDrawer();
-          }}
-        />
-        <DrawerLink
-          icon="git"
-          label="Git"
-          focused={pathname === '/git'}
-          onPress={() => {
-            router.push('/git');
-            props.navigation.closeDrawer();
-          }}
-        />
-        <DrawerLink
-          icon="devices"
-          label="Devices"
-          focused={pathname === '/devices'}
-          onPress={() => {
-            router.push('/devices');
-            props.navigation.closeDrawer();
-          }}
-        />
-        <DrawerLink
-          icon="terminal"
-          label="Terminal"
-          focused={pathname === '/terminal'}
-          onPress={() => {
-            router.push('/terminal');
-            props.navigation.closeDrawer();
-          }}
-        />
-        <View style={styles.bottom}>
+        </Text>
+        <View className="gap-0.5">
+          <DrawerLink
+            icon="sessions"
+            label="Chats"
+            focused={pathname === '/chats'}
+            onPress={() => {
+              router.push('/chats');
+              props.navigation.closeDrawer();
+            }}
+          />
+          <DrawerLink
+            icon="layers"
+            label="Roadmap"
+            focused={pathname === '/roadmap'}
+            onPress={() => {
+              router.push('/roadmap');
+              props.navigation.closeDrawer();
+            }}
+          />
+          <DrawerLink
+            icon="loop"
+            label="Build"
+            focused={pathname === '/build'}
+            onPress={() => {
+              router.push('/build');
+              props.navigation.closeDrawer();
+            }}
+          />
+          <DrawerLink
+            icon="git"
+            label="Git"
+            focused={pathname === '/git'}
+            onPress={() => {
+              router.push('/git');
+              props.navigation.closeDrawer();
+            }}
+          />
+          <DrawerLink
+            icon="devices"
+            label="Devices"
+            focused={pathname === '/devices'}
+            onPress={() => {
+              router.push('/devices');
+              props.navigation.closeDrawer();
+            }}
+          />
+          <DrawerLink
+            icon="terminal"
+            label="Terminal"
+            focused={pathname === '/terminal'}
+            onPress={() => {
+              router.push('/terminal');
+              props.navigation.closeDrawer();
+            }}
+          />
+        </View>
+        <View className="mt-auto">
           <DrawerLink
             icon="settings"
             label="Settings"
@@ -111,7 +110,6 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
 
 /** Desktop web: always-on sidebar with nav and the chat list, ChatGPT/Codex style. */
 function DesktopSidebar() {
-  const theme = useTheme();
   const pathname = usePathname();
   const { session } = useGlobalSearchParams<{ session?: string }>();
   const removeSession = useMutation(api.sessions.remove);
@@ -150,12 +148,10 @@ function DesktopSidebar() {
   });
 
   return (
-    <View style={[styles.desktop, { backgroundColor: theme.sidebar }]}>
-      <View style={styles.brand}>
-        <ThemedText type="heading" style={styles.mark}>
-          Factory
-        </ThemedText>
-      </View>
+    <View className="flex-1 gap-2 bg-surface p-2.5">
+      <Text className="px-2 py-1.5 text-[22px] font-semibold leading-7 tracking-tight text-foreground">
+        Factory
+      </Text>
       <DrawerLink
         icon="compose"
         label="New chat"
@@ -164,7 +160,7 @@ function DesktopSidebar() {
         onPress={newChat}
       />
       <ProjectSwitcher />
-      <View>
+      <View className="gap-0.5">
         <DrawerLink
           icon="layers"
           label="Roadmap"
@@ -186,7 +182,7 @@ function DesktopSidebar() {
           onPress={() => router.navigate('/terminal')}
         />
       </View>
-      <View style={styles.chats}>
+      <View className="min-h-0 flex-1 pt-2">
         <ChatList
           ref={searchRef}
           dense
@@ -219,92 +215,28 @@ export function DrawerLink({
   focused: boolean;
   onPress: () => void;
 }) {
-  const theme = useTheme();
   const desktop = useDesktop();
+  const [foreground, muted] = useCSSVariable([
+    '--color-foreground',
+    '--color-muted-foreground',
+  ]) as (string | undefined)[];
   return (
-    <Pressable
-      accessibilityRole="button"
+    <Item
+      size={desktop ? 'sm' : 'default'}
       onPress={onPress}
-      style={(state) => [
-        desktop ? styles.itemDense : styles.item,
-        focused
-          ? { backgroundColor: theme.backgroundSelected }
-          : (state as { hovered?: boolean }).hovered && { backgroundColor: theme.subtleHover },
-        state.pressed && { opacity: 0.7 },
-      ]}>
-      <SymbolView
-        name={IconNames[icon]}
-        size={18}
-        tintColor={focused ? theme.text : theme.textSecondary}
-      />
-      <ThemedText type="small" themeColor={focused ? 'text' : 'textSecondary'}>
-        {label}
-      </ThemedText>
+      accessibilityLabel={label}
+      className={focused ? 'bg-primary/15' : 'bg-transparent'}>
+      <Item.Media>
+        <SymbolView name={IconNames[icon]} size={18} tintColor={focused ? foreground : muted} />
+      </Item.Media>
+      <Item.Content>
+        <Item.Title className={focused ? 'text-foreground' : 'text-muted-foreground'}>{label}</Item.Title>
+      </Item.Content>
       {shortcut ? (
-        <Text style={[styles.shortcut, { color: theme.textSecondary }]}>{shortcut}</Text>
+        <Item.Actions>
+          <Text className="text-xs text-muted-foreground">{shortcut}</Text>
+        </Item.Actions>
       ) : null}
-    </Pressable>
+    </Item>
   );
 }
-
-const styles = StyleSheet.create({
-  scroll: {
-    flexGrow: 1,
-  },
-  safe: {
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingBottom: 10,
-    gap: Spacing.three,
-  },
-  brand: {
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  mark: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: 600,
-    letterSpacing: -0.4,
-  },
-  navLabel: {
-    paddingHorizontal: 10,
-  },
-  item: {
-    minHeight: 44,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderCurve: 'continuous',
-  },
-  bottom: {
-    marginTop: 'auto',
-  },
-  desktop: {
-    flex: 1,
-    padding: 10,
-    gap: Spacing.two,
-  },
-  itemDense: {
-    minHeight: 34,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderCurve: 'continuous',
-  },
-  shortcut: {
-    marginLeft: 'auto',
-    fontSize: 12,
-  },
-  chats: {
-    flex: 1,
-    minHeight: 0,
-    paddingTop: Spacing.two,
-  },
-});

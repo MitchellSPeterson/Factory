@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { View } from 'react-native';
+import { Button } from 'panelui-native/components/button';
+import { Input } from 'panelui-native/components/input';
+import { Text } from 'panelui-native/primitives/text';
 
-import { ThemedText } from '@/components/themed-text';
-import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { useQuery } from '@/lib/factory';
 import { pairingBase } from '@/lib/pairing';
@@ -49,27 +50,28 @@ export default function MachinePage() {
 }
 
 function CloneFolder({ path }: { path: string }) {
-  const theme = useTheme();
   const [value, setValue] = useState(path);
   const [message, setMessage] = useState("");
   useEffect(() => {
     setValue(path);
   }, [path]);
   return (
-    <View>
-      <View style={styles.clonePad}>
-        <TextInput
-          accessibilityLabel="Clone folder"
-          autoCapitalize="none"
-          autoComplete="off"
-          autoCorrect={false}
-          value={value}
-          onChangeText={setValue}
-          style={[styles.cloneField, { color: theme.text, borderColor: theme.line }]}
-        />
-        <View style={styles.cloneActions}>
-        <Pressable
-          accessibilityRole="button"
+    <View className="gap-2.5 px-4 py-3">
+      <Input
+        variant="filled"
+        accessibilityLabel="Clone folder"
+        autoCapitalize="none"
+        autoComplete="off"
+        autoCorrect={false}
+        value={value}
+        onChangeText={setValue}
+      />
+      <View className="flex-row gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-0"
+          labelClassName="text-primary"
           onPress={() => {
             void (async () => {
               try {
@@ -82,10 +84,13 @@ function CloneFolder({ path }: { path: string }) {
               }
             })();
           }}>
-          <ThemedText style={{ color: theme.accent }}>Choose folder</ThemedText>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
+          Choose folder
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-0"
+          labelClassName="text-primary"
           onPress={() => {
             void (async () => {
               try {
@@ -96,15 +101,10 @@ function CloneFolder({ path }: { path: string }) {
               }
             })();
           }}>
-          <ThemedText style={{ color: theme.accent }}>Save</ThemedText>
-        </Pressable>
-        </View>
-        {message ? (
-          <ThemedText themeColor="textSecondary" style={styles.cloneHint}>
-            {message}
-          </ThemedText>
-        ) : null}
+          Save
+        </Button>
       </View>
+      {message ? <Text size="sm" muted>{message}</Text> : null}
     </View>
   );
 }
@@ -134,10 +134,3 @@ async function saveProjectsRoot(projectsRoot: string) {
     );
   }
 }
-
-const styles = StyleSheet.create({
-  clonePad: { paddingHorizontal: 16, paddingVertical: 12, gap: 10 },
-  cloneField: { borderWidth: 1, borderRadius: 10, borderCurve: 'continuous', paddingHorizontal: 12, paddingVertical: 9, fontSize: 15 },
-  cloneActions: { flexDirection: 'row', gap: 20 },
-  cloneHint: { fontSize: 13, lineHeight: 18 },
-});

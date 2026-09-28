@@ -1,5 +1,7 @@
-import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { SymbolView } from 'expo-symbols';
+
+import { Button } from 'panelui-native/components/button';
 
 import { useTheme } from '@/hooks/use-theme';
 
@@ -77,42 +79,26 @@ export function IconButton({
   const color = filled ? theme.sidebar : theme.text;
 
   return (
-    <Pressable
-      accessibilityRole="button"
+    <Button
+      variant="ghost"
+      size="icon"
       accessibilityLabel={accessibilityLabel}
       disabled={disabled}
       onPress={onPress}
-      style={(state) => [
-        styles.button,
-        filled
-          ? { backgroundColor: theme.text }
-          : { backgroundColor: theme.subtleHover },
-        state.pressed && !disabled && styles.pressed,
-        disabled && styles.disabled,
-        style,
-        // Web pointer hover; callers often pass a transparent background.
-        !filled &&
-          !disabled &&
-          (state as { hovered?: boolean }).hovered && { backgroundColor: theme.subtleHover },
-      ]}>
+      // `rounded-xl` matches the old 12px radius (Button's own size="icon"
+      // ships an 8px `rounded-lg`). `bg-foreground` for "filled" is an exact
+      // token match for the old `theme.text` background.
+      // ponytail: bg-foreground/5 approximates the old per-theme `subtleHover`
+      // rgba (0.05 light / 0.04 dark); tune if the "plain" resting state looks off.
+      className={[
+        'rounded-xl',
+        filled ? 'bg-foreground' : 'bg-foreground/5',
+        disabled ? 'opacity-40' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={[{ borderCurve: 'continuous' } as ViewStyle, style]}>
       <SymbolView name={IconNames[icon]} size={20} tintColor={color} />
-    </Pressable>
+    </Button>
   );
 }
-
-const styles = StyleSheet.create({
-  button: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: {
-    transform: [{ scale: 0.97 }],
-  },
-  disabled: {
-    opacity: 0.4,
-  },
-});

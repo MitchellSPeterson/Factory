@@ -1,13 +1,14 @@
 import { Button, Host, Icon } from '@expo/ui';
 import { useFocusEffect, useNavigation } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, Text, View } from 'react-native';
+import { AppState, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert } from 'panelui-native/components/alert';
+import { ChevronDownIcon } from 'panelui-native/icons';
+import { Text } from 'panelui-native/primitives/text';
 import { ActionButton } from '@/components/action-button';
 import { EmptyState } from '@/components/empty-state';
-import { IconButton, IconNames } from '@/components/icon-button';
-import { useTheme } from '@/hooks/use-theme';
+import { IconButton } from '@/components/icon-button';
 import { connectDeviceHub, hubRequest, parseDevices, type HubDevice } from '@/devices/hub/api';
 import { DeviceList } from '@/devices/hub/DeviceList';
 import { Inspector } from '@/devices/hub/Inspector';
@@ -30,7 +31,6 @@ function SettingsButton({ onPress }: { onPress: () => void }) {
 }
 
 export default function DevicesPage() {
-  const theme = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
@@ -100,22 +100,22 @@ export default function DevicesPage() {
           accessibilityRole="button"
           accessibilityLabel={`${title}, choose device`}
           onPress={() => setDeviceList(true)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44 }}>
-          <Text style={{ color: theme.text, fontSize: 17, fontWeight: '600' }}>{title}</Text>
-          <SymbolView name={IconNames.chevronDown} size={11} tintColor={theme.textSecondary} />
+          className="min-h-11 flex-row items-center gap-1">
+          <Text className="text-[17px] font-semibold text-foreground">{title}</Text>
+          <ChevronDownIcon size={12} className="text-muted-foreground" />
         </Pressable>
       ),
       headerRight: () => <SettingsButton onPress={() => setSettings(true)} />,
     });
-  }, [navigation, selected?.name, theme.text, theme.textSecondary]);
+  }, [navigation, selected?.name]);
   const selection = useMemo<StreamSelection | null>(() =>
     selected?.booted && selected.supported && !paused && focused && foreground
       ? { device: selected.id, platform: selected.platform, streamMode: mode } : null,
   [selected?.id, selected?.booted, selected?.supported, selected?.platform, paused, focused, foreground, mode]);
   useEffect(() => { setState({}); }, [selected?.id]);
   const onScreenshot = useCallback((data: string) => { void shareScreenshot(data).catch(error => { if (mounted.current) setError(String(error)); }); }, []);
-  return <View style={{ flex: 1, backgroundColor: theme.sidebar }}>
-    <View style={{ flex: 1 }}>
+  return <View className="flex-1 bg-surface">
+    <View className="flex-1">
       {baseUrl && online ? (
         <StreamView baseUrl={baseUrl} selection={selection} onState={setState} onError={setError} onScreenshot={onScreenshot} bind={bind} />
       ) : (
@@ -126,7 +126,6 @@ export default function DevicesPage() {
           action={
             <ActionButton
               label="Reconnect"
-              style={{ alignSelf: 'center' }}
               onPress={() => {
                 endpoint.current = null;
                 setConnectionError('');
@@ -137,31 +136,25 @@ export default function DevicesPage() {
         />
       )}
       {online && (!selected?.booted || paused) && (
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0,
-            backgroundColor: theme.sidebar,
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 16,
-            padding: 24,
-          }}>
+        <View className="absolute inset-0 items-center justify-center gap-4 bg-surface p-6">
           <Label>{paused ? 'Preview paused' : 'Choose a running device'}</Label>
           <ActionButton
             label={paused ? 'Resume preview' : 'Devices'}
-            style={{ alignSelf: 'center' }}
             onPress={() => (paused ? setPaused(false) : setDeviceList(true))}
           />
         </View>
       )}
     </View>
-    {error ? <View style={{ padding: 12 }}><Label>{error}</Label></View> : null}
-    <View style={{ paddingHorizontal: 12, paddingTop: 12, paddingBottom: insets.bottom + 12 }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignSelf: 'center', padding: 4, gap: 2, borderRadius: 18, borderWidth: 1, borderColor: theme.line, backgroundColor: theme.subtleHover }}>
+    {error ? (
+      <Alert variant="destructive" className="m-3">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Description>{error}</Alert.Description>
+        </Alert.Content>
+      </Alert>
+    ) : null}
+    <View className="px-3 pt-3" style={{ paddingBottom: insets.bottom + 12 }}>
+      <View className="flex-row flex-wrap items-center justify-center gap-0.5 self-center rounded-[18px] border border-border bg-card p-1">
         <IconButton icon="screenshot" accessibilityLabel="Take screenshot" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'screenshot', args: [] } })} />
         <IconButton icon="appearance" accessibilityLabel="Toggle device light and dark mode" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'setAppearance', args: [state.appearance === 'dark' ? 'light' : 'dark'] } })} />
         <IconButton icon="home" accessibilityLabel="Home" style={{ backgroundColor: 'transparent' }} disabled={!selection} onPress={() => send({ type: 'command', command: { method: 'pressButton', args: ['home'] } })} />

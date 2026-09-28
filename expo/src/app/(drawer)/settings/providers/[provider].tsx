@@ -1,9 +1,10 @@
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useLayoutEffect } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { View } from 'react-native';
+import { Switch } from 'panelui-native/components/switch';
+import { Text } from 'panelui-native/primitives/text';
 
 import { ProviderMark } from '@/chats/model-picker';
-import { ThemedText } from '@/components/themed-text';
 import { api } from '@/lib/api';
 import { useMutation, useQuery } from '@/lib/factory';
 import { PROVIDER_SETUP } from '@/settings/providers';
@@ -47,12 +48,12 @@ export default function ProviderPage() {
 
   return (
     <SettingsScroll>
-      <View style={styles.hero}>
+      <View className="items-center gap-1.5 pt-2">
         <ProviderMark provider={provider} size={56} />
-        <ThemedText style={styles.heroTitle}>{providerLabel(provider)}</ThemedText>
-        <ThemedText themeColor={status === 'Ready' ? 'success' : 'textSecondary'} style={styles.heroStatus}>
+        <Text className="mt-1.5 text-2xl font-bold leading-8 text-foreground">{providerLabel(provider)}</Text>
+        <Text className={status === 'Ready' ? 'text-[15px] leading-5 text-success' : 'text-[15px] leading-5 text-muted-foreground'}>
           {status}
-        </ThemedText>
+        </Text>
       </View>
 
       <SettingsGroup footer={entry?.message}>
@@ -75,11 +76,7 @@ export default function ProviderPage() {
       {enabled ? (
         <>
           <SettingsGroup title="Set up" footer="Keys are encrypted on this device and only the Worker can read them.">
-            <View style={styles.signIn}>
-              <ThemedText themeColor="textSecondary" style={styles.signInText}>
-                {setup.signIn}
-              </ThemedText>
-            </View>
+            <Text className="px-4 py-3 text-sm leading-5 text-muted-foreground">{setup.signIn}</Text>
             {setup.fields.map((field) => (
               <VariableField
                 key={field.name}
@@ -102,11 +99,3 @@ export default function ProviderPage() {
     </SettingsScroll>
   );
 }
-
-const styles = StyleSheet.create({
-  hero: { alignItems: 'center', gap: 6, paddingTop: 8 },
-  heroTitle: { fontSize: 24, lineHeight: 30, fontWeight: 700, marginTop: 6 },
-  heroStatus: { fontSize: 15, lineHeight: 20 },
-  signIn: { paddingHorizontal: 16, paddingVertical: 12 },
-  signInText: { fontSize: 14, lineHeight: 20 },
-});

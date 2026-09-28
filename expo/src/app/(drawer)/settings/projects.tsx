@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 
 import { ProjectPicture } from '@/components/project-picture';
 import { api } from '@/lib/api';
@@ -60,7 +60,7 @@ export default function ProjectsPage() {
       )}
 
       <SettingsGroup title="Add a Project" footer="Use a folder on this Mac, or clone from GitHub into the clone folder.">
-        <View style={styles.pad}>
+        <View className="p-3">
           <AddProjectFlow onAdded={openAdded} />
         </View>
       </SettingsGroup>
@@ -127,7 +127,3 @@ function cloneLabel(status: string): string {
   if (status === 'failed') return 'Failed';
   return status;
 }
-
-const styles = StyleSheet.create({
-  pad: { padding: 12, gap: 10 },
-});

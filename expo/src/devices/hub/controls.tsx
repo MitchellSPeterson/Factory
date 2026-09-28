@@ -1,6 +1,11 @@
 import { BottomSheet, RNHostView } from '@expo/ui';
 import { useState, type Context, type ReactNode } from 'react';
-import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, VirtualizedList, useWindowDimensions } from 'react-native';
+import { FlatList, Platform, ScrollView, View, VirtualizedList, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { Card } from 'panelui-native/components/card';
+import { Item } from 'panelui-native/components/item';
+import { Switch } from 'panelui-native/components/switch';
+import { Input } from 'panelui-native/components/input';
+import { Text } from 'panelui-native/primitives/text';
 import { IconButton } from '@/components/icon-button';
 import { useKeyboardHeight } from '@/hooks/use-keyboard-height';
 import { useTheme } from '@/hooks/use-theme';
@@ -17,8 +22,7 @@ function SheetScrollContextReset({ children }: { children: ReactNode }) {
 }
 
 export function Label({ children, muted = false }: { children: ReactNode; muted?: boolean }) {
-  const t = useTheme();
-  return <Text selectable style={{ color: muted ? t.textSecondary : t.text, fontSize: 15, lineHeight: 21 }}>{children}</Text>;
+  return <Text selectable muted={muted} className="text-[15px] leading-[21px]">{children}</Text>;
 }
 /** The app's one bottom sheet. `header` replaces the default title + close row (e.g. for back navigation). */
 export function Sheet({ title, visible, onClose, children, scroll = true, header }: { title: string; visible: boolean; onClose: () => void; children: ReactNode; scroll?: boolean; header?: ReactNode }) {
@@ -28,19 +32,21 @@ export function Sheet({ title, visible, onClose, children, scroll = true, header
   // Web: vaul's inner div sizes to content, so a 0-height flex body collapses. Match the 96vh drawer minus its handle.
   const webBody = Platform.OS === 'web' ? { height: height * 0.96 - 32, flexGrow: 0 } : null;
   return (
+    // containerColor is a native host prop (BottomSheet from @expo/ui), not a style — it needs an actual
+    // color value, so useTheme stays for this one prop rather than a className.
     <BottomSheet isPresented={visible} onDismiss={onClose} snapPoints={['half', 'full']} contentPadding={0} containerColor={t.background}>
       <RNHostView>
-        <View style={[styles.sheetBody, webBody, keyboard > 0 ? { paddingBottom: keyboard } : null]}>
+        <View style={[sheetBodyLayout, webBody, keyboard > 0 ? { paddingBottom: keyboard } : null] as StyleProp<ViewStyle>}>
           {header ?? (
-            <View style={[styles.sheetHead, { borderColor: t.line }]}>
-              <Text accessibilityRole="header" style={{ fontSize: 20, fontWeight: '600', color: t.text }}>{title}</Text>
+            <View className="flex-row items-center justify-between border-b border-border p-4">
+              <Text accessibilityRole="header" className="text-xl font-semibold text-foreground">{title}</Text>
               <IconButton icon="close" accessibilityLabel={`Close ${title}`} onPress={onClose} />
             </View>
           )}
           <SheetScrollContextReset>
             {scroll
-              ? <ScrollView style={styles.sheetFill} keyboardShouldPersistTaps="handled" nestedScrollEnabled contentContainerStyle={styles.content}>{children}</ScrollView>
-              : <View style={styles.sheetFill}>{children}</View>}
+              ? <ScrollView style={sheetFillLayout} keyboardShouldPersistTaps="handled" nestedScrollEnabled contentContainerStyle={{ padding: 16, paddingBottom: 36 }}>{children}</ScrollView>
+              : <View style={sheetFillLayout}>{children}</View>}
           </SheetScrollContextReset>
         </View>
       </RNHostView>
@@ -48,11 +54,15 @@ export function Sheet({ title, visible, onClose, children, scroll = true, header
   );
 }
 export function Group({ title, children }: { title: string; children: ReactNode }) {
-  const t = useTheme();
-  return <View style={{ gap: 10, marginBottom: 22 }}><Text accessibilityRole="header" style={{ color: t.textSecondary, fontSize: 13, fontWeight: '600' }}>{title}</Text><View style={{ backgroundColor: t.backgroundElement, borderRadius: 12, borderCurve: 'continuous', padding: 12, gap: 12 }}>{children}</View></View>;
+  return (
+    <View className="mb-[22px] gap-2.5">
+      <Text accessibilityRole="header" className="text-[13px] font-semibold text-muted-foreground">{title}</Text>
+      <Card className="gap-3 p-3">{children}</Card>
+    </View>
+  );
 }
 export function Row({ label, children }: { label: string; children: ReactNode }) {
-  return <View style={styles.row}><View style={{ flex: 1 }}><Label>{label}</Label></View>{children}</View>;
+  return <View className="min-h-9 flex-row items-center justify-between gap-3"><View className="flex-1"><Label>{label}</Label></View>{children}</View>;
 }
 export function Toggle({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
   return <Row label={label}><Switch accessibilityLabel={label} value={value} disabled={disabled} onValueChange={onChange} /></Row>;
@@ -60,21 +70,25 @@ export function Toggle({ label, value, onChange, disabled }: { label: string; va
 export type Option = { value: string; label: string };
 export function Choice({ label, value, options, onChange, disabled }: { label: string; value: string; options: readonly Option[]; onChange: (value: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
-  const t = useTheme();
-  return <><Pressable accessibilityRole="button" accessibilityLabel={`${label}: ${options.find(o => o.value === value)?.label ?? value}`} disabled={disabled} onPress={() => setOpen(true)} style={[styles.row, { minHeight: 44, opacity: disabled ? .5 : 1 }]}><Label>{label}</Label><Text style={{ color: t.textSecondary, flexShrink: 1, textAlign: 'right' }}>{(options.find(o => o.value === value)?.label ?? value) || 'Choose'}  ›</Text></Pressable>
-    <Sheet visible={open} title={label} onClose={() => setOpen(false)} scroll={false}><FlatList style={styles.sheetFill} nestedScrollEnabled keyboardShouldPersistTaps="handled" data={options} keyExtractor={o => o.value} renderItem={({ item }) => <Pressable accessibilityRole="radio" accessibilityState={{ checked: item.value === value }} onPress={() => { onChange(item.value); setOpen(false); }} style={[styles.option, { borderColor: t.line }]}><Label>{item.label}</Label><Label>{item.value === value ? '✓' : ''}</Label></Pressable>} /></Sheet>
+  return <>
+    <Item accessibilityLabel={`${label}: ${options.find(o => o.value === value)?.label ?? value}`} disabled={disabled} onPress={() => setOpen(true)} className="p-0">
+      <Item.Content><Item.Title>{label}</Item.Title></Item.Content>
+      <Item.Actions><Text className="shrink text-right text-muted-foreground">{(options.find(o => o.value === value)?.label ?? value) || 'Choose'}  ›</Text></Item.Actions>
+    </Item>
+    <Sheet visible={open} title={label} onClose={() => setOpen(false)} scroll={false}>
+      <FlatList style={sheetFillLayout} nestedScrollEnabled keyboardShouldPersistTaps="handled" data={options} keyExtractor={o => o.value} renderItem={({ item }) => (
+        <Item accessibilityRole="radio" accessibilityState={{ checked: item.value === value }} onPress={() => { onChange(item.value); setOpen(false); }} className="rounded-none border-b border-border">
+          <Item.Content><Item.Title>{item.label}</Item.Title></Item.Content>
+          <Item.Actions><Text>{item.value === value ? '✓' : ''}</Text></Item.Actions>
+        </Item>
+      )} />
+    </Sheet>
   </>;
 }
 export function Field({ label, value, onChange, numeric = false, placeholder }: { label: string; value: string; onChange: (value: string) => void; numeric?: boolean; placeholder?: string }) {
-  const t = useTheme();
-  return <View style={{ gap: 6 }}><Label muted>{label}</Label><TextInput accessibilityLabel={label} value={value} onChangeText={onChange} placeholder={placeholder} placeholderTextColor={t.textSecondary} autoCapitalize="none" autoCorrect={false} keyboardType={numeric ? 'numbers-and-punctuation' : 'default'} style={{ minHeight: 44, borderWidth: 1, borderColor: t.lineStrong, borderRadius: 8, padding: 10, color: t.text, fontSize: 16 }} /></View>;
+  return <Input label={label} value={value} onChangeText={onChange} placeholder={placeholder} autoCapitalize="none" autoCorrect={false} keyboardType={numeric ? 'numbers-and-punctuation' : 'default'} />;
 }
 export function options(values: readonly string[]): Option[] { return values.map(value => ({ value, label: value.replaceAll('-', ' ') })); }
-export const styles = StyleSheet.create({
-  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: StyleSheet.hairlineWidth },
-  sheetBody: sheetBodyLayout,
-  sheetFill: sheetFillLayout,
-  content: { padding: 16, paddingBottom: 36 },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 36 },
-  option: { minHeight: 52, padding: 16, flexDirection: 'row', justifyContent: 'space-between', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
-});
+// Kept for the two call sites (DeviceList, Inspector) that still size a scrollable body against the
+// sheet's native host view — sheetFillLayout comes from sheetLayout.ts (out of scope, vendor layout math).
+export const styles = { sheetFill: sheetFillLayout };

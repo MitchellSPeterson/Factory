@@ -1,8 +1,7 @@
 import { useMemo } from "react";
 import hljs from "highlight.js/lib/common";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
-import { useTheme } from "@/hooks/use-theme";
+import { Card } from "panelui-native/components/card";
 
 // Extension -> highlight.js language id. Anything missing (or not registered
 // in the "common" bundle, e.g. dockerfile) falls back to plaintext below.
@@ -58,9 +57,6 @@ function escapeHtml(text: string): string {
 }
 
 export function CodeView({ path, text }: { path: string; text: string }) {
-  const theme = useTheme();
-  const scheme = useColorScheme();
-
   const lines = useMemo(() => text.split("\n"), [text]);
   const tooBig = text.length > MAX_HIGHLIGHT_BYTES || lines.length > MAX_HIGHLIGHT_LINES;
 
@@ -76,23 +72,23 @@ export function CodeView({ path, text }: { path: string; text: string }) {
   }, [text, path, tooBig]);
 
   const gutterDigits = String(lines.length).length;
-  const accent = scheme === "dark" ? { number: "#79c0ff", type: "#d2a8ff" } : { number: "#0550ae", type: "#6639ba" };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", backgroundColor: theme.backgroundElement }}>
+    <Card className="min-h-0 flex-1 flex-col overflow-hidden rounded-none border-0 bg-surface shadow-none">
       <style>{`
-        .fx-code-line .hljs-comment, .fx-code-line .hljs-quote { color: ${theme.textSecondary}; font-style: italic; }
+        .fx-code-line .hljs-comment, .fx-code-line .hljs-quote { color: var(--color-code-comment); font-style: italic; }
         .fx-code-line .hljs-keyword, .fx-code-line .hljs-selector-tag, .fx-code-line .hljs-tag,
-        .fx-code-line .hljs-deletion, .fx-code-line .hljs-regexp { color: ${theme.danger}; }
-        .fx-code-line .hljs-string, .fx-code-line .hljs-addition, .fx-code-line .hljs-meta-string { color: ${theme.success}; }
+        .fx-code-line .hljs-regexp { color: var(--color-code-keyword); }
+        .fx-code-line .hljs-deletion { color: var(--color-code-deleted); }
+        .fx-code-line .hljs-string, .fx-code-line .hljs-addition, .fx-code-line .hljs-meta-string { color: var(--color-code-string); }
         .fx-code-line .hljs-title, .fx-code-line .hljs-section, .fx-code-line .hljs-name,
-        .fx-code-line .hljs-selector-id, .fx-code-line .hljs-selector-class, .fx-code-line .hljs-built_in { color: ${theme.accent}; }
+        .fx-code-line .hljs-selector-id, .fx-code-line .hljs-selector-class, .fx-code-line .hljs-built_in { color: var(--color-code-function); }
         .fx-code-line .hljs-number, .fx-code-line .hljs-literal, .fx-code-line .hljs-symbol,
-        .fx-code-line .hljs-bullet { color: ${accent.number}; }
+        .fx-code-line .hljs-bullet { color: var(--color-code-number); }
         .fx-code-line .hljs-type, .fx-code-line .hljs-attr, .fx-code-line .hljs-attribute,
         .fx-code-line .hljs-params, .fx-code-line .hljs-template-variable,
-        .fx-code-line .hljs-variable.language_ { color: ${accent.type}; }
-        .fx-code-line .hljs-meta, .fx-code-line .hljs-doctag, .fx-code-line .hljs-link { color: ${theme.textSecondary}; }
+        .fx-code-line .hljs-variable.language_ { color: var(--color-code-property); }
+        .fx-code-line .hljs-meta, .fx-code-line .hljs-doctag, .fx-code-line .hljs-link { color: var(--color-muted-foreground); }
         .fx-code-line .hljs-emphasis { font-style: italic; }
         .fx-code-line .hljs-strong { font-weight: 600; }
       `}</style>
@@ -108,9 +104,9 @@ export function CodeView({ path, text }: { path: string; text: string }) {
             flexShrink: 0,
             userSelect: "none",
             textAlign: "right",
-            color: theme.textSecondary,
-            backgroundColor: theme.backgroundElement,
-            borderRight: `1px solid ${theme.line}`,
+            color: "var(--color-muted-foreground)",
+            backgroundColor: "var(--color-surface)",
+            borderRight: "1px solid var(--color-border)",
             padding: "8px 10px",
             minWidth: `${gutterDigits + 2}ch`,
             fontFamily: "var(--font-mono)",
@@ -124,7 +120,7 @@ export function CodeView({ path, text }: { path: string; text: string }) {
           <code
             className="fx-code-line"
             style={{
-              color: theme.text,
+              color: "var(--color-foreground)",
               fontFamily: "var(--font-mono)",
               fontSize: 12.5,
               lineHeight: "20px",
@@ -137,6 +133,6 @@ export function CodeView({ path, text }: { path: string; text: string }) {
         </pre>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

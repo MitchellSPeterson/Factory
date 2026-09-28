@@ -1,27 +1,21 @@
-import { SymbolView } from "expo-symbols";
 import { forwardRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import Animated, {
-  css,
-  cubicBezier,
-  useReducedMotion,
-} from "react-native-reanimated";
+import { Pressable, ScrollView, TextInput, View } from "react-native";
+import Animated, { css, cubicBezier, useReducedMotion } from "react-native-reanimated";
+
+import { Badge } from "panelui-native/components/badge";
+import { Button } from "panelui-native/components/button";
+import { EmptyState } from "panelui-native/components/empty-state";
+import { Item } from "panelui-native/components/item";
+import { SearchBar } from "panelui-native/components/search-bar";
+import { Spinner } from "panelui-native/components/spinner";
+import { TrashIcon } from "panelui-native/icons";
+
 import { useQuery } from "@/lib/factory";
 import type { Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { inProjectScope } from "@/lib/project-scope";
 import { useProjectScope } from "@/lib/project-scope-context";
-import { useTheme } from "@/hooks/use-theme";
 import { ProviderMark } from "@/chats/model-picker";
-import { IconNames } from "@/components/icon-button";
 
 const pulse = css.keyframes({
   "0%, 100%": { opacity: 1 },
@@ -36,16 +30,22 @@ const motion = css.create({
   },
 });
 
-function StatusDot({ color, running }: { color: string; running: boolean }) {
+function statusTone(status: string): "running" | "failed" | "idle" {
+  if (status === "running" || status === "queued") return "running";
+  if (status === "failed") return "failed";
+  return "idle";
+}
+
+function StatusDot({ tone, running }: { tone: "running" | "failed" | "idle"; running: boolean }) {
   const reduced = useReducedMotion();
   return (
-    <Animated.View
-      style={[
-        styles.dot,
-        { backgroundColor: color },
-        running && !reduced ? motion.pulse : null,
-      ]}
-    />
+    <Animated.View style={running && !reduced ? motion.pulse : undefined}>
+      <Badge
+        shape="dot"
+        variant={tone === "failed" ? "destructive" : "default"}
+        className={tone === "idle" ? "h-2.5 w-2.5 bg-muted-foreground" : "h-2.5 w-2.5"}
+      />
+    </Animated.View>
   );
 }
 
@@ -55,7 +55,6 @@ function ChatRow({
   provider,
   status,
   selected,
-  statusColor,
   dense,
   onOpen,
   onDelete,
@@ -65,12 +64,10 @@ function ChatRow({
   provider: "codex" | "cursor" | "grok" | "claude" | "openai";
   status: string;
   selected: boolean;
-  statusColor: string;
   dense?: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const theme = useTheme();
   // RN-web ends a Pressable's hover when a nested Pressable is entered, so the
   // two sibling buttons report hover themselves (web forbids nested <button>s).
   const [hovered, setHovered] = useState(false);
@@ -78,19 +75,12 @@ function ChatRow({
     onHoverIn: () => setHovered(true),
     onHoverOut: () => setHovered(false),
   };
+  const tone = statusTone(status);
   return (
     <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        borderRadius: dense ? 8 : 12,
-        borderCurve: "continuous",
-        backgroundColor: selected
-          ? theme.backgroundSelected
-          : hovered
-            ? theme.subtleHover
-            : "transparent",
-      }}
+      className={`flex-row items-stretch ${dense ? "rounded-lg" : "rounded-xl"} ${
+        selected ? "bg-primary/15" : hovered ? "bg-surface" : "bg-transparent"
+      }`}
     >
       <Pressable
         {...hover}
@@ -104,53 +94,35 @@ function ChatRow({
         }}
         onPress={onOpen}
         onLongPress={onDelete}
-        style={({ pressed }) => [
-          dense ? styles.rowDense : styles.row,
-          pressed && !selected && { backgroundColor: theme.subtleHover },
-        ]}
+        className={`min-w-0 flex-1 ${!selected ? "active:bg-surface" : ""}`}
       >
-        <ProviderMark provider={provider} size={dense ? 16 : 18} />
-        <View style={styles.rowCopy}>
-          <Text
-            numberOfLines={dense ? 1 : 2}
-            style={[
-              dense ? styles.rowTitleDense : styles.rowTitle,
-              { color: theme.text },
-            ]}
-          >
-            {title}
-          </Text>
-          {projectName ? (
-            <Text
-              numberOfLines={1}
-              style={[styles.projectName, { color: theme.textSecondary }]}
-            >
-              {projectName}
-            </Text>
-          ) : null}
-        </View>
+        <Item size={dense ? "xs" : "sm"} className="bg-transparent">
+          <Item.Media>
+            <ProviderMark provider={provider} size={dense ? 16 : 18} />
+          </Item.Media>
+          <Item.Content>
+            <Item.Title numberOfLines={dense ? 1 : 2} className={dense ? "text-[13px] font-normal" : undefined}>
+              {title}
+            </Item.Title>
+            {projectName ? <Item.Description numberOfLines={1}>{projectName}</Item.Description> : null}
+          </Item.Content>
+        </Item>
       </Pressable>
       {dense ? (
-        <Pressable
+        <Button
           {...hover}
-          accessibilityRole="button"
+          variant="ghost"
+          size="icon"
           accessibilityLabel={`Delete ${title}`}
           onPress={onDelete}
-          style={styles.trailing}
+          pressScale={1}
+          className="h-auto w-[34px] self-stretch rounded-lg"
         >
-          {hovered ? (
-            <SymbolView
-              name={IconNames.trash}
-              size={15}
-              tintColor={theme.textSecondary}
-            />
-          ) : (
-            <StatusDot color={statusColor} running={status === "running"} />
-          )}
-        </Pressable>
+          {hovered ? <TrashIcon size={15} /> : <StatusDot tone={tone} running={status === "running"} />}
+        </Button>
       ) : (
-        <View style={styles.trailing}>
-          <StatusDot color={statusColor} running={status === "running"} />
+        <View className="w-[34px] items-center justify-center">
+          <StatusDot tone={tone} running={status === "running"} />
         </View>
       )}
     </View>
@@ -168,54 +140,46 @@ export const ChatList = forwardRef<
     bottomInset?: number;
   }
 >(function ChatList({ selectedId, onOpen, onDelete, dense, bottomInset = 88 }, searchRef) {
-  const theme = useTheme();
   const sessions = useQuery(api.sessions.list);
   const { scope } = useProjectScope();
   const [search, setSearch] = useState("");
   const filtered = (sessions ?? []).filter(
     (row) =>
       inProjectScope(row.session.projectId, scope) &&
-      `${row.session.title} ${row.projectName}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
+      `${row.session.title} ${row.projectName}`.toLowerCase().includes(search.toLowerCase()),
   );
   return (
     <>
-      <TextInput
+      <SearchBar
         ref={searchRef}
         accessibilityLabel="Search chats"
         placeholder="Search conversations…"
-        placeholderTextColor={theme.textSecondary}
         value={search}
         onChangeText={setSearch}
-        style={[
-          dense ? styles.searchDense : styles.search,
-          {
-            backgroundColor: theme.backgroundElement,
-            color: theme.text,
-            borderColor: theme.line,
-          },
-        ]}
+        size={dense ? "sm" : "md"}
+        variant={dense ? "filled" : "outline"}
+        shape="rounded"
+        panel="never"
+        cancel="never"
+        containerClassName={dense ? "mb-1" : "mx-4 mb-4 mt-3"}
       />
       <ScrollView
-        contentContainerStyle={[
-          dense ? styles.listDense : styles.list,
-          { paddingBottom: bottomInset },
-        ]}
+        contentContainerStyle={{ paddingBottom: bottomInset }}
+        contentContainerClassName={dense ? "gap-px" : "gap-1 px-2"}
         keyboardShouldPersistTaps="handled"
       >
         {sessions === undefined ? (
-          <ActivityIndicator color={theme.accent} />
+          <View className="items-center py-6">
+            <Spinner label="Loading chats" />
+          </View>
         ) : !filtered.length ? (
-          <View style={styles.listEmpty}>
-            <Text
-              style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 22 }}
-            >
+          <EmptyState size="sm" className="flex-none items-start px-4 py-4">
+            <EmptyState.Description className="text-left">
               {search
                 ? "No conversations match your search."
                 : "Start a conversation to work with an agent in a Project."}
-            </Text>
-          </View>
+            </EmptyState.Description>
+          </EmptyState>
         ) : (
           filtered.map((row) => (
             <ChatRow
@@ -226,14 +190,6 @@ export const ChatList = forwardRef<
               status={row.session.status}
               selected={row.session._id === selectedId}
               dense={dense}
-              statusColor={
-                row.session.status === "running" ||
-                row.session.status === "queued"
-                  ? theme.accent
-                  : row.session.status === "failed"
-                    ? theme.danger
-                    : theme.textSecondary
-              }
               onOpen={() => onOpen(row.session._id)}
               onDelete={() => onDelete(row.session._id, row.session.title)}
             />
@@ -242,57 +198,4 @@ export const ChatList = forwardRef<
       </ScrollView>
     </>
   );
-});
-
-const styles = StyleSheet.create({
-  search: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    height: 42,
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 13,
-  },
-  searchDense: {
-    marginHorizontal: 0,
-    marginBottom: 4,
-    paddingHorizontal: 10,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-    fontSize: 13,
-  },
-  list: { paddingHorizontal: 8, gap: 4 },
-  listDense: { gap: 1 },
-  listEmpty: { padding: 16, gap: 8 },
-  row: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 14,
-    paddingRight: 0,
-    borderRadius: 12,
-    borderCurve: "continuous",
-  },
-  rowDense: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingLeft: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderCurve: "continuous",
-  },
-  trailing: { width: 34, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
-  rowCopy: { flex: 1, minWidth: 0, gap: 2 },
-  rowTitle: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
-  rowTitleDense: { fontSize: 13, lineHeight: 18 },
-  projectName: { fontSize: 11 },
-  dot: { width: 10, height: 10, borderRadius: 5, flexShrink: 0 },
 });

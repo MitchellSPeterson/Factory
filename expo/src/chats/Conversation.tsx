@@ -1,20 +1,33 @@
 import { useMutation, useQuery } from "@/lib/factory";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Image, Keyboard, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as DocumentPicker from "expo-document-picker";
-import Markdown from "react-native-markdown-display";
+import { AIInput } from "panelui-native/components/ai-input";
+import { Alert } from "panelui-native/components/alert";
+import { Attachment as FileAttachment } from "panelui-native/components/attachment";
+import { Avatar } from "panelui-native/components/avatar";
+import { Button } from "panelui-native/components/button";
+import { Chip } from "panelui-native/components/chip";
+import { EmptyState } from "panelui-native/components/empty-state";
+import { Message as ChatMessage } from "panelui-native/components/message";
+import {
+  MessageScroller,
+  useMessageScroller,
+} from "panelui-native/components/message-scroller";
+import { Response } from "panelui-native/components/response";
+import { Spinner } from "panelui-native/components/spinner";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  PaperclipIcon,
+  SendArrowIcon,
+  SparklesIcon,
+  XIcon,
+} from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
 import { readPickedAttachment } from "./pickedAttachment";
 import * as Clipboard from "expo-clipboard";
 import { api } from "@/lib/api";
@@ -22,10 +35,7 @@ import { withSkillMentions } from "../../../shared/sessionText";
 import { dockedBottomPad } from "@/lib/keyboardInset";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useDesktop } from "@/hooks/use-desktop";
-import { useTheme } from "@/hooks/use-theme";
-import { Fonts, Colors } from "@/constants/theme";
 import type { Id } from "@/lib/dataModel";
-import { Action, Notice } from "./ui";
 import { ActivityRow, ThinkingRow, WorkGroup } from "./ActivityRow";
 import {
   groupChatFeed,
@@ -36,7 +46,7 @@ import { readLastSettings, writeLastSettings } from "./lastSettingsStore";
 import type { ChatSettings } from "./lastSettings";
 import { canonicalCursorModel } from "../../../shared/agentModel";
 import { roadmapPrompt } from "../../../shared/roadmap";
-import { ModelMenu, PickerChip, effortLabel, modelTitle, useChatModels } from "./model-picker";
+import { ModelMenu, effortLabel, modelTitle, useChatModels } from "./model-picker";
 import { SlashMenu } from "./SlashMenu";
 import { BranchPicker } from "./BranchPicker";
 import { isCompactDraft, slashItems, slashQuery, type SlashItem } from "./composerSlash";
@@ -60,7 +70,7 @@ type Message = SessionView["messages"][number] & {
   skillSlugs?: string[];
   kind?: SessionItemKind;
 };
-type Attachment = { id: Id<"_storage">; uri: string; name: string };
+type PendingImage = { id: Id<"_storage">; uri: string; name: string };
 type PickedSkill = { slug: string; title: string };
 type RepoSkill = { slug: string; title: string; description: string };
 const MAX_CHAT_SKILLS = 8;
@@ -83,37 +93,14 @@ function SkillChip({
   slug: string;
   onRemove?: () => void;
 }) {
-  const theme = useTheme();
-  const chip = (
-    <View
-      style={[
-        styles.skillChip,
-        { backgroundColor: theme.subtleHover },
-      ]}
-    >
-      <Text style={{ color: theme.textSecondary, fontSize: 13, fontWeight: "600" }}>
-        skill:
-        <Text style={{ color: theme.text }}>{slug}</Text>
-        {onRemove ? (
-          <Text style={{ color: theme.textSecondary, fontWeight: "500" }}>  ×</Text>
-        ) : null}
-      </Text>
-    </View>
-  );
-  if (!onRemove) return chip;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Remove skill ${slug}`}
-      onPress={onRemove}
-      style={({ pressed }) => ({
-        minHeight: 44,
-        justifyContent: "center",
-        opacity: pressed ? 0.7 : 1,
-      })}
-    >
-      {chip}
-    </Pressable>
+    <Chip
+      size="sm"
+      variant="outline"
+      onClose={onRemove}
+      accessibilityLabel={onRemove ? `Remove skill ${slug}` : `skill:${slug}`}>
+      {`skill:${slug}`}
+    </Chip>
   );
 }
 
@@ -128,10 +115,10 @@ function CopyPromptButton({ text, slugs }: { text: string; slugs: readonly strin
   const payload = withSkillMentions(text, slugs);
   if (payload.trim() === "") return null;
   return (
-    <Action
-      icon={copied ? "check" : "copy"}
-      label={copied ? "Copied prompt" : "Copy prompt"}
-      compact
+    <Button
+      size="icon"
+      variant="ghost"
+      accessibilityLabel={copied ? "Copied prompt" : "Copy prompt"}
       onPress={() => {
         void Clipboard.setStringAsync(payload)
           .then((ok) => {
@@ -141,8 +128,9 @@ function CopyPromptButton({ text, slugs }: { text: string; slugs: readonly strin
             timer.current = setTimeout(() => setCopied(false), 1500);
           })
           .catch(() => {});
-      }}
-    />
+      }}>
+      {copied ? <CheckIcon size={16} /> : <CopyIcon size={16} />}
+    </Button>
   );
 }
 
@@ -153,88 +141,78 @@ function MessageRow({
   message: Message;
   skills: PickedSkill[];
 }) {
-  const theme = useTheme();
   const user = message.role === "user";
-  const dark = theme.background === Colors.dark.background;
-  const bubble = (
-    <View
-      style={[
-        styles.message,
-        !user && styles.assistantMessage,
-        user && styles.userMessage,
-        user && {
-          backgroundColor: dark ? "#2f2f2f" : "#ececee",
-        },
-      ]}
-    >
-      {skills.length > 0 ? (
-        <View style={styles.skillRow}>
-          {skills.map((skill) => (
-            <SkillChip key={skill.slug} slug={skill.slug} />
-          ))}
-        </View>
+  const images = (message.imageUrls ?? []).filter((url): url is string => url !== null);
+  const streaming = !user && message.status === "inProgress";
+  return (
+    <ChatMessage align={user ? "end" : "start"}>
+      {!user ? (
+        <ChatMessage.Avatar>
+          <Avatar size="sm" fallback="F" />
+        </ChatMessage.Avatar>
       ) : null}
-      {user ? (
-        message.text ? (
-          <Text selectable style={[styles.prose, { color: theme.text }]}>
-            {message.text}
-          </Text>
-        ) : null
-      ) : (
-        <Markdown
-          style={{
-            body: { color: theme.text, fontSize: 16, lineHeight: 26 },
-            code_inline: {
-              backgroundColor: theme.backgroundElement,
-              color: theme.text,
-              fontFamily: Fonts.mono,
-              fontSize: 13,
-              borderWidth: 0,
-              paddingHorizontal: 3,
-              paddingVertical: 1,
-            },
-            fence: {
-              backgroundColor: theme.sidebar,
-              color: theme.text,
-              borderColor: theme.line,
-              fontFamily: Fonts.mono,
-              fontSize: 12,
-            },
-            code_block: { backgroundColor: theme.sidebar, color: theme.text },
-            link: { color: theme.accent },
-            blockquote: {
-              backgroundColor: theme.backgroundElement,
-              borderColor: theme.line,
-            },
-            hr: { backgroundColor: theme.line },
-          }}
-        >
-          {message.text}
-        </Markdown>
-      )}
-      {(message.imageUrls ?? [])
-        .filter((url) => url !== null)
-        .map((uri, i) => (
+      <ChatMessage.Content>
+        {skills.length > 0 ? (
+          <View className="flex-row flex-wrap gap-1.5">
+            {skills.map((skill) => (
+              <SkillChip key={skill.slug} slug={skill.slug} />
+            ))}
+          </View>
+        ) : null}
+        {user ? (
+          message.text ? (
+            <ChatMessage.Bubble>
+              <ChatMessage.BubbleContent selectable>{message.text}</ChatMessage.BubbleContent>
+            </ChatMessage.Bubble>
+          ) : null
+        ) : message.text || streaming ? (
+          <Response isStreaming={streaming}>{message.text}</Response>
+        ) : null}
+        {images.map((uri, i) => (
           <Image
             key={i}
             source={{ uri }}
             accessibilityLabel="Message attachment"
-            style={styles.image}
+            className="h-40 w-full rounded-xl"
             resizeMode="contain"
           />
         ))}
-    </View>
+        {user ? (
+          <ChatMessage.Actions>
+            <CopyPromptButton text={message.text} slugs={message.skillSlugs ?? []} />
+          </ChatMessage.Actions>
+        ) : null}
+      </ChatMessage.Content>
+    </ChatMessage>
   );
-  if (!user) return bubble;
+}
+
+export function Conversation(props: {
+  sessionId: Id<"sessions"> | null;
+  projectId: Id<"projects"> | null;
+  projectName: string;
+  roadmapItemId?: Id<"roadmapItems"> | null;
+  onCreated: (id: Id<"sessions">) => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardHeight();
+  const bottomPad = dockedBottomPad({
+    keyboardHeight: keyboard,
+    insetBottom: insets.bottom,
+    platform: Platform.OS,
+    gap: Platform.OS === "ios" ? 16 : 8,
+    webPad: 12,
+  });
   return (
-    <View style={styles.userWrap}>
-      {bubble}
-      <CopyPromptButton text={message.text} slugs={message.skillSlugs ?? []} />
+    <View className="min-h-0 flex-1 bg-background" style={{ paddingBottom: bottomPad }}>
+      <MessageScroller autoScroll defaultScrollPosition="end" className="min-h-0 flex-1">
+        <ConversationBody {...props} />
+      </MessageScroller>
     </View>
   );
 }
 
-export function Conversation({
+function ConversationBody({
   sessionId,
   projectId,
   projectName,
@@ -247,12 +225,9 @@ export function Conversation({
   roadmapItemId?: Id<"roadmapItems"> | null;
   onCreated: (id: Id<"sessions">) => void;
 }) {
-  const theme = useTheme();
+  const { scrollToEnd } = useMessageScroller();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const keyboard = useKeyboardHeight();
   const view = useQuery<SessionView | null>(api.sessions.get, sessionId ? { sessionId } : "skip");
-  // New chat started from a Roadmap Item: load it once to pre-fill the composer (not auto-sent).
   const roadmapItem = useQuery(
     api.roadmap.getItem,
     !sessionId && roadmapItemId ? { itemId: roadmapItemId } : "skip",
@@ -263,16 +238,13 @@ export function Conversation({
   const stop = useMutation(api.sessions.stop);
   const configure = useMutation(api.sessions.configure);
   const uploadUrl = useMutation(api.sessions.generateUploadUrl);
-  const project = useQuery(
-    api.projects.get,
-    projectId ? { projectId } : "skip",
-  );
+  const project = useQuery(api.projects.get, projectId ? { projectId } : "skip");
   const catalog = project?.skills ?? [];
   const [text, setText] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<PendingImage[]>([]);
   const [pickedSkills, setPickedSkills] = useState<PickedSkill[]>([]);
   const [picker, setPicker] = useState<null | "model" | "branch">(null);
   const [settings, setSettings] = useState<ChatSettings>(readLastSettings);
@@ -280,19 +252,11 @@ export function Conversation({
   const currentModel = models?.find(
     (row) => row.provider === settings.provider && row.model === settings.model,
   );
-  const editor = useRef<TextInput>(null);
   const desktop = useDesktop();
-  const scroll = useRef<ScrollView>(null);
-  const follow = useRef(true);
-  const [atBottom, setAtBottom] = useState(true);
-  const busy =
-    view?.session.status === "running" || view?.session.status === "queued";
+  const busy = view?.session.status === "running" || view?.session.status === "queued";
   const awaitingApproval =
     view?.session.status === "running" && hasPendingPermission(view?.messages ?? []);
-  const feed = useMemo(
-    () => groupChatFeed(view?.messages ?? []),
-    [view?.messages],
-  );
+  const feed = useMemo(() => groupChatFeed(view?.messages ?? []), [view?.messages]);
   const showThinking = shouldShowThinkingRow({
     busy,
     queued: view?.session.status === "queued",
@@ -319,7 +283,6 @@ export function Conversation({
     view?.session.serviceTier,
   ]);
   useEffect(() => {
-    // New chats fall back to an available model when the saved one's provider is off or signed out.
     const first = models?.[0];
     if (sessionId || !first || currentModel) return;
     setSettings((prev) => ({ ...prev, provider: first.provider, model: first.model }));
@@ -394,8 +357,7 @@ export function Conversation({
       setText("");
       setAttachments([]);
       setPickedSkills([]);
-      follow.current = true;
-      setAtBottom(true);
+      scrollToEnd(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Message could not be sent.");
     } finally {
@@ -464,140 +426,139 @@ export function Conversation({
       setUploading(false);
     }
   }
-  if (sessionId && view === undefined)
+
+  if (sessionId && view === undefined) {
     return (
-      <View style={styles.empty}>
-        <ActivityIndicator color={theme.accent} />
+      <View className="flex-1 items-center justify-center">
+        <Spinner size="md" label="Loading conversation" />
       </View>
     );
-  if (sessionId && view === null)
+  }
+  if (sessionId && view === null) {
     return (
-      <Notice text="This conversation is no longer available. Choose another or start a new one." />
+      <View className="flex-1 justify-center px-4">
+        <Alert>
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>Conversation unavailable</Alert.Title>
+            <Alert.Description>
+              This conversation is no longer available. Choose another or start a new one.
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
+      </View>
     );
-  const bottomPad = dockedBottomPad({
-    keyboardHeight: keyboard,
-    insetBottom: insets.bottom,
-    platform: Platform.OS,
-    gap: Platform.OS === "ios" ? 16 : 8,
-    webPad: 12,
-  });
+  }
+
+  const extraSend =
+    !busy && !text.trim() && (attachments.length > 0 || pickedSkills.length > 0);
+  const modelLabel = currentModel?.title ?? modelTitle(settings.model);
+
   return (
-    <View style={[styles.root, { paddingBottom: bottomPad }]}>
+    <View className="min-h-0 flex-1">
       {view?.roadmapItem ? (
-        <Pressable
-          accessibilityRole="link"
+        <Chip
+          size="sm"
+          variant="outline"
+          className="mx-4 mt-2 self-start"
           accessibilityLabel={`Roadmap item ${view.roadmapItem.title}`}
-          onPress={() => router.push(`/roadmap?item=${view.roadmapItem!._id}`)}
-          style={({ pressed }) => [
-            styles.roadmapChip,
-            { backgroundColor: theme.subtleHover, opacity: pressed ? 0.7 : 1 },
-          ]}
-        >
-          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 12, fontWeight: "600" }}>
-            Roadmap · {view.roadmapItem.title}
-          </Text>
-        </Pressable>
+          onPress={() => router.push(`/roadmap?item=${view.roadmapItem!._id}`)}>
+          {`Roadmap · ${view.roadmapItem.title}`}
+        </Chip>
       ) : null}
-      <ScrollView
-        ref={scroll}
-        style={styles.feed}
-        contentContainerStyle={[
-          styles.feedContent,
-          !view?.messages.length && styles.emptyFeed,
-        ]}
-        keyboardShouldPersistTaps="handled"
-        scrollEventThrottle={80}
-        onScroll={(event) => {
-          const { contentOffset, contentSize, layoutMeasurement } =
-            event.nativeEvent;
-          const bottom =
-            contentSize.height - contentOffset.y - layoutMeasurement.height <
-            100;
-          follow.current = bottom;
-          setAtBottom(bottom);
-        }}
-        onContentSizeChange={() => {
-          if (follow.current) scroll.current?.scrollToEnd({ animated: false });
-        }}
-      >
-        {view?.messages.length ? (
-          feed.map((row) => {
-            if (row.type === "work") {
-              return (
-                <WorkGroup
-                  key={row.id}
-                  messages={row.messages}
-                  live={busy && row.messages.some((message) => message.status === "inProgress" && message.kind === "tool")}
-                  sessionLive={busy}
-                />
-              );
-            }
-            if (row.type === "permission") {
-              return (
-                <ActivityRow
-                  key={row.message._id}
-                  message={row.message}
-                  sessionId={view.session._id}
-                  canResolve={view.session.status === "running"}
-                />
-              );
-            }
-            return (
-              <MessageRow
-                key={row.message._id}
-                message={row.message}
-                skills={labelsFor(row.message.skillSlugs, catalog)}
-              />
-            );
-          })
-        ) : (
-          <View style={styles.empty}>
-            <Text style={[styles.emptyTitle, { color: theme.text }]}>
-              What are we building?
-            </Text>
-            <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
-              {projectId
-                ? `Ask ${projectName} anything.`
-                : "Choose a Project to start."}
-            </Text>
-          </View>
-        )}
-        {view?.session.status === "queued" ? (
-          <View style={styles.running}>
-            <ActivityIndicator size="small" color={theme.accent} />
-            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
-              Waiting for this machine…
-            </Text>
-          </View>
-        ) : null}
-        {showThinking ? <ThinkingRow /> : null}
-        {view?.session.error ? (
-          <Notice text={view.session.error} error />
-        ) : null}
-      </ScrollView>
+      <View className="relative min-h-0 flex-1">
+        <MessageScroller.Viewport
+          className="flex-1"
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled">
+          <MessageScroller.Content>
+            {view?.messages.length ? (
+              feed.map((row) => {
+                if (row.type === "work") {
+                  return (
+                    <MessageScroller.Item key={row.id} messageId={row.id}>
+                      <WorkGroup
+                        messages={row.messages}
+                        live={
+                          busy &&
+                          row.messages.some(
+                            (message) => message.status === "inProgress" && message.kind === "tool",
+                          )
+                        }
+                        sessionLive={busy}
+                      />
+                    </MessageScroller.Item>
+                  );
+                }
+                if (row.type === "permission") {
+                  return (
+                    <MessageScroller.Item key={row.message._id} messageId={row.message._id}>
+                      <ActivityRow
+                        message={row.message}
+                        sessionId={view.session._id}
+                        canResolve={view.session.status === "running"}
+                      />
+                    </MessageScroller.Item>
+                  );
+                }
+                return (
+                  <MessageScroller.Item
+                    key={row.message._id}
+                    messageId={row.message._id}
+                    scrollAnchor={row.message.role === "user"}>
+                    <MessageRow
+                      message={row.message}
+                      skills={labelsFor(row.message.skillSlugs, catalog)}
+                    />
+                  </MessageScroller.Item>
+                );
+              })
+            ) : (
+              <EmptyState className="py-16">
+                <EmptyState.Media variant="icon">
+                  <SparklesIcon size={28} />
+                </EmptyState.Media>
+                <EmptyState.Title>What are we building?</EmptyState.Title>
+                <EmptyState.Description>
+                  {projectId ? `Ask ${projectName} anything.` : "Choose a Project to start."}
+                </EmptyState.Description>
+              </EmptyState>
+            )}
+            {view?.session.status === "queued" ? (
+              <View className="flex-row items-center gap-2 px-1">
+                <Spinner size="sm" />
+                <Text className="text-sm text-muted-foreground">Waiting for this machine…</Text>
+              </View>
+            ) : null}
+            {showThinking ? <ThinkingRow /> : null}
+            {view?.session.error ? (
+              <Alert variant="destructive">
+                <Alert.Indicator />
+                <Alert.Content>
+                  <Alert.Description>{view.session.error}</Alert.Description>
+                </Alert.Content>
+              </Alert>
+            ) : null}
+          </MessageScroller.Content>
+        </MessageScroller.Viewport>
+        <MessageScroller.Button accessibilityLabel="Latest message" className="bottom-3" />
+      </View>
       {picker ? (
         <Pressable
           accessibilityLabel="Dismiss picker"
           onPress={() => setPicker(null)}
-          style={[StyleSheet.absoluteFill, { zIndex: 1 }]}
+          className="absolute inset-0 z-10"
         />
       ) : null}
-      <View style={[styles.composerWrap, { zIndex: 2 }]}>
-        {!atBottom && (
-          <View style={styles.jump}>
-            <Action
-              icon="down"
-              label="Latest message"
-              selected
-              onPress={() => {
-                follow.current = true;
-                setAtBottom(true);
-                scroll.current?.scrollToEnd({ animated: true });
-              }}
-            />
-          </View>
-        )}
-        {error ? <Notice text={error} error /> : null}
+      <View className="z-20 gap-2 px-3 pb-2">
+        {error ? (
+          <Alert variant="destructive">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Description>{error}</Alert.Description>
+            </Alert.Content>
+          </Alert>
+        ) : null}
         <SlashMenu visible={slashOpen} items={items} onSelect={pickSlash} />
         <ModelMenu
           visible={picker === "model"}
@@ -612,261 +573,119 @@ export function Conversation({
             projectId={projectId}
             open={picker === "branch"}
             onToggle={() => {
-              if (picker !== "branch") editor.current?.blur();
+              if (picker !== "branch") Keyboard.dismiss();
               setPicker(picker === "branch" ? null : "branch");
             }}
             onClose={() => setPicker(null)}
           />
         ) : null}
-        <View
-          style={[
-            styles.composer,
-            {
-              backgroundColor: theme.background === Colors.dark.background
-                ? "#2f2f2f"
-                : theme.backgroundElement,
-              borderColor: theme.line,
-            },
-          ]}
-        >
-          {!!attachments.length && (
-            <ScrollView horizontal contentContainerStyle={{ gap: 8 }}>
+        <AIInput
+          value={text}
+          onValueChange={(next) => {
+            if (slashQuery(next) !== null) setPicker(null);
+            setText(next);
+          }}
+          status={busy ? "streaming" : "ready"}
+          disabled={!projectId || pending || uploading}
+          onSubmit={() => {
+            void submit();
+          }}
+          onStop={() => {
+            if (!sessionId) return;
+            void stop({ sessionId }).catch((e) => setError(String(e)));
+          }}>
+          {attachments.length > 0 ? (
+            <View className="flex-row flex-wrap gap-2 px-2 pt-2">
               {attachments.map((item) => (
-                <View key={item.id}>
-                  <Image source={{ uri: item.uri }} style={styles.thumbnail} />
-                  <Action
-                    icon="close"
-                    label={`Remove ${item.name}`}
-                    compact
-                    onPress={() =>
-                      setAttachments((previous) =>
-                        previous.filter((image) => image.id !== item.id),
-                      )
-                    }
-                  />
-                </View>
+                <FileAttachment
+                  key={item.id}
+                  state={uploading ? "uploading" : "done"}
+                  orientation="vertical"
+                  size="sm"
+                  className="w-24">
+                  <FileAttachment.Media variant="image">
+                    <Image source={{ uri: item.uri }} className="h-16 w-full" accessibilityLabel={item.name} />
+                  </FileAttachment.Media>
+                  <FileAttachment.Actions>
+                    <FileAttachment.Action
+                      accessibilityLabel={`Remove ${item.name}`}
+                      onPress={() =>
+                        setAttachments((previous) => previous.filter((image) => image.id !== item.id))
+                      }>
+                      <XIcon size={14} />
+                    </FileAttachment.Action>
+                  </FileAttachment.Actions>
+                </FileAttachment>
               ))}
-            </ScrollView>
-          )}
+            </View>
+          ) : null}
           {pickedSkills.length > 0 ? (
-            <View style={[styles.skillRow, { paddingHorizontal: 8, paddingTop: 8 }]}>
+            <View className="flex-row flex-wrap gap-1.5 px-2 pt-2">
               {pickedSkills.map((skill) => (
                 <SkillChip
                   key={skill.slug}
                   slug={skill.slug}
                   onRemove={() =>
-                    setPickedSkills((previous) =>
-                      previous.filter((row) => row.slug !== skill.slug),
-                    )
+                    setPickedSkills((previous) => previous.filter((row) => row.slug !== skill.slug))
                   }
                 />
               ))}
             </View>
           ) : null}
-          <TextInput
-            ref={editor}
+          <AIInput.Field
             accessibilityLabel="Message"
-            placeholder={
-              busy
-                ? "Write your next message…"
-                : "Ask anything, or type /"
-            }
-            placeholderTextColor={theme.textSecondary}
-            value={text}
-            onFocus={() => setPicker(null)}
-            onChangeText={(next) => {
-              if (slashQuery(next) !== null) setPicker(null);
-              setText(next);
-            }}
-            multiline
+            placeholder={busy ? "Write your next message…" : "Ask anything, or type /"}
             autoFocus={desktop}
+            maxLength={16000}
+            onFocus={() => setPicker(null)}
             onKeyPress={(event) => {
               if (!desktop) return;
-              // Desktop keyboard: Enter sends (or picks the top / item), ⇧Enter is a newline, ⌘/ opens models.
               const key = event.nativeEvent as unknown as KeyboardEvent;
               if (key.key === "Enter" && !key.shiftKey && !key.isComposing) {
-                event.preventDefault();
+                (event as unknown as { preventDefault?: () => void }).preventDefault?.();
                 if (slashOpen && items[0]) pickSlash(items[0]);
                 else void submit();
               } else if (key.key === "/" && (key.metaKey || key.ctrlKey)) {
-                event.preventDefault();
+                (event as unknown as { preventDefault?: () => void }).preventDefault?.();
                 if (!busy) setPicker(picker === "model" ? null : "model");
               } else if (key.key === "Escape" && picker) {
                 setPicker(null);
               }
             }}
-            maxLength={16000}
-            style={[styles.editor, { color: theme.text }]}
           />
-          <View style={styles.toolbar}>
-            <Action
-              icon="attach"
+          <AIInput.Toolbar>
+            <AIInput.Action
               label="Attach image"
-              compact
-              onPress={() => void attach()}
+              icon={<PaperclipIcon size={18} />}
               disabled={uploading || attachments.length >= 4}
+              onPress={() => void attach()}
             />
-            <PickerChip
-              label={`${currentModel?.title ?? modelTitle(settings.model)} · ${effortLabel(settings.effort)}`}
-              icon={settings.provider}
-              open={picker === "model"}
+            <AIInput.Pill
+              label={modelLabel}
+              detail={effortLabel(settings.effort)}
+              indicator={<ChevronDownIcon size={14} />}
               disabled={busy}
+              accessibilityLabel="Choose model"
               onPress={() => {
-                if (picker !== "model") editor.current?.blur();
+                Keyboard.dismiss();
                 setPicker(picker === "model" ? null : "model");
               }}
             />
-            <View style={{ flex: 1 }} />
-            {uploading || pending ? (
-              <ActivityIndicator size="small" color={theme.accent} />
-            ) : null}
-            {busy && sessionId ? (
-              <Action
-                icon="stop"
-                label="Stop agent"
-                compact
-                emphasis
-                onPress={() =>
-                  void stop({ sessionId }).catch((e) => setError(String(e)))
-                }
-              />
+            <AIInput.Spacer />
+            {extraSend ? (
+              <Button
+                size="icon"
+                accessibilityLabel="Send message"
+                disabled={pending || uploading || !projectId}
+                onPress={() => void submit()}>
+                <SendArrowIcon size={18} />
+              </Button>
             ) : (
-              <Action
-                icon="send"
-                label="Send message"
-                compact
-                emphasis
-                disabled={
-                  pending ||
-                  uploading ||
-                  !projectId ||
-                  (!text.trim() && !attachments.length && !pickedSkills.length)
-                }
-                onPress={() => void submit()}
-              />
+              <AIInput.Submit sendLabel="Send message" stopLabel="Stop agent" />
             )}
-          </View>
-        </View>
+          </AIInput.Toolbar>
+        </AIInput>
       </View>
     </View>
   );
 }
-const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 0 },
-  feed: { flex: 1 },
-  feedContent: {
-    width: "100%",
-    maxWidth: 768,
-    alignSelf: "center",
-    paddingHorizontal: 20,
-    paddingTop: 28,
-    paddingBottom: 28,
-    gap: 8,
-  },
-  emptyFeed: { flexGrow: 1 },
-  empty: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-    gap: 10,
-  },
-  emptyTitle: {
-    fontSize: 32,
-    fontWeight: "600",
-    letterSpacing: -0.5,
-    lineHeight: 38,
-    textAlign: "center",
-  },
-  emptyBody: {
-    fontSize: 15,
-    lineHeight: 22,
-    maxWidth: 320,
-    textAlign: "center",
-  },
-  message: { gap: 10, maxWidth: "100%" },
-  assistantMessage: { marginVertical: 8 },
-  userWrap: {
-    alignSelf: "flex-end",
-    maxWidth: "78%",
-    alignItems: "flex-end",
-    marginVertical: 8,
-    gap: 2,
-  },
-  userMessage: {
-    borderRadius: 22,
-    borderCurve: "continuous",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  prose: { fontSize: 16, lineHeight: 24 },
-  image: { width: 240, height: 180, maxWidth: "100%", borderRadius: 12 },
-  running: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
-    paddingHorizontal: 4,
-    paddingVertical: 8,
-  },
-  composerWrap: {
-    paddingHorizontal: 16,
-    width: "100%",
-    maxWidth: 768,
-    alignSelf: "center",
-  },
-  composer: {
-    borderRadius: 28,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 6,
-    paddingTop: 6,
-    paddingBottom: 6,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.18,
-        shadowRadius: 24,
-      },
-      android: { elevation: 4 },
-      web: { boxShadow: "0 12px 40px rgba(0,0,0,0.28)" },
-      default: {},
-    }),
-  },
-  editor: {
-    minHeight: 44,
-    maxHeight: 180,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    lineHeight: 22,
-    textAlignVertical: "top",
-  },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingHorizontal: 4,
-    paddingBottom: 2,
-  },
-  thumbnail: { width: 60, height: 60, borderRadius: 8 },
-  jump: { alignSelf: "center", marginBottom: 8 },
-  roadmapChip: {
-    alignSelf: "center",
-    marginTop: 8,
-    maxWidth: 320,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderCurve: "continuous",
-  },
-  skillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  skillChip: {
-    minHeight: 28,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderCurve: "continuous",
-    justifyContent: "center",
-  },
-});

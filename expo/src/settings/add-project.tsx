@@ -1,12 +1,14 @@
 import { useAction, useMutation, useQuery } from "@/lib/factory";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
+import { ScrollView, View } from "react-native";
+
+import { Button } from "panelui-native/components/button";
+import { Input } from "panelui-native/components/input";
+import { Item } from "panelui-native/components/item";
+import { Text } from "panelui-native/primitives/text";
 
 import { ProjectPicture } from "@/components/project-picture";
-import { ThemedText } from "@/components/themed-text";
-import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
 import { pairingBase } from "@/lib/pairing";
@@ -40,7 +42,7 @@ export function AddProjectFlow({
   const github = useQuery(api.github.connection);
   const [step, setStep] = useState<AddStep>("choose");
   return (
-    <View style={styles.stack}>
+    <View className="gap-3">
       {step === "choose" ? (
         <ChooseStep
           footer={footer}
@@ -72,7 +74,7 @@ function ChooseStep({
   onClone: () => void;
 }) {
   return (
-    <View style={styles.stack}>
+    <View className="gap-3">
       <PathCard
         label="Use a folder on this Mac"
         detail="Point Factory at a git repository already here."
@@ -84,16 +86,15 @@ function ChooseStep({
         onPress={onClone}
       />
       {footer ? (
-        <ThemedText themeColor="textSecondary" style={styles.hint}>
+        <Text size="sm" muted>
           {footer}
-        </ThemedText>
+        </Text>
       ) : null}
     </View>
   );
 }
 
 function FolderStep({ onAdded, onBack }: { onAdded: (projectId: string) => void; onBack: () => void }) {
-  const theme = useTheme();
   const addFolder = useMutation(api.projects.addFolder);
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
@@ -106,32 +107,28 @@ function FolderStep({ onAdded, onBack }: { onAdded: (projectId: string) => void;
   }
 
   return (
-    <View style={styles.stack}>
-      <TextInput
+    <View className="gap-3">
+      <Input
         accessibilityLabel="Folder path"
         autoCapitalize="none"
         autoComplete="off"
         autoCorrect={false}
         placeholder="/Users/you/code/app"
-        placeholderTextColor={theme.textSecondary}
         value={path}
         onChangeText={(text) => {
           setPath(text);
           setName(nameFromPath(text));
         }}
-        style={[styles.field, { color: theme.text, borderColor: theme.line }]}
       />
-      <TextInput
+      <Input
         accessibilityLabel="Project name"
         autoComplete="off"
         placeholder="Name"
-        placeholderTextColor={theme.textSecondary}
         value={name}
         onChangeText={setName}
-        style={[styles.field, { color: theme.text, borderColor: theme.line }]}
       />
-      <ActionButton
-        label="Choose folder on this Mac"
+      <Button
+        variant="secondary"
         onPress={() => {
           void (async () => {
             try {
@@ -141,11 +138,12 @@ function FolderStep({ onAdded, onBack }: { onAdded: (projectId: string) => void;
               setMessage(error instanceof Error ? error.message : "Picker failed.");
             }
           })();
-        }}
-      />
-      <ActionButton
-        label="Add Project"
-        disabled={busy || !path.trim()}
+        }}>
+        Choose folder on this Mac
+      </Button>
+      <Button
+        loading={busy}
+        disabled={!path.trim()}
         onPress={() => {
           void (async () => {
             setBusy(true);
@@ -161,13 +159,16 @@ function FolderStep({ onAdded, onBack }: { onAdded: (projectId: string) => void;
               setBusy(false);
             }
           })();
-        }}
-      />
-      <ActionButton label="Back" quiet onPress={onBack} />
+        }}>
+        Add Project
+      </Button>
+      <Button variant="ghost" onPress={onBack}>
+        Back
+      </Button>
       {message ? (
-        <ThemedText themeColor="textSecondary" style={styles.hint}>
+        <Text size="sm" muted>
           {message}
-        </ThemedText>
+        </Text>
       ) : null}
     </View>
   );
@@ -180,31 +181,28 @@ function GithubConnectStep({
   onBack: () => void;
   onConnected: () => void;
 }) {
-  const theme = useTheme();
   const connect = useAction(api.github.connect);
   const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   return (
-    <View style={styles.stack}>
-      <ThemedText themeColor="textSecondary" style={styles.hint}>
+    <View className="gap-3">
+      <Text size="sm" muted>
         Paste a GitHub token with read-only Contents access.
-      </ThemedText>
-      <TextInput
+      </Text>
+      <Input
         accessibilityLabel="GitHub token"
         autoCapitalize="none"
         autoComplete="new-password"
         autoCorrect={false}
         secureTextEntry
         placeholder="ghp_…"
-        placeholderTextColor={theme.textSecondary}
         value={token}
         onChangeText={setToken}
-        style={[styles.field, { color: theme.text, borderColor: theme.line }]}
       />
-      <ActionButton
-        label="Connect GitHub"
-        disabled={busy || !token.trim()}
+      <Button
+        loading={busy}
+        disabled={!token.trim()}
         onPress={() => {
           void (async () => {
             setBusy(true);
@@ -217,13 +215,16 @@ function GithubConnectStep({
               setBusy(false);
             }
           })();
-        }}
-      />
-      <ActionButton label="Back" quiet onPress={onBack} />
+        }}>
+        Connect GitHub
+      </Button>
+      <Button variant="ghost" onPress={onBack}>
+        Back
+      </Button>
       {message ? (
-        <ThemedText themeColor="textSecondary" style={styles.hint}>
+        <Text size="sm" muted>
           {message}
-        </ThemedText>
+        </Text>
       ) : null}
     </View>
   );
@@ -236,7 +237,6 @@ function GithubListStep({
   onAdded: (projectId: string) => void;
   onBack: () => void;
 }) {
-  const theme = useTheme();
   const live = useQuery(api.servers.local);
   const github = useQuery(api.github.connection);
   const listRepos = useAction(api.github.listRepos);
@@ -274,14 +274,13 @@ function GithubListStep({
   }
 
   return (
-    <View style={styles.stack}>
-      <TextInput
+    <View className="gap-3">
+      <Input
         accessibilityLabel="Find a GitHub repository"
         autoCapitalize="none"
         autoComplete="off"
         autoCorrect={false}
         placeholder="owner/repo"
-        placeholderTextColor={theme.textSecondary}
         value={filter}
         onChangeText={(text) => {
           setFilter(text);
@@ -291,56 +290,45 @@ function GithubListStep({
             setName(nameFromRepo(typed));
           }
         }}
-        style={[styles.field, { color: theme.text, borderColor: theme.line }]}
       />
-      <TextInput
+      <Input
         accessibilityLabel="Project name"
         autoComplete="off"
         placeholder="Name"
-        placeholderTextColor={theme.textSecondary}
         value={name}
         onChangeText={setName}
-        style={[styles.field, { color: theme.text, borderColor: theme.line }]}
       />
-      <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
+      <ScrollView className="max-h-[220px]" contentContainerClassName="gap-1.5" keyboardShouldPersistTaps="handled">
         {repos === undefined ? (
-          <ThemedText themeColor="textSecondary" style={styles.hint}>
+          <Text size="sm" muted>
             Loading repositories…
-          </ThemedText>
+          </Text>
         ) : shown.length === 0 ? (
-          <ThemedText themeColor="textSecondary" style={styles.hint}>
+          <Text size="sm" muted>
             No repositories match. Type owner/repo to clone anyway.
-          </ThemedText>
+          </Text>
         ) : (
           shown.slice(0, 40).map((row) => (
-            <Pressable
+            <Item
               key={row.repo}
-              accessibilityRole="button"
+              size="sm"
+              variant="outline"
               onPress={() => pick(row.repo)}
-              style={({ pressed }) => [
-                styles.repo,
-                {
-                  borderColor: theme.line,
-                  backgroundColor: row.repo.toLowerCase() === repo ? theme.backgroundSelected : "transparent",
-                  transform: [{ scale: pressed ? 0.97 : 1 }],
-                },
-              ]}>
-              <ProjectPicture githubRepo={row.repo} name={row.repo} size={22} />
-              <View style={styles.repoText}>
-                <ThemedText style={styles.repoName}>{row.repo}</ThemedText>
-                {row.description ? (
-                  <ThemedText themeColor="textSecondary" numberOfLines={1} style={styles.repoDetail}>
-                    {row.description}
-                  </ThemedText>
-                ) : null}
-              </View>
-            </Pressable>
+              className={row.repo.toLowerCase() === repo ? "bg-muted" : "bg-transparent"}>
+              <Item.Media>
+                <ProjectPicture githubRepo={row.repo} name={row.repo} size={22} />
+              </Item.Media>
+              <Item.Content>
+                <Item.Title numberOfLines={1}>{row.repo}</Item.Title>
+                {row.description ? <Item.Description numberOfLines={1}>{row.description}</Item.Description> : null}
+              </Item.Content>
+            </Item>
           ))
         )}
       </ScrollView>
-      <ActionButton
-        label="Clone from GitHub"
-        disabled={busy || !repo}
+      <Button
+        loading={busy}
+        disabled={!repo}
         onPress={() => {
           void (async () => {
             setBusy(true);
@@ -360,67 +348,29 @@ function GithubListStep({
               setBusy(false);
             }
           })();
-        }}
-      />
-      <ActionButton label="Back" quiet onPress={onBack} />
+        }}>
+        Clone from GitHub
+      </Button>
+      <Button variant="ghost" onPress={onBack}>
+        Back
+      </Button>
       {message ? (
-        <ThemedText themeColor="textSecondary" style={styles.hint}>
+        <Text size="sm" muted>
           {message}
-        </ThemedText>
+        </Text>
       ) : null}
     </View>
   );
 }
 
 function PathCard({ label, detail, onPress }: { label: string; detail: string; onPress: () => void }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          backgroundColor: pressed ? theme.subtleHover : theme.backgroundElement,
-          borderColor: theme.line,
-          transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
-        },
-      ]}>
-      <ThemedText style={styles.cardLabel}>{label}</ThemedText>
-      <ThemedText themeColor="textSecondary" style={styles.cardDetail}>
-        {detail}
-      </ThemedText>
-    </Pressable>
-  );
-}
-
-function ActionButton({
-  label,
-  onPress,
-  disabled,
-  quiet,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  quiet?: boolean;
-}) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        opacity: disabled ? 0.45 : 1,
-        transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
-      })}>
-      <ThemedText style={{ color: quiet ? theme.textSecondary : theme.accent, fontSize: 16, lineHeight: 22 }}>
-        {label}
-      </ThemedText>
-    </Pressable>
+    <Item variant="outline" onPress={onPress} className="min-h-[72px] bg-card">
+      <Item.Content>
+        <Item.Title className="text-[17px] font-semibold leading-[22px]">{label}</Item.Title>
+        <Item.Description>{detail}</Item.Description>
+      </Item.Content>
+    </Item>
   );
 }
 
@@ -432,35 +382,3 @@ async function pickFolderFromWorker() {
   }
   return body.path;
 }
-
-const styles = StyleSheet.create({
-  stack: { gap: 12 },
-  hint: { fontSize: 13, lineHeight: 18 },
-  field: { borderWidth: 1, borderRadius: 10, borderCurve: "continuous", paddingHorizontal: 12, paddingVertical: 10, fontSize: 16 },
-  list: { maxHeight: 220 },
-  repo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 6,
-  },
-  repoText: { flex: 1, minWidth: 0 },
-  repoName: { fontSize: 15, lineHeight: 20 },
-  repoDetail: { fontSize: 13, lineHeight: 18, marginTop: 2 },
-  card: {
-    minHeight: 72,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 4,
-  },
-  cardLabel: { fontSize: 17, lineHeight: 22, fontWeight: 600 },
-  cardDetail: { fontSize: 14, lineHeight: 20 },
-});

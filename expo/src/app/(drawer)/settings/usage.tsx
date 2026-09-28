@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
+import { Badge } from 'panelui-native/components/badge';
+import { Card } from 'panelui-native/components/card';
+import { Progress } from 'panelui-native/components/progress';
+import { Text } from 'panelui-native/primitives/text';
 
 import { ProviderMark } from '@/chats/model-picker';
-import { ThemedText } from '@/components/themed-text';
-import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import type { ProviderMeter } from '@/lib/dataModel';
 import { useQuery } from '@/lib/factory';
@@ -13,13 +15,15 @@ import {
   formatTokens,
   formatUsdCents,
   paceLabel,
+  USAGE_FILL,
   usageFillColor,
 } from '@/settings/format';
 import { SettingsMessage, SettingsScroll } from '@/settings/ui';
 import { providerLabel } from '../../../../../shared/agentModel';
 
+type MeterColor = 'primary' | 'success' | 'warning' | 'destructive' | 'info';
+
 export default function UsagePage() {
-  const theme = useTheme();
   const live = useQuery(api.servers.local);
   const [now, setNow] = useState(Date.now());
   const usage = live?.providerUsage;
@@ -43,26 +47,20 @@ export default function UsagePage() {
         </Card>
       ) : (
         usage.meters.map((meter) => (
-          <View key={meter.provider} style={styles.section}>
-            <View style={styles.sectionHeader}>
+          <View key={meter.provider} className="gap-2.5">
+            <View className="flex-row items-center gap-2.5 px-1">
               <ProviderMark provider={meter.provider} size={22} />
-              <ThemedText style={styles.sectionTitle}>{providerLabel(meter.provider)}</ThemedText>
-              {meter.status === 'ok' && meter.plan ? (
-                <View style={[styles.plan, { backgroundColor: theme.backgroundElement }]}>
-                  <ThemedText themeColor="textSecondary" style={styles.planText}>
-                    {meter.plan}
-                  </ThemedText>
-                </View>
-              ) : null}
+              <Text className="text-xl font-semibold leading-7">{providerLabel(meter.provider)}</Text>
+              {meter.status === 'ok' && meter.plan ? <Badge variant="secondary">{meter.plan}</Badge> : null}
             </View>
             <MeterCards meter={meter} now={now} />
           </View>
         ))
       )}
       {usage ? (
-        <ThemedText themeColor="textSecondary" style={styles.footer}>
+        <Text size="sm" muted className="px-1">
           {formatCheckedAt(usage.checkedAt, now)}
-        </ThemedText>
+        </Text>
       ) : null}
     </SettingsScroll>
   );
@@ -72,12 +70,12 @@ function MeterCards({ meter, now }: { meter: ProviderMeter; now: number }) {
   if (meter.status !== 'ok') {
     return (
       <Card>
-        <ThemedText style={styles.cardTitle}>
-          {meter.status === 'error' ? 'Could not read usage' : 'Not signed in'}
-        </ThemedText>
-        <ThemedText themeColor="textSecondary" style={styles.meta}>
-          {meter.message}
-        </ThemedText>
+        <Card.Header className="gap-1.5 p-4">
+          <Card.Title className="text-base leading-6">
+            {meter.status === 'error' ? 'Could not read usage' : 'Not signed in'}
+          </Card.Title>
+          <Card.Description>{meter.message}</Card.Description>
+        </Card.Header>
       </Card>
     );
   }
@@ -95,9 +93,9 @@ function MeterCards({ meter, now }: { meter: ProviderMeter; now: number }) {
           />
         ))}
         {meter.remainingCents !== undefined && meter.limitCents !== undefined ? (
-          <ThemedText themeColor="textSecondary" style={[styles.meta, { paddingHorizontal: 4 }]}>
+          <Text size="sm" muted className="px-1">
             {`${formatUsdCents(meter.remainingCents)} of ${formatUsdCents(meter.limitCents)} included left`}
-          </ThemedText>
+          </Text>
         ) : null}
       </>
     );
@@ -127,8 +125,14 @@ function MeterCards({ meter, now }: { meter: ProviderMeter; now: number }) {
           : undefined;
   return (
     <Card>
-      <ThemedText style={styles.cardTitle}>{meter.totalTokens !== undefined ? 'Local activity' : 'Usage'}</ThemedText>
-      <ThemedText style={styles.big}>{figure ?? 'No usage figures yet'}</ThemedText>
+      <Card.Header className="gap-1.5 p-4">
+        <Card.Title className="text-base leading-6">
+          {meter.totalTokens !== undefined ? 'Local activity' : 'Usage'}
+        </Card.Title>
+        <Text className="text-[34px] font-bold leading-10 tabular-nums text-foreground">
+          {figure ?? 'No usage figures yet'}
+        </Text>
+      </Card.Header>
     </Card>
   );
 }
@@ -148,65 +152,52 @@ function LimitCard({
   windowSeconds?: number;
   detail?: string;
 }) {
-  const theme = useTheme();
   const left = Math.max(0, Math.min(100, 100 - percentUsed));
   const pace = paceLabel(percentUsed, now, resetsAt, windowSeconds);
   const meta = [resetsAt ? formatReset(resetsAt, now) : undefined, detail].filter(Boolean).join(' · ');
   return (
     <Card>
-      <View style={styles.cardHeader}>
-        <ThemedText style={styles.cardTitle}>{title}</ThemedText>
-        {pace ? (
-          <ThemedText themeColor="textSecondary" style={styles.meta}>
-            {pace}
-          </ThemedText>
+      <Card.Header className="gap-1.5 p-4">
+        <View className="flex-row items-baseline justify-between gap-3">
+          <Card.Title className="text-base leading-6">{title}</Card.Title>
+          {pace ? (
+            <Text size="sm" muted>
+              {pace}
+            </Text>
+          ) : null}
+        </View>
+        <Text className="text-[34px] font-bold leading-10 tabular-nums text-foreground">
+          {/* Round down so any use shows below 100%. */}
+          {Math.floor(left)}%
+          <Text className="text-base font-normal text-muted-foreground"> left</Text>
+        </Text>
+        {meta ? (
+          <Text size="sm" muted>
+            {meta}
+          </Text>
         ) : null}
-      </View>
-      <ThemedText style={styles.big}>
-        {/* Round down so any use shows below 100%. */}
-        {Math.floor(left)}%
-        <ThemedText themeColor="textSecondary" style={styles.bigSuffix}>
-          {' '}left
-        </ThemedText>
-      </ThemedText>
-      {meta ? (
-        <ThemedText themeColor="textSecondary" style={styles.meta}>
-          {meta}
-        </ThemedText>
-      ) : null}
-      <View
-        accessible
-        accessibilityLabel={`${title} ${Math.floor(left)} percent left`}
-        style={[styles.track, { backgroundColor: theme.line }]}>
-        <View
-          style={[
-            styles.fill,
-            { width: `${left}%`, backgroundColor: usageFillColor(percentUsed, now, resetsAt, windowSeconds) },
-          ]}
+        <Progress
+          className="mt-2"
+          size="lg"
+          value={left}
+          color={meterColor(percentUsed, now, resetsAt, windowSeconds)}
+          accessibilityLabel={`${title} ${Math.floor(left)} percent left`}
         />
-      </View>
+      </Card.Header>
     </Card>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
-  const theme = useTheme();
-  return <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>{children}</View>;
+/** Same pace bands as the old fill, mapped onto Progress colors instead of hex. */
+function meterColor(
+  percentUsed: number,
+  now: number,
+  resetsAt?: number,
+  windowSeconds?: number,
+): MeterColor {
+  const fill = usageFillColor(percentUsed, now, resetsAt, windowSeconds);
+  if (fill === USAGE_FILL.comfortable) return 'success';
+  if (fill === USAGE_FILL.onTrack) return 'info';
+  if (fill === USAGE_FILL.approaching || fill === USAGE_FILL.overPace) return 'warning';
+  return 'destructive';
 }
-
-const styles = StyleSheet.create({
-  section: { gap: 10 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 4 },
-  sectionTitle: { fontSize: 20, lineHeight: 26, fontWeight: 600 },
-  plan: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, borderCurve: 'continuous' },
-  planText: { fontSize: 12, lineHeight: 16, fontWeight: 600 },
-  card: { borderRadius: 16, borderCurve: 'continuous', padding: 16, gap: 6 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 },
-  cardTitle: { fontSize: 16, lineHeight: 22, fontWeight: 600 },
-  big: { fontSize: 34, lineHeight: 40, fontWeight: 700, fontVariant: ['tabular-nums'] },
-  bigSuffix: { fontSize: 16, fontWeight: 400 },
-  meta: { fontSize: 13, lineHeight: 18 },
-  track: { height: 10, borderRadius: 5, overflow: 'hidden', marginTop: 8 },
-  fill: { height: '100%', borderRadius: 5 },
-  footer: { fontSize: 13, lineHeight: 18, paddingHorizontal: 4 },
-});

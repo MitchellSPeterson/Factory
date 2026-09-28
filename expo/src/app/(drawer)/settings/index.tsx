@@ -1,12 +1,13 @@
 import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useCSSVariable } from 'uniwind';
+import { Card } from 'panelui-native/components/card';
+import { Item } from 'panelui-native/components/item';
+import { ChevronRightIcon } from 'panelui-native/icons';
 
 import { ProjectPicture } from '@/components/project-picture';
-import { ThemedText } from '@/components/themed-text';
 import { useDesktop } from '@/hooks/use-desktop';
-import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import type { ProviderMeter } from '@/lib/dataModel';
 import { useQuery } from '@/lib/factory';
@@ -119,34 +120,30 @@ function MachineCard({
   checking: boolean;
   onPress: () => void;
 }) {
-  const theme = useTheme();
+  const foreground = useCSSVariable('--color-foreground') as string | undefined;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${name ?? 'Worker'}, ${online ? 'online' : 'offline'}`}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-      ]}>
-      <View style={[styles.cardIcon, { backgroundColor: theme.sidebar }]}>
-        <SymbolView name={SettingsIcons.machine} size={28} tintColor={theme.text} />
-      </View>
-      <View style={styles.cardText}>
-        <ThemedText numberOfLines={1} style={styles.cardTitle}>
-          {checking ? 'Checking this Mac…' : name ?? 'Worker not running'}
-        </ThemedText>
-        {name ? <StatusValue online={online} /> : null}
-        <ThemedText themeColor="textSecondary" numberOfLines={1} ellipsizeMode="middle" style={styles.cardDetail}>
-          {folder ? `Clones into ${folder}` : 'Start the Worker on this Mac to run chats.'}
-        </ThemedText>
-      </View>
-      <SymbolView
-        name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
-        size={13}
-        tintColor={theme.textSecondary}
-      />
-    </Pressable>
+    <Card className="overflow-hidden">
+      <Item
+        onPress={onPress}
+        accessibilityLabel={`${name ?? 'Worker'}, ${online ? 'online' : 'offline'}`}
+        className="rounded-none bg-transparent">
+        <Item.Media className="h-[52px] w-[52px] rounded-xl bg-surface">
+          <SymbolView name={SettingsIcons.machine} size={28} tintColor={foreground} />
+        </Item.Media>
+        <Item.Content className="items-start">
+          <Item.Title numberOfLines={1} className="text-xl font-semibold leading-6">
+            {checking ? 'Checking this Mac…' : name ?? 'Worker not running'}
+          </Item.Title>
+          {name ? <StatusValue online={online} /> : null}
+          <Item.Description numberOfLines={1} ellipsizeMode="middle">
+            {folder ? `Clones into ${folder}` : 'Start the Worker on this Mac to run chats.'}
+          </Item.Description>
+        </Item.Content>
+        <Item.Actions>
+          <ChevronRightIcon size={16} />
+        </Item.Actions>
+      </Item>
+    </Card>
   );
 }
 
@@ -169,25 +166,3 @@ function tightestMeter(meters: ProviderMeter[]) {
   }
   return best;
 }
-
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    borderRadius: 16,
-    borderCurve: 'continuous',
-  },
-  cardIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardText: { flex: 1, minWidth: 0, gap: 3, alignItems: 'flex-start' },
-  cardTitle: { fontSize: 20, lineHeight: 25, fontWeight: 600 },
-  cardDetail: { fontSize: 13, lineHeight: 18, alignSelf: 'stretch' },
-});

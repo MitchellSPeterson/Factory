@@ -1,10 +1,8 @@
 import { type ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
+import { EmptyState as PanelEmpty } from 'panelui-native/components/empty-state';
 
-import { ThemedText } from '@/components/themed-text';
 import { IconNames, type IconName } from '@/components/icon-button';
-import { useTheme } from '@/hooks/use-theme';
 
 export function EmptyState({
   title,
@@ -17,52 +15,16 @@ export function EmptyState({
   action?: ReactNode;
   icon?: IconName;
 }) {
-  const theme = useTheme();
   return (
-    <View style={styles.empty}>
+    <PanelEmpty className="max-w-[440px] flex-1 self-center px-6 py-8">
       {icon ? (
-        <View style={[styles.icon, { backgroundColor: theme.backgroundSelected }]}>
-          <SymbolView name={IconNames[icon]} size={28} tintColor={theme.accent} />
-        </View>
+        <PanelEmpty.Media variant="icon">
+          <SymbolView name={IconNames[icon]} size={28} />
+        </PanelEmpty.Media>
       ) : null}
-      <ThemedText type="heading" style={styles.title}>
-        {title}
-      </ThemedText>
-      <ThemedText type="small" themeColor="textSecondary" style={styles.body}>
-        {body}
-      </ThemedText>
-      {action}
-    </View>
+      <PanelEmpty.Title className="text-center">{title}</PanelEmpty.Title>
+      <PanelEmpty.Description className="text-center">{body}</PanelEmpty.Description>
+      {action ? <PanelEmpty.Content>{action}</PanelEmpty.Content> : null}
+    </PanelEmpty>
   );
 }
-
-const styles = StyleSheet.create({
-  empty: {
-    flex: 1,
-    minHeight: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    gap: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 32,
-    maxWidth: 440,
-    width: '100%',
-  },
-  icon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    textAlign: 'center',
-  },
-  body: {
-    textAlign: 'center',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-});

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 
 import { DevicesView } from "@/app/(drawer)/devices.web";
@@ -7,7 +7,6 @@ import { ProjectTerminals } from "@/app/(drawer)/terminal";
 import { FilesPanel } from "@/chats/FilesPanel";
 import { Notice } from "@/chats/ui";
 import { GitWorkspace } from "@/git/GitWorkspace";
-import { useTheme } from "@/hooks/use-theme";
 import type { ToolPanelProps, ToolTab } from "./ToolPanel";
 
 export type { ToolTab } from "./ToolPanel";
@@ -28,7 +27,6 @@ function savedWidth() {
 
 /** Codex-style right panel: slides out beside the chat, drag its left edge to resize. */
 export function ToolPanel({ project, tab, open }: ToolPanelProps) {
-  const theme = useTheme();
   const reduced = useReducedMotion();
   const { width: windowWidth } = useWindowDimensions();
   const [wanted, setWanted] = useState(savedWidth);
@@ -59,18 +57,15 @@ export function ToolPanel({ project, tab, open }: ToolPanelProps) {
 
   return (
     <View
-      style={[
-        styles.clip,
+      className={`shrink-0 flex-row overflow-hidden bg-background ${open ? "border-l border-border" : ""}`}
+      style={
         {
           width: open ? width : 0,
-          borderLeftWidth: open ? 1 : 0,
-          borderColor: theme.line,
-          backgroundColor: theme.background,
           transitionProperty: "width",
           transitionDuration: dragging || reduced ? "0ms" : "220ms",
           transitionTimingFunction: "cubic-bezier(0.23, 1, 0.32, 1)",
-        } as object,
-      ]}
+        } as object
+      }
     >
       <View
         accessibilityRole="adjustable"
@@ -93,13 +88,21 @@ export function ToolPanel({ project, tab, open }: ToolPanelProps) {
             localStorage.setItem(WIDTH_KEY, String(width));
           } catch {}
         }}
-        style={[styles.handle, { cursor: "col-resize" } as object]}
+        className="absolute -left-[3px] bottom-0 top-0 z-10 w-[7px]"
+        style={{ cursor: "col-resize" } as object}
       />
-      <View style={[styles.inner, { width }]}>
+      <View className="min-h-0 flex-1" style={{ width }}>
         {/* Iframes (terminal, device) would swallow the drag, so they sit out while resizing. */}
-        <View style={[styles.body, dragging && ({ pointerEvents: "none" } as object)]}>
+        <View
+          className="min-h-0 flex-1"
+          style={dragging ? ({ pointerEvents: "none" } as object) : undefined}
+        >
           {visited.map((id) => (
-            <View key={id} style={[styles.page, { display: id === tab ? "flex" : "none" }]}>
+            <View
+              key={id}
+              className="min-h-0 flex-1"
+              style={{ display: id === tab ? "flex" : "none" }}
+            >
               {body(id)}
             </View>
           ))}
@@ -108,18 +111,3 @@ export function ToolPanel({ project, tab, open }: ToolPanelProps) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  clip: { flexShrink: 0, overflow: "hidden", flexDirection: "row" },
-  handle: {
-    position: "absolute",
-    left: -3,
-    top: 0,
-    bottom: 0,
-    width: 7,
-    zIndex: 2,
-  },
-  inner: { flex: 1, minHeight: 0 },
-  body: { flex: 1, minHeight: 0 },
-  page: { flex: 1, minHeight: 0 },
-});

@@ -3,8 +3,7 @@
 // that lands (reorder.ts) and re-renders optimistically, so the row springs home from
 // its dragged offset while the layout transition slides it into its new slot.
 import type { ReactNode } from "react";
-import { Platform, StyleSheet, View } from "react-native";
-import { SymbolView } from "expo-symbols";
+import { Platform, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   FadeIn,
@@ -17,8 +16,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
-import { useTheme } from "@/hooks/use-theme";
-import { IconNames } from "@/components/icon-button";
+import { GripVerticalIcon } from "panelui-native/icons";
 import { EASE_OUT, MOTION_MS } from "./meta";
 
 const SPRING = { damping: 22, stiffness: 260, mass: 0.8 };
@@ -31,11 +29,10 @@ export function DragRow({
   children,
 }: {
   rowRef: (view: View | null) => void;
-  surface: string; // list background, so a lifted row stays opaque over its neighbours
+  surface: string;
   onDrop: (translationY: number) => Promise<unknown>;
   children: ReactNode;
 }) {
-  const theme = useTheme();
   const reduced = useReducedMotion();
   const translateY = useSharedValue(0);
   const lift = useSharedValue(0);
@@ -73,15 +70,20 @@ export function DragRow({
   const outerStyle = useAnimatedStyle(() => ({ zIndex: lift.value > 0 || translateY.value !== 0 ? 10 : 0 }));
 
   const handle = (
-    <View accessibilityLabel="Drag to reorder" style={[styles.handle, web && ({ cursor: "grab" } as object)]}>
-      <SymbolView name={IconNames.dragHandle} size={15} tintColor={theme.lineStrong} />
+    <View
+      accessibilityLabel="Drag to reorder"
+      className="w-7 items-center justify-center self-stretch"
+      style={web ? ({ cursor: "grab" } as object) : undefined}>
+      <GripVerticalIcon size={15} className="text-muted-foreground" />
     </View>
   );
 
   const row = (
-    <Animated.View style={[styles.row, { backgroundColor: surface }, style]}>
-      <View style={styles.content}>{children}</View>
-      {web ? <GestureDetector gesture={gesture}>{handle}</GestureDetector> : null}
+    <Animated.View style={style}>
+      <View className={`flex-row items-center rounded-[10px] ${surface}`}>
+        <View className="min-w-0 flex-1">{children}</View>
+        {web ? <GestureDetector gesture={gesture}>{handle}</GestureDetector> : null}
+      </View>
     </Animated.View>
   );
 
@@ -90,17 +92,10 @@ export function DragRow({
       layout={reduced ? undefined : LAYOUT}
       entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)}
       exiting={reduced ? undefined : FadeOut.duration(140)}
-      style={outerStyle}
-    >
+      style={outerStyle}>
       <View ref={rowRef} collapsable={false}>
         {web ? row : <GestureDetector gesture={gesture}>{row}</GestureDetector>}
       </View>
     </Animated.View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", borderRadius: 10, borderCurve: "continuous" },
-  content: { flex: 1, minWidth: 0 },
-  handle: { width: 28, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
-});

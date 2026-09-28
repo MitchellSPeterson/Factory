@@ -1,21 +1,20 @@
 import { useRouter } from "expo-router";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Linking, Pressable, Text, View } from "react-native";
 
-import { IconButton } from "@/components/icon-button";
-import { Sheet } from "@/devices/hub/controls";
-import { sheetFillLayout } from "@/devices/hub/sheetLayout";
-import { Fonts } from "@/constants/theme";
+import { BottomSheet } from "panelui-native/components/bottom-sheet";
+import { Button } from "panelui-native/components/button";
+import { Checkbox } from "panelui-native/components/checkbox";
+import { CodeBlock } from "panelui-native/components/code-block";
+import { EmptyState } from "panelui-native/components/empty-state";
+import { Input } from "panelui-native/components/input";
+import { Item } from "panelui-native/components/item";
+import { Menu } from "panelui-native/components/menu";
+import { Spinner } from "panelui-native/components/spinner";
+import { Textarea } from "panelui-native/components/textarea";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, EllipsisIcon, RotateCwIcon, XIcon } from "panelui-native/icons";
+
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import type { Doc, Id } from "@/lib/dataModel";
@@ -25,8 +24,6 @@ import {
   autoCommitMessage,
   formatFileStatus,
   localBranches,
-  numberDiffLines,
-  parseDiff,
   plural,
   remoteOnlyBranches,
 } from "./format";
@@ -34,8 +31,6 @@ import {
 type Status = Extract<OperationResult, { kind: "status" }>;
 type Row = Doc<"projectOperations">;
 type Page = "home" | "commit" | "review" | "branches";
-
-const WARN = "#d9730d";
 
 const RUNNING: Partial<Record<ProjectOperation["kind"], string>> = {
   commit: "Committing…",
@@ -64,11 +59,14 @@ const ICONS = {
   pr: { ios: "arrow.triangle.pull", android: "call_merge", web: "call_merge" },
   review: { ios: "text.bubble", android: "rate_review", web: "rate_review" },
   branches: { ios: "arrow.triangle.branch", android: "account_tree", web: "account_tree" },
-  chevronDown: { ios: "chevron.down", android: "expand_more", web: "expand_more" },
-  chevronRight: { ios: "chevron.right", android: "chevron_right", web: "chevron_right" },
-  check: { ios: "checkmark", android: "check", web: "check" },
-  close: { ios: "xmark", android: "close", web: "close" },
 } as const;
+
+/** Drops the git header noise before the first hunk, for `CodeBlock`'s own diff highlighting. */
+function diffText(text: string) {
+  const lines = text.replace(/\n$/, "").split("\n");
+  const first = lines.findIndex((line) => line.startsWith("@@"));
+  return (first > 0 ? lines.slice(first) : lines).join("\n");
+}
 
 /** T3-style git controls: a bottom sheet with Commit, Push, Create PR, Review, and Branches. */
 export function GitSheet({
@@ -80,12 +78,10 @@ export function GitSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const theme = useTheme();
   const router = useRouter();
   const rows = useQuery(api.projectOperations.list, visible ? { projectId: project._id } : "skip");
   const enqueue = useMutation(api.projectOperations.enqueue);
   const [page, setPage] = useState<Page>("home");
-  const [menu, setMenu] = useState(false);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [lastId, setLastId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -124,7 +120,6 @@ export function GitSheet({
   useEffect(() => {
     if (!visible) {
       setPage("home");
-      setMenu(false);
       return;
     }
     void refresh();
@@ -178,173 +173,153 @@ export function GitSheet({
         ? `${plural(files.length, "file")} · +${sumCounts(files).added} · −${sumCounts(files).removed}`
         : undefined;
 
-  const banner = error ? (
-    <Banner tone="danger" text={error} onClose={() => setError("")} />
-  ) : last && (last.state === "queued" || last.state === "running") ? (
-    <Banner tone="busy" text={RUNNING[last.operation.kind] ?? "Working…"} />
-  ) : last?.state === "failed" ? (
-    <Banner tone="danger" text={last.error ?? "That didn't work."} onClose={() => setLastId(null)} />
-  ) : last?.state === "done" && DONE[last.operation.kind] ? (
-    <Banner
-      tone="success"
-      text={DONE[last.operation.kind]!}
-      link={last.operation.kind === "createPr" && last.result?.kind === "text" ? last.result.text : undefined}
-      onClose={() => setLastId(null)}
-    />
-  ) : null;
-
   const push = pushState(git, dirty);
   const pr = prState(git, dirty, isDefault);
 
   return (
-    <Sheet
-      title={title}
-      visible={visible}
-      onClose={onClose}
-      scroll={false}
-      header={
-          <View style={[styles.header, { borderColor: theme.line }]}>
-            <IconButton
-              icon="back"
-              accessibilityLabel={page === "home" ? "Close git controls" : "Back"}
-              onPress={back}
-              style={{ backgroundColor: "transparent" }}
-            />
-            <View style={styles.headerText}>
-              <Text numberOfLines={1} style={[styles.title, { color: theme.text }]}>
-                {title}
+    <BottomSheet open={visible} onOpenChange={(open) => !open && onClose()}>
+      <BottomSheet.Content size="full" showClose={false} className="px-0 pt-0">
+        <View className="flex-row items-center gap-2 border-b border-border px-3 py-2.5">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={page === "home" ? "Close git controls" : "Back"}
+            hitSlop={8}
+            onPress={back}
+            className="h-9 w-9 items-center justify-center rounded-full active:bg-accent">
+            <ChevronLeftIcon size={18} className="text-foreground" />
+          </Pressable>
+          <View className="flex-1 gap-0.5">
+            <Text numberOfLines={1} className="text-lg font-medium text-foreground">
+              {title}
+            </Text>
+            {subtitle ? (
+              <Text numberOfLines={1} className="text-sm text-muted-foreground">
+                {subtitle}
               </Text>
-              {subtitle ? (
-                <Text numberOfLines={1} style={[styles.subtitle, { color: theme.textSecondary }]}>
-                  {subtitle}
-                </Text>
-              ) : null}
-            </View>
-            {page === "home" ? (
-              <IconButton
-                icon="more"
-                accessibilityLabel="More git actions"
-                onPress={() => setMenu((open) => !open)}
-                style={{ backgroundColor: menu ? theme.backgroundSelected : "transparent" }}
-              />
             ) : null}
           </View>
-      }>
-      <View style={sheetFillLayout}>
-          {banner}
-
           {page === "home" ? (
-            <ScrollView style={sheetFillLayout} nestedScrollEnabled contentContainerStyle={styles.body}>
-              <Card>
-                <ActionRow
-                  icon={ICONS.commit}
-                  title="Commit"
-                  subtitle={dirty ? `${plural(files.length, "file")} changed` : "No changes to commit"}
-                  disabled={!dirty || busy}
-                  onPress={() => setPage("commit")}
-                />
-                <ActionRow
-                  icon={ICONS.push}
-                  title={push.title}
-                  subtitle={push.subtitle}
-                  disabled={!push.enabled || busy}
-                  onPress={() => void act({ kind: "push" })}
-                />
-                <ActionRow
-                  icon={ICONS.pr}
-                  title="Create PR"
-                  subtitle={pr.subtitle}
-                  disabled={!pr.enabled || busy}
-                  onPress={() => void act({ kind: "createPr" })}
-                />
-                <ActionRow
-                  icon={ICONS.review}
-                  title="Review changes"
-                  subtitle={dirty ? "See what changed in each file" : "No changes to review"}
-                  disabled={!dirty}
-                  onPress={() => setPage("review")}
-                />
-                <ActionRow
-                  icon={ICONS.branches}
-                  title="Branches & worktrees"
-                  subtitle="Switch branch, create branch, or move to a worktree"
-                  onPress={() => setPage("branches")}
-                />
-              </Card>
-            </ScrollView>
-          ) : page === "commit" && git ? (
-            <CommitPage
-              git={git}
-              files={files}
-              selected={selected}
-              excluded={excluded}
-              totals={totals}
-              isDefault={isDefault}
-              busy={busy}
-              onToggle={toggle}
-              onCommit={async (message, newBranch) => {
-                const ok = await act({
-                  kind: "commit",
-                  message: message || autoCommitMessage(selected.map((item) => item.path)),
-                  paths: selected.map((item) => item.path),
-                  expectedBranch: git.branch,
-                  ...(newBranch ? { newBranch } : {}),
-                });
-                if (ok) setPage("home");
-              }}
-            />
-          ) : page === "review" ? (
-            <ReviewPage
-              projectId={project._id}
-              files={files}
-              excluded={excluded}
-              rows={rows ?? []}
-              onToggle={toggle}
-            />
-          ) : page === "branches" ? (
-            <BranchesPage git={git} busy={busy} act={act} />
-          ) : (
-            <ActivityIndicator color={theme.textSecondary} style={{ margin: 32 }} />
-          )}
-
-          {menu && page === "home" ? (
-            <View style={[styles.menu, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}>
-              {[
-                { label: "Refresh", onPress: () => void refresh() },
-                { label: "Fetch", onPress: () => void act({ kind: "fetch" }), disabled: busy },
-                {
-                  label: git?.behind ? `Pull ${git.behind}` : "Pull",
-                  onPress: () => void act({ kind: "pull" }),
-                  disabled: busy || dirty,
-                },
-                {
-                  label: "Open Git page",
-                  onPress: () => {
+            <Menu>
+              <Menu.Trigger>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="More git actions"
+                  hitSlop={8}
+                  className="h-9 w-9 items-center justify-center rounded-full active:bg-accent">
+                  <EllipsisIcon size={18} className="text-foreground" />
+                </Pressable>
+              </Menu.Trigger>
+              <Menu.Content align="end">
+                <Menu.Item icon={<RotateCwIcon size={16} />} onSelect={() => void refresh()}>
+                  Refresh
+                </Menu.Item>
+                <Menu.Item icon={<RotateCwIcon size={16} />} disabled={busy} onSelect={() => void act({ kind: "fetch" })}>
+                  Fetch
+                </Menu.Item>
+                <Menu.Item disabled={busy || dirty} onSelect={() => void act({ kind: "pull" })}>
+                  {git?.behind ? `Pull ${git.behind}` : "Pull"}
+                </Menu.Item>
+                <Menu.Separator />
+                <Menu.Item
+                  onSelect={() => {
                     onClose();
                     router.push("/git");
-                  },
-                },
-              ].map((item) => (
-                <Pressable
-                  key={item.label}
-                  accessibilityRole="menuitem"
-                  disabled={item.disabled}
-                  onPress={() => {
-                    setMenu(false);
-                    item.onPress();
-                  }}
-                  style={({ pressed }) => [
-                    styles.menuItem,
-                    pressed && { backgroundColor: theme.subtleHover },
-                    item.disabled && { opacity: 0.4 },
-                  ]}>
-                  <Text style={{ color: theme.text, fontSize: 15 }}>{item.label}</Text>
-                </Pressable>
-              ))}
-            </View>
+                  }}>
+                  Open Git page
+                </Menu.Item>
+              </Menu.Content>
+            </Menu>
           ) : null}
-      </View>
-    </Sheet>
+        </View>
+
+        {error ? (
+          <Banner tone="danger" text={error} onClose={() => setError("")} />
+        ) : last && (last.state === "queued" || last.state === "running") ? (
+          <Banner tone="busy" text={RUNNING[last.operation.kind] ?? "Working…"} />
+        ) : last?.state === "failed" ? (
+          <Banner tone="danger" text={last.error ?? "That didn't work."} onClose={() => setLastId(null)} />
+        ) : last?.state === "done" && DONE[last.operation.kind] ? (
+          <Banner
+            tone="success"
+            text={DONE[last.operation.kind]!}
+            link={last.operation.kind === "createPr" && last.result?.kind === "text" ? last.result.text : undefined}
+            onClose={() => setLastId(null)}
+          />
+        ) : null}
+
+        {page === "home" ? (
+          <BottomSheet.Body contentContainerClassName="gap-3 p-3 pb-6">
+            <Item.Group className="overflow-hidden rounded-2xl border border-border">
+              <ActionRow
+                icon={ICONS.commit}
+                title="Commit"
+                subtitle={dirty ? `${plural(files.length, "file")} changed` : "No changes to commit"}
+                disabled={!dirty || busy}
+                onPress={() => setPage("commit")}
+              />
+              <Item.Separator />
+              <ActionRow
+                icon={ICONS.push}
+                title={push.title}
+                subtitle={push.subtitle}
+                disabled={!push.enabled || busy}
+                onPress={() => void act({ kind: "push" })}
+              />
+              <Item.Separator />
+              <ActionRow
+                icon={ICONS.pr}
+                title="Create PR"
+                subtitle={pr.subtitle}
+                disabled={!pr.enabled || busy}
+                onPress={() => void act({ kind: "createPr" })}
+              />
+              <Item.Separator />
+              <ActionRow
+                icon={ICONS.review}
+                title="Review changes"
+                subtitle={dirty ? "See what changed in each file" : "No changes to review"}
+                disabled={!dirty}
+                onPress={() => setPage("review")}
+              />
+              <Item.Separator />
+              <ActionRow
+                icon={ICONS.branches}
+                title="Branches & worktrees"
+                subtitle="Switch branch, create branch, or move to a worktree"
+                onPress={() => setPage("branches")}
+              />
+            </Item.Group>
+          </BottomSheet.Body>
+        ) : page === "commit" && git ? (
+          <CommitPage
+            git={git}
+            files={files}
+            selected={selected}
+            excluded={excluded}
+            totals={totals}
+            isDefault={isDefault}
+            busy={busy}
+            onToggle={toggle}
+            onCommit={async (message, newBranch) => {
+              const ok = await act({
+                kind: "commit",
+                message: message || autoCommitMessage(selected.map((item) => item.path)),
+                paths: selected.map((item) => item.path),
+                expectedBranch: git.branch,
+                ...(newBranch ? { newBranch } : {}),
+              });
+              if (ok) setPage("home");
+            }}
+          />
+        ) : page === "review" ? (
+          <ReviewPage projectId={project._id} files={files} excluded={excluded} rows={rows ?? []} onToggle={toggle} />
+        ) : page === "branches" ? (
+          <BranchesPage git={git} busy={busy} act={act} />
+        ) : (
+          <View className="items-center py-8"><Spinner label="Loading changes" /></View>
+        )}
+      </BottomSheet.Content>
+    </BottomSheet>
   );
 }
 
@@ -394,7 +369,6 @@ function CommitPage({
   onToggle: (path: string) => void;
   onCommit: (message: string, newBranch?: string) => Promise<void>;
 }) {
-  const theme = useTheme();
   const [editing, setEditing] = useState(false);
   const [message, setMessage] = useState("");
   const [branchMode, setBranchMode] = useState(false);
@@ -403,38 +377,37 @@ function CommitPage({
   const canCommit = selected.length > 0 && !busy && (!branchMode || !!branch.trim());
   return (
     <>
-      <ScrollView style={sheetFillLayout} nestedScrollEnabled contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        <Card padded>
-          <Text style={[styles.label, { color: theme.textSecondary }]}>Branch</Text>
-          <Text style={[styles.value, { color: theme.text }]}>{branchMode && branch.trim() ? branch.trim() : git.branch}</Text>
+      <BottomSheet.Body contentContainerClassName="gap-3 p-3 pb-6" keyboardShouldPersistTaps="handled">
+        <View className="gap-2 rounded-2xl border border-border bg-card p-4">
+          <Text className="text-sm text-muted-foreground">Branch</Text>
+          <Text className="text-lg text-foreground">{branchMode && branch.trim() ? branch.trim() : git.branch}</Text>
           {isDefault && !branchMode ? (
-            <Text style={[styles.warn, { color: WARN }]}>Warning: this is the default branch.</Text>
+            <Text className="text-sm text-warning">Warning: this is the default branch.</Text>
           ) : null}
           {branchMode ? (
-            <TextInput
+            <Input
               accessibilityLabel="New branch name"
               autoCapitalize="none"
               autoCorrect={false}
               autoFocus
               placeholder="feature/my-change"
-              placeholderTextColor={theme.textSecondary}
               value={branch}
               onChangeText={setBranch}
-              style={[styles.input, { color: theme.text, borderColor: theme.line, marginTop: 10 }]}
+              className="mt-1"
             />
           ) : null}
-        </Card>
+        </View>
 
-        <Card padded>
-          <View style={styles.rowBetween}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, { color: theme.text }]}>Files</Text>
-              <Text style={[styles.meta, { color: theme.textSecondary }]}>
+        <View className="gap-2 rounded-2xl border border-border bg-card p-4">
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1 gap-0.5">
+              <Text className="text-base font-medium text-foreground">Files</Text>
+              <Text className="text-sm text-muted-foreground">
                 {selected.length} selected · +{totals.added} / −{totals.removed}
               </Text>
             </View>
             <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setEditing((v) => !v)}>
-              <Text style={[styles.link, { color: theme.accent }]}>{editing ? "Done" : "Edit"}</Text>
+              <Text className="text-sm font-semibold text-primary">{editing ? "Done" : "Edit"}</Text>
             </Pressable>
           </View>
           {preview.map((item) => (
@@ -444,58 +417,48 @@ function CommitPage({
               accessibilityState={editing ? { checked: !excluded.has(item.path) } : undefined}
               disabled={!editing}
               onPress={() => onToggle(item.path)}
-              style={styles.fileLine}>
+              className="min-h-8 flex-row items-center gap-2.5">
               {editing ? <Check on={!excluded.has(item.path)} /> : null}
-              <Text numberOfLines={1} ellipsizeMode="head" style={[styles.path, { color: theme.text }]}>
+              <Text numberOfLines={1} ellipsizeMode="head" className="flex-1 text-sm text-foreground">
                 {item.path}
               </Text>
               <Counts file={item} />
             </Pressable>
           ))}
           {!editing && selected.length > 3 ? (
-            <Text style={[styles.meta, { color: theme.textSecondary }]}>+{selected.length - 3} more files</Text>
+            <Text className="text-sm text-muted-foreground">+{selected.length - 3} more files</Text>
           ) : null}
-        </Card>
+        </View>
 
-        <Card padded>
-          <Text style={[styles.cardTitle, { color: theme.text }]}>Commit message</Text>
-          <TextInput
+        <View className="gap-2 rounded-2xl border border-border bg-card p-4">
+          <Text className="text-base font-medium text-foreground">Commit message</Text>
+          <Textarea
             accessibilityLabel="Commit message"
-            multiline
             placeholder="Leave empty to auto-generate"
-            placeholderTextColor={theme.textSecondary}
             value={message}
             onChangeText={setMessage}
-            style={[styles.input, styles.message, { color: theme.text, borderColor: theme.line }]}
+            rows={4}
           />
-        </Card>
-      </ScrollView>
-      <View style={styles.footer}>
-        <Pressable
-          accessibilityRole="button"
+        </View>
+      </BottomSheet.Body>
+      <BottomSheet.Footer className="flex-row gap-2 px-3">
+        <Button
+          variant="secondary"
+          className="flex-1"
           onPress={() => {
             setBranchMode((v) => !v);
             setBranch("");
-          }}
-          style={({ pressed }) => [
-            styles.secondary,
-            { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-          ]}>
-          <Text style={[styles.secondaryLabel, { color: theme.text }]}>
-            {branchMode ? "Commit on current branch" : "Commit on new branch"}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
+          }}>
+          {branchMode ? "Commit on current branch" : "Commit on new branch"}
+        </Button>
+        <Button
+          variant="primary"
+          className="flex-1"
           disabled={!canCommit}
-          onPress={() => void onCommit(message.trim(), branchMode ? branch.trim() : undefined)}
-          style={({ pressed }) => [
-            styles.primary,
-            { backgroundColor: theme.accent, opacity: !canCommit ? 0.45 : pressed ? 0.85 : 1 },
-          ]}>
-          <Text style={styles.primaryLabel}>{branchMode ? "Create branch & commit" : "Commit"}</Text>
-        </Pressable>
-      </View>
+          onPress={() => void onCommit(message.trim(), branchMode ? branch.trim() : undefined)}>
+          {branchMode ? "Create branch & commit" : "Commit"}
+        </Button>
+      </BottomSheet.Footer>
     </>
   );
 }
@@ -513,24 +476,21 @@ function ReviewPage({
   rows: Row[];
   onToggle: (path: string) => void;
 }) {
-  const theme = useTheme();
-  const enqueue = useMutation(api.projectOperations.enqueue);
   const [open, setOpen] = useState<Set<string>>(() => new Set(files[0] ? [files[0].path] : []));
-  const loadDiff = (path: string) =>
-    void enqueue({ projectId, operation: { kind: "diff", path } }).catch(() => {});
+  const enqueue = useMutation(api.projectOperations.enqueue);
+  const loadDiff = (path: string) => void enqueue({ projectId, operation: { kind: "diff", path } }).catch(() => {});
   useEffect(() => {
     if (files[0]) loadDiff(files[0].path);
   }, []);
   return (
-    <ScrollView style={sheetFillLayout} nestedScrollEnabled contentContainerStyle={{ paddingBottom: 32 }}>
+    <BottomSheet.Body contentContainerClassName="pb-8">
       {files.map((item) => {
         const expanded = open.has(item.path);
         const status = formatFileStatus(item.status);
-        const tone = status.tone === "danger" ? theme.danger : status.tone === "success" ? theme.success : theme.text;
         const diff = rows.find((row) => row.operation.kind === "diff" && row.operation.path === item.path);
         return (
-          <View key={item.path} style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderColor: theme.line }}>
-            <View style={[styles.reviewRow, { backgroundColor: theme.backgroundElement }]}>
+          <View key={item.path} className="border-b border-border">
+            <View className="min-h-14 flex-row items-center gap-2.5 pr-3.5">
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${item.path}`}
@@ -542,16 +502,10 @@ function ReviewPage({
                     return next;
                   });
                 }}
-                style={styles.reviewToggle}>
-                <SymbolView
-                  name={expanded ? ICONS.chevronDown : ICONS.chevronRight}
-                  size={14}
-                  tintColor={theme.textSecondary}
-                />
-                <View accessibilityLabel={status.label} style={[styles.statusRing, { borderColor: tone }]}>
-                  <View style={[styles.statusDot, { backgroundColor: tone }]} />
-                </View>
-                <Text numberOfLines={1} ellipsizeMode="head" style={[styles.reviewPath, { color: theme.text }]}>
+                className="min-w-0 flex-1 flex-row items-center gap-2.5 py-3 pl-3.5">
+                {expanded ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+                <StatusTag status={status} />
+                <Text numberOfLines={1} ellipsizeMode="head" className="flex-1 text-sm font-semibold text-foreground">
                   {item.path}
                 </Text>
                 <Counts file={item} reverse />
@@ -569,72 +523,28 @@ function ReviewPage({
           </View>
         );
       })}
-    </ScrollView>
+    </BottomSheet.Body>
   );
 }
 
 function DiffBlock({ diff }: { diff?: Row }) {
-  const theme = useTheme();
-  const parsed = useMemo(
-    () => (diff?.result?.kind === "text" ? parseDiff(diff.result.text) : undefined),
-    [diff?.result],
-  );
-  const numbers = useMemo(() => (parsed ? numberDiffLines(parsed.lines) : []), [parsed]);
-  if (!parsed) {
+  if (diff?.result?.kind !== "text") {
     return diff?.state === "failed" ? (
-      <Text style={[styles.meta, { color: theme.danger, padding: 16 }]}>{diff.error}</Text>
+      <Text className="p-4 text-sm text-destructive">{diff.error}</Text>
     ) : (
-      <ActivityIndicator color={theme.textSecondary} style={{ margin: 16 }} />
+      <View className="items-center py-4">
+        <Spinner />
+      </View>
     );
   }
-  if (!parsed.lines.some((line) => line.kind !== "ctx" || line.text)) {
-    return <Text style={[styles.meta, { color: theme.textSecondary, padding: 16 }]}>No text changes to show.</Text>;
+  const text = diffText(diff.result.text);
+  if (!text.split("\n").some((line) => !/^\s?$/.test(line.slice(1)) || /^[+-]/.test(line))) {
+    return <Text className="p-4 text-sm text-muted-foreground">No text changes to show.</Text>;
   }
   return (
-    <ScrollView horizontal>
-      <View style={{ minWidth: "100%" }}>
-        {parsed.lines.map((line, i) => (
-          <View
-            key={i}
-            style={[
-              styles.diffLine,
-              line.kind === "add"
-                ? { backgroundColor: "rgba(63, 185, 80, 0.12)" }
-                : line.kind === "del"
-                  ? { backgroundColor: "rgba(248, 81, 73, 0.12)" }
-                  : line.kind === "hunk"
-                    ? { backgroundColor: theme.subtleHover }
-                    : null,
-            ]}>
-            <View
-              style={[
-                styles.gutter,
-                line.kind === "add" && { borderLeftColor: theme.success },
-                line.kind === "del" && { borderLeftColor: theme.danger },
-              ]}>
-              <Text style={[styles.lineNo, { color: theme.textSecondary }]}>{numbers[i] ?? ""}</Text>
-            </View>
-            <Text
-              selectable
-              style={[
-                styles.code,
-                {
-                  color:
-                    line.kind === "add"
-                      ? theme.success
-                      : line.kind === "del"
-                        ? theme.danger
-                        : line.kind === "hunk"
-                          ? theme.textSecondary
-                          : theme.text,
-                },
-              ]}>
-              {line.kind === "hunk" ? line.text : line.text.slice(1) || " "}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
+    <View className="px-3.5 pb-3">
+      <CodeBlock code={text} language="diff" className="rounded-lg border-0 bg-transparent" />
+    </View>
   );
 }
 
@@ -647,7 +557,6 @@ function BranchesPage({
   busy: boolean;
   act: (operation: ProjectOperation) => Promise<boolean>;
 }) {
-  const theme = useTheme();
   const [name, setName] = useState("");
   const [base, setBase] = useState("");
   const [worktreeBranch, setWorktreeBranch] = useState("");
@@ -661,54 +570,47 @@ function BranchesPage({
   const remotes = remoteOnlyBranches(all).filter(match);
   const baseBranch = base.trim() || (git && !git.detached ? git.branch : "");
   return (
-    <ScrollView style={sheetFillLayout} nestedScrollEnabled contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-      <Card padded>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>New branch</Text>
-        <TextInput
+    <BottomSheet.Body contentContainerClassName="gap-3 p-3 pb-6" keyboardShouldPersistTaps="handled">
+      <View className="gap-2 rounded-2xl border border-border bg-card p-4">
+        <Text className="text-base font-medium text-foreground">New branch</Text>
+        <Input
           accessibilityLabel="New branch name"
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="feature/my-change"
-          placeholderTextColor={theme.textSecondary}
           value={name}
           onChangeText={setName}
-          style={[styles.input, { color: theme.text, borderColor: theme.line }]}
         />
-        <SecondaryButton
-          label="Create & checkout"
+        <Button
+          variant="secondary"
           disabled={busy || !name.trim()}
-          onPress={() =>
-            void act({ kind: "createBranch", name: name.trim(), checkout: true }).then((ok) => ok && setName(""))
-          }
-        />
-      </Card>
+          onPress={() => void act({ kind: "createBranch", name: name.trim(), checkout: true }).then((ok) => ok && setName(""))}>
+          Create & checkout
+        </Button>
+      </View>
 
-      <Card padded>
-        <Text style={[styles.cardTitle, { color: theme.text }]}>New worktree</Text>
-        <Text style={[styles.label, { color: theme.textSecondary }]}>Base branch</Text>
-        <TextInput
+      <View className="gap-2 rounded-2xl border border-border bg-card p-4">
+        <Text className="text-base font-medium text-foreground">New worktree</Text>
+        <Text className="text-sm text-muted-foreground">Base branch</Text>
+        <Input
           accessibilityLabel="Base branch"
           autoCapitalize="none"
           autoCorrect={false}
           placeholder={baseBranch || "main"}
-          placeholderTextColor={theme.textSecondary}
           value={base}
           onChangeText={setBase}
-          style={[styles.input, { color: theme.text, borderColor: theme.line }]}
         />
-        <Text style={[styles.label, { color: theme.textSecondary }]}>New branch</Text>
-        <TextInput
+        <Text className="text-sm text-muted-foreground">New branch</Text>
+        <Input
           accessibilityLabel="Worktree branch name"
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="feature/parallel-work"
-          placeholderTextColor={theme.textSecondary}
           value={worktreeBranch}
           onChangeText={setWorktreeBranch}
-          style={[styles.input, { color: theme.text, borderColor: theme.line }]}
         />
-        <SecondaryButton
-          label="Create worktree"
+        <Button
+          variant="secondary"
           disabled={busy || !worktreeBranch.trim()}
           onPress={() =>
             void act({
@@ -719,47 +621,57 @@ function BranchesPage({
               createBranch: true,
               ...(baseBranch ? { base: baseBranch } : {}),
             }).then((ok) => ok && setWorktreeBranch(""))
-          }
-        />
-      </Card>
+          }>
+          Create worktree
+        </Button>
+      </View>
 
-      <Text style={[styles.section, { color: theme.textSecondary }]}>Existing branches</Text>
+      <Text className="mt-2 px-2 text-sm text-muted-foreground">Existing branches</Text>
       {all.length > 8 ? (
-        <TextInput
+        <Input
           accessibilityLabel="Filter branches"
           autoCapitalize="none"
           autoCorrect={false}
           placeholder="Filter branches"
-          placeholderTextColor={theme.textSecondary}
           value={query}
           onChangeText={setQuery}
-          style={[styles.input, { color: theme.text, borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
+          variant="filled"
         />
       ) : null}
-      {!git ? <Text style={[styles.meta, { color: theme.textSecondary }]}>Loading branches…</Text> : null}
-      {locals.map((item) => {
-        const elsewhere = !item.current && !!item.worktreePath;
-        return (
-          <BranchRow
-            key={item.name}
-            name={item.name}
-            detail={item.current ? "Current branch" : elsewhere ? "Checked out in another worktree" : "Local branch"}
-            current={item.current}
-            disabled={busy || item.current || elsewhere}
-            onPress={() => void act({ kind: "checkout", branch: item.name })}
-          />
-        );
-      })}
-      {remotes.map((item) => (
-        <BranchRow
-          key={item.name}
-          name={item.name}
-          detail="Remote branch · checking out makes a local copy"
-          disabled={busy}
-          onPress={() => void act({ kind: "checkout", branch: item.name })}
-        />
-      ))}
-    </ScrollView>
+      {!git ? <Text className="text-sm text-muted-foreground">Loading branches…</Text> : null}
+      {locals.length ? (
+        <Item.Group className="overflow-hidden rounded-2xl border border-border">
+          {locals.map((item, index) => {
+            const elsewhere = !item.current && !!item.worktreePath;
+            return (
+              <BranchRow
+                key={item.name}
+                first={index === 0}
+                name={item.name}
+                detail={item.current ? "Current branch" : elsewhere ? "Checked out in another worktree" : "Local branch"}
+                current={item.current}
+                disabled={busy || item.current || elsewhere}
+                onPress={() => void act({ kind: "checkout", branch: item.name })}
+              />
+            );
+          })}
+        </Item.Group>
+      ) : null}
+      {remotes.length ? (
+        <Item.Group className="overflow-hidden rounded-2xl border border-border">
+          {remotes.map((item, index) => (
+            <BranchRow
+              key={item.name}
+              first={index === 0}
+              name={item.name}
+              detail="Remote branch · checking out makes a local copy"
+              disabled={busy}
+              onPress={() => void act({ kind: "checkout", branch: item.name })}
+            />
+          ))}
+        </Item.Group>
+      ) : null}
+    </BottomSheet.Body>
   );
 }
 
@@ -768,36 +680,35 @@ function BranchRow({
   detail,
   current,
   disabled,
+  first,
   onPress,
 }: {
   name: string;
   detail: string;
   current?: boolean;
   disabled: boolean;
+  first: boolean;
   onPress: () => void;
 }) {
-  const theme = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${name}, ${detail}`}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.branchRow,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
-        disabled && !current && { opacity: 0.5 },
-      ]}>
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text numberOfLines={1} style={[styles.branchName, { color: theme.text }]}>
-          {name}
-        </Text>
-        <Text numberOfLines={1} style={[styles.meta, { color: theme.textSecondary }]}>
-          {detail}
-        </Text>
-      </View>
-      {current ? <SymbolView name={ICONS.check} size={16} tintColor={theme.accent} /> : null}
-    </Pressable>
+    <>
+      {first ? null : <Item.Separator />}
+      <Item
+        accessibilityLabel={`${name}, ${detail}`}
+        disabled={disabled}
+        onPress={disabled ? undefined : onPress}
+        className={current ? undefined : "opacity-100"}>
+        <Item.Content>
+          <Item.Title numberOfLines={1}>{name}</Item.Title>
+          <Item.Description numberOfLines={1}>{detail}</Item.Description>
+        </Item.Content>
+        {current ? (
+          <Item.Actions>
+            <CheckIcon size={16} />
+          </Item.Actions>
+        ) : null}
+      </Item>
+    </>
   );
 }
 
@@ -816,79 +727,43 @@ function ActionRow({
 }) {
   const theme = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${subtitle}`}
-      accessibilityState={{ disabled: !!disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.actionRow,
-        pressed && { backgroundColor: theme.subtleHover },
-        disabled && { opacity: 0.45 },
-      ]}>
-      <SymbolView name={icon} size={24} tintColor={theme.text} />
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text style={[styles.actionTitle, { color: theme.text }]}>{title}</Text>
-        <Text style={[styles.actionSubtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
-      </View>
-    </Pressable>
+    <Item accessibilityLabel={`${title}. ${subtitle}`} disabled={disabled} onPress={disabled ? undefined : onPress} className="px-4 py-3.5">
+      <Item.Media>
+        <SymbolView name={icon} size={22} tintColor={theme.text} />
+      </Item.Media>
+      <Item.Content>
+        <Item.Title>{title}</Item.Title>
+        <Item.Description>{subtitle}</Item.Description>
+      </Item.Content>
+    </Item>
   );
 }
 
 function Counts({ file, reverse }: { file: GitFile; reverse?: boolean }) {
-  const theme = useTheme();
   if (file.added === undefined || file.removed === undefined) {
     const status = formatFileStatus(file.status);
-    return <Text style={[styles.counts, { color: theme.textSecondary }]}>{status.label}</Text>;
+    return <Text className="font-mono text-xs text-muted-foreground">{status.label}</Text>;
   }
-  const add = <Text style={{ color: theme.success }}>+{file.added}</Text>;
-  const del = <Text style={{ color: theme.danger }}>−{file.removed}</Text>;
   return (
-    <Text style={styles.counts}>
-      {reverse ? del : add}
+    <Text className="font-mono text-xs">
+      {reverse ? <Text className="text-destructive">−{file.removed}</Text> : <Text className="text-success">+{file.added}</Text>}
       {"  "}
-      {reverse ? add : del}
+      {reverse ? <Text className="text-success">+{file.added}</Text> : <Text className="text-destructive">−{file.removed}</Text>}
     </Text>
   );
 }
 
+function StatusTag({ status }: { status: ReturnType<typeof formatFileStatus> }) {
+  const tone = status.tone === "danger" ? "text-destructive" : status.tone === "success" ? "text-success" : "text-foreground";
+  return (
+    <View className={`h-[22px] w-[22px] items-center justify-center rounded-md border-2 ${tone === "text-destructive" ? "border-destructive" : tone === "text-success" ? "border-success" : "border-foreground"}`}>
+      <View className={`h-[7px] w-[7px] rounded-full ${tone === "text-destructive" ? "bg-destructive" : tone === "text-success" ? "bg-success" : "bg-foreground"}`} />
+    </View>
+  );
+}
+
 function Check({ on }: { on: boolean }) {
-  const theme = useTheme();
-  return (
-    <View
-      style={[
-        styles.check,
-        { borderColor: on ? theme.accent : theme.lineStrong, backgroundColor: on ? theme.accent : "transparent" },
-      ]}>
-      {on ? <SymbolView name={ICONS.check} size={13} tintColor="#ffffff" /> : null}
-    </View>
-  );
-}
-
-function SecondaryButton({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.secondary,
-        { backgroundColor: pressed ? theme.backgroundSelected : theme.sidebar, opacity: disabled ? 0.5 : 1 },
-      ]}>
-      <Text style={[styles.secondaryLabel, { color: theme.text }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Card({ children, padded }: { children: ReactNode; padded?: boolean }) {
-  const theme = useTheme();
-  return (
-    <View style={[styles.card, padded && styles.cardPadded, { backgroundColor: theme.backgroundElement }]}>
-      {children}
-    </View>
-  );
+  return <Checkbox checked={on} />;
 }
 
 function Banner({
@@ -902,113 +777,23 @@ function Banner({
   link?: string;
   onClose?: () => void;
 }) {
-  const theme = useTheme();
-  const color = tone === "danger" ? theme.danger : tone === "success" ? theme.success : theme.textSecondary;
+  const color = tone === "danger" ? "text-destructive" : tone === "success" ? "text-success" : "text-muted-foreground";
   return (
-    <View style={[styles.banner, { backgroundColor: theme.backgroundElement }]}>
-      {tone === "busy" ? <ActivityIndicator size="small" color={color} /> : null}
-      <Text style={[styles.bannerText, { color }]} numberOfLines={4}>
+    <View className="mx-3 mb-1 flex-row items-center gap-2.5 rounded-2xl bg-muted px-3.5 py-2.5">
+      {tone === "busy" ? <Spinner size="sm" /> : null}
+      <Text numberOfLines={4} className={`flex-1 text-sm ${color}`}>
         {text}
       </Text>
       {link ? (
         <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(link)}>
-          <Text style={[styles.link, { color: theme.accent }]}>Open</Text>
+          <Text className="text-sm font-semibold text-primary">Open</Text>
         </Pressable>
       ) : null}
       {onClose ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Dismiss" hitSlop={10} onPress={onClose}>
-          <SymbolView name={ICONS.close} size={14} tintColor={theme.textSecondary} />
+          <XIcon size={14} />
         </Pressable>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerText: { flex: 1, minWidth: 0, gap: 2 },
-  title: { fontSize: 22, lineHeight: 28, fontWeight: "500" },
-  subtitle: { fontSize: 14, lineHeight: 19 },
-  body: { padding: 10, paddingBottom: 24, gap: 10 },
-  card: { borderRadius: 20, borderCurve: "continuous", overflow: "hidden" },
-  cardPadded: { padding: 18, gap: 8 },
-  cardTitle: { fontSize: 17, lineHeight: 22, fontWeight: "500" },
-  label: { fontSize: 13, lineHeight: 18 },
-  value: { fontSize: 17, lineHeight: 22 },
-  warn: { fontSize: 14, lineHeight: 19, marginTop: 6 },
-  meta: { fontSize: 13, lineHeight: 18 },
-  link: { fontSize: 15, fontWeight: "600" },
-  rowBetween: { flexDirection: "row", alignItems: "center", gap: 12 },
-  fileLine: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 32 },
-  path: { flex: 1, fontSize: 14 },
-  counts: { fontSize: 13, fontFamily: Fonts?.mono, fontVariant: ["tabular-nums"] },
-  input: {
-    borderWidth: 1,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    fontSize: 16,
-  },
-  message: { minHeight: 110, textAlignVertical: "top" },
-  footer: { paddingHorizontal: 10, paddingTop: 4, paddingBottom: 10, gap: 8 },
-  primary: { minHeight: 52, borderRadius: 26, alignItems: "center", justifyContent: "center" },
-  primaryLabel: { color: "#ffffff", fontSize: 16, fontWeight: "600" },
-  secondary: { minHeight: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
-  secondaryLabel: { fontSize: 15, fontWeight: "600" },
-  actionRow: { flexDirection: "row", alignItems: "center", gap: 18, paddingHorizontal: 20, paddingVertical: 14, minHeight: 72 },
-  actionTitle: { fontSize: 17, lineHeight: 22 },
-  actionSubtitle: { fontSize: 14, lineHeight: 19 },
-  menu: {
-    position: "absolute",
-    top: 4,
-    right: 14,
-    minWidth: 200,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-    boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-  },
-  menuItem: { minHeight: 44, justifyContent: "center", paddingHorizontal: 16 },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginHorizontal: 10,
-    marginBottom: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderCurve: "continuous",
-  },
-  bannerText: { flex: 1, fontSize: 14, lineHeight: 19 },
-  section: { fontSize: 14, marginTop: 8, paddingHorizontal: 8 },
-  branchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 18,
-    borderCurve: "continuous",
-  },
-  branchName: { fontSize: 17, lineHeight: 22 },
-  reviewRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingRight: 14, minHeight: 56 },
-  reviewToggle: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: 14, paddingVertical: 12 },
-  reviewPath: { flex: 1, fontSize: 14, fontWeight: "600" },
-  statusRing: { width: 22, height: 22, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  check: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: "center", justifyContent: "center" },
-  diffLine: { flexDirection: "row", minHeight: 22 },
-  gutter: { width: 52, paddingRight: 10, borderLeftWidth: 3, borderLeftColor: "transparent", alignItems: "flex-end", justifyContent: "center" },
-  lineNo: { fontSize: 12, fontFamily: Fonts?.mono, fontVariant: ["tabular-nums"] },
-  code: { fontFamily: Fonts?.mono, fontSize: 13, lineHeight: 22, paddingRight: 16 },
-});

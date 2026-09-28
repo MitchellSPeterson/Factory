@@ -2,12 +2,15 @@ import { useMutation } from "@/lib/factory";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { WebView } from "react-native-webview";
+
+import { Alert } from "panelui-native/components/alert";
+import { Button } from "panelui-native/components/button";
+
 import type { Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
-import { useTheme } from "@/hooks/use-theme";
 import { lanHostFromManifest, rewriteLoopbackUrl } from "@/devices/streamUrl";
 import renderer from "./terminal.generated.json";
 import {
@@ -18,8 +21,6 @@ import {
 } from "./terminalInput";
 import { createPtyDisplayGate } from "./ptyOutput";
 import { createTerminalPasteSession } from "./terminalPaste";
-
-const ACCESSORY_HEIGHT = 52;
 
 type ToolbarAction =
   | { kind: "send"; key: string; label: string; data: string }
@@ -192,7 +193,6 @@ export function TerminalPanel({
   projectName: string;
   visible: boolean;
 }) {
-  const theme = useTheme();
   const keyboard = useKeyboardHeight();
   const web = useRef<WebView>(null);
   const paste = useRef(createTerminalPasteSession());
@@ -264,20 +264,20 @@ export function TerminalPanel({
   }
 
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: theme.background, paddingBottom: keyboard },
-      ]}
-    >
+    <View className="min-h-0 flex-1 bg-background" style={{ paddingBottom: keyboard }}>
       {session.error ? (
-        <Text style={[styles.error, { color: theme.danger }]}>{session.error}</Text>
+        <Alert variant="destructive" className="mx-3 mt-2">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>{session.error}</Alert.Title>
+          </Alert.Content>
+        </Alert>
       ) : null}
       <WebView
         ref={web}
         accessibilityLabel={projectName ? `Terminal for ${projectName}` : "Terminal"}
         source={{ html: renderer }}
-        style={styles.surface}
+        style={{ flex: 1 }}
         originWhitelist={["*"]}
         scrollEnabled={false}
         bounces={false}
@@ -329,56 +329,30 @@ export function TerminalPanel({
           }
         }}
       />
-      <View
-        style={[
-          styles.accessory,
-          {
-            backgroundColor: theme.sidebar,
-            borderTopColor: theme.line,
-            minHeight: ACCESSORY_HEIGHT,
-          },
-        ]}
-      >
+      <View className="min-h-[52px] border-t border-border bg-surface">
         <ScrollView
           horizontal
           keyboardShouldPersistTaps="always"
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.pills}
+          contentContainerClassName="items-center gap-1.5 px-2 py-2"
         >
           {actions.map((action) => {
-            const active =
-              action.kind === "modifier" && modifier === action.modifier;
+            const active = action.kind === "modifier" && modifier === action.modifier;
+            const strong = action.kind === "modifier" || action.kind === "clear";
             return (
-              <Pressable
+              <Button
                 key={action.key}
-                accessibilityRole="button"
+                variant="outline"
+                size="sm"
                 accessibilityLabel={action.label}
                 onPress={() => onAction(action)}
-                style={({ pressed }) => [
-                  styles.pill,
-                  {
-                    backgroundColor: active
-                      ? theme.backgroundSelected
-                      : theme.backgroundElement,
-                    borderColor: active ? theme.accent : theme.line,
-                    opacity: pressed ? 0.72 : 1,
-                  },
-                ]}
+                pressScale={1}
+                pressOpacity={0.72}
+                className={`h-9 rounded-full px-3 ${active ? "border-primary bg-primary/15" : ""}`}
+                labelClassName={strong ? "text-[13px] font-semibold uppercase" : "text-[13px] font-medium"}
               >
-                <Text
-                  style={{
-                    color: theme.text,
-                    fontSize: 13,
-                    fontWeight: action.kind === "modifier" || action.kind === "clear" ? "600" : "500",
-                    textTransform:
-                      action.kind === "modifier" || action.kind === "clear"
-                        ? "uppercase"
-                        : "none",
-                  }}
-                >
-                  {action.label}
-                </Text>
-              </Pressable>
+                {action.label}
+              </Button>
             );
           })}
         </ScrollView>
@@ -386,24 +360,3 @@ export function TerminalPanel({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 0 },
-  surface: { flex: 1, backgroundColor: "#181818" },
-  error: { paddingHorizontal: 12, paddingTop: 8, fontSize: 12 },
-  accessory: { borderTopWidth: 1 },
-  pills: {
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 6,
-    alignItems: "center",
-  },
-  pill: {
-    paddingHorizontal: 12,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

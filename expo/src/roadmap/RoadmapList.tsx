@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type LayoutRectangle,
-} from "react-native";
+import { Platform, Pressable, ScrollView, View, type LayoutRectangle } from "react-native";
 import { SymbolView } from "expo-symbols";
 import Animated, {
   FadeIn,
@@ -19,11 +9,20 @@ import Animated, {
   useReducedMotion,
   withTiming,
 } from "react-native-reanimated";
+import { Badge } from "panelui-native/components/badge";
+import { Chip } from "panelui-native/components/chip";
+import { Input } from "panelui-native/components/input";
+import { Item as Row } from "panelui-native/components/item";
+import { Spinner } from "panelui-native/components/spinner";
+import { Tabs } from "panelui-native/components/tabs";
+import { ChevronRightIcon, PlusIcon } from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
 import { useMutation, useQuery } from "@/lib/factory";
 import { api } from "@/lib/api";
 import type { Doc, Id } from "@/lib/dataModel";
 import { useTheme } from "@/hooks/use-theme";
 import { Action, Notice } from "@/chats/ui";
+import { EmptyState } from "@/components/empty-state";
 import { IconButton, IconNames } from "@/components/icon-button";
 import { DragRow } from "@/roadmap/DragRow";
 import { ImportDialog } from "@/roadmap/ImportDialog";
@@ -92,7 +91,6 @@ export function RoadmapList({
   selectedId: Id<"roadmapItems"> | undefined;
   onOpen: (id: Id<"roadmapItems">) => void;
 }) {
-  const theme = useTheme();
   const reduced = useReducedMotion();
   const data = useQuery(api.roadmap.get, { projectId });
   const createItem = useMutation(api.roadmap.createItem);
@@ -185,16 +183,18 @@ export function RoadmapList({
   const closedCount = (data?.items ?? []).filter((item) => isClosed(item.status)).length;
 
   return (
-    <View style={styles.root}>
-      <View style={styles.toolbar}>
+    <View className="min-h-0 flex-1">
+      <View className="flex-row items-center justify-between gap-2 py-1.5 pl-3 pr-1.5">
         <Segmented value={groupBy} onChange={setGroupBy} />
-        <View style={styles.toolbarEnd}>
-          <IconButton
-            icon="add"
-            accessibilityLabel="New item"
-            onPress={() => setComposer(composer ? null : { section: null })}
-            style={{ backgroundColor: composer && !composer.section ? theme.backgroundSelected : "transparent" }}
-          />
+        <View className="flex-row items-center">
+          <View className={composer && !composer.section ? "rounded-xl bg-primary/15" : undefined}>
+            <IconButton
+              icon="add"
+              accessibilityLabel="New item"
+              onPress={() => setComposer(composer ? null : { section: null })}
+              style={{ backgroundColor: "transparent" }}
+            />
+          </View>
           <Popover
             items={[
               { label: "Import GitHub issue", icon: "github", onPress: () => setImporting(true) },
@@ -206,12 +206,14 @@ export function RoadmapList({
             ]}
           >
             {(open, isOpen) => (
-              <IconButton
-                icon="more"
-                accessibilityLabel="More"
-                onPress={open}
-                style={{ backgroundColor: isOpen ? theme.subtleHover : "transparent" }}
-              />
+              <View className={isOpen ? "rounded-xl bg-muted" : undefined}>
+                <IconButton
+                  icon="more"
+                  accessibilityLabel="More"
+                  onPress={open}
+                  style={{ backgroundColor: "transparent" }}
+                />
+              </View>
             )}
           </Popover>
         </View>
@@ -221,19 +223,19 @@ export function RoadmapList({
         <Composer onSubmit={create} onClose={() => setComposer(null)} onCreated={onOpen} />
       ) : null}
       {error ? (
-        <Animated.View entering={reduced ? undefined : FadeIn.duration(MOTION_MS)} style={styles.error}>
+        <Animated.View entering={reduced ? undefined : FadeIn.duration(MOTION_MS)} className="px-3">
           <Notice text={error} error />
         </Animated.View>
       ) : null}
 
       {data === undefined ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.textSecondary} />
+        <View className="flex-1 items-center justify-center">
+          <Spinner label="Loading roadmap" />
         </View>
       ) : total === 0 && !composer ? (
         <EmptyRoadmap onNew={() => setComposer({ section: null })} onImport={() => setImporting(true)} />
       ) : (
-        <ScrollView contentContainerStyle={styles.list} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerClassName="px-1.5 pb-10" keyboardShouldPersistTaps="handled">
           {sections.map((section) => {
             const isCollapsed = collapsed.has(section.key);
             const rows = visibleRows(section);
@@ -242,7 +244,7 @@ export function RoadmapList({
               <Animated.View
                 key={`${groupBy}:${section.key}`}
                 layout={reduced ? undefined : LAYOUT}
-                style={styles.section}
+                className="mt-2"
               >
                 <View
                   ref={(view) => {
@@ -292,9 +294,9 @@ export function RoadmapList({
                     <Pressable
                       accessibilityRole="button"
                       onPress={() => setShowClosed(true)}
-                      style={({ pressed }) => [styles.hiddenNote, pressed && { opacity: 0.6 }]}
+                      className="px-9 py-1.5 active:opacity-60"
                     >
-                      <Text style={[styles.hiddenText, { color: theme.textSecondary }]}>
+                      <Text className="text-xs text-muted-foreground">
                         {hidden} done or dropped · Show
                       </Text>
                     </Pressable>
@@ -304,8 +306,8 @@ export function RoadmapList({
             );
           })}
           {closedCount > 0 && showClosed && groupBy !== "status" ? (
-            <Pressable accessibilityRole="button" onPress={() => setShowClosed(false)} style={styles.hiddenNote}>
-              <Text style={[styles.hiddenText, { color: theme.textSecondary }]}>Hide done and dropped</Text>
+            <Pressable accessibilityRole="button" onPress={() => setShowClosed(false)} className="px-9 py-1.5">
+              <Text className="text-xs text-muted-foreground">Hide done and dropped</Text>
             </Pressable>
           ) : null}
         </ScrollView>
@@ -325,47 +327,20 @@ export function RoadmapList({
 }
 
 function Segmented({ value, onChange }: { value: GroupBy; onChange: (next: GroupBy) => void }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
-  const [boxes, setBoxes] = useState<Partial<Record<GroupBy, { x: number; width: number }>>>({});
-  const box = boxes[value];
-  const indicator = useAnimatedStyle(() => {
-    if (!box) return { opacity: 0 };
-    const timing = { duration: reduced ? 0 : MOTION_MS, easing: EASE_OUT };
-    return { opacity: 1, left: withTiming(box.x, timing), width: withTiming(box.width, timing) };
-  }, [box, reduced]);
   return (
-    <View accessibilityRole="tablist" style={[styles.segmented, { backgroundColor: theme.subtleHover }]}>
-      <Animated.View style={[styles.indicator, { backgroundColor: theme.backgroundElement }, indicator]} />
-      {GROUPS.map((group) => (
-        <Pressable
-          key={group.id}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: value === group.id }}
-          accessibilityLabel={`Group by ${group.label}`}
-          onPress={() => onChange(group.id)}
-          onLayout={(e) => {
-            const { x, width } = e.nativeEvent.layout;
-            setBoxes((prev) => ({ ...prev, [group.id]: { x, width } }));
-          }}
-          style={styles.segment}
-        >
-          <Text
-            style={{
-              color: value === group.id ? theme.text : theme.textSecondary,
-              fontSize: 12,
-              fontWeight: value === group.id ? "600" : "500",
-            }}
-          >
+    <Tabs value={value} onValueChange={(next) => onChange(next as GroupBy)} defaultValue="category" variant="segmented">
+      <Tabs.List>
+        {GROUPS.map((group) => (
+          <Tabs.Trigger key={group.id} value={group.id}>
             {group.label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
+    </Tabs>
   );
 }
 
-function Chevron({ open, color }: { open: boolean; color: string }) {
+function Chevron({ open }: { open: boolean }) {
   const reduced = useReducedMotion();
   const style = useAnimatedStyle(
     () => ({
@@ -375,7 +350,7 @@ function Chevron({ open, color }: { open: boolean; color: string }) {
   );
   return (
     <Animated.View style={style}>
-      <SymbolView name={IconNames.chevronRight} size={11} tintColor={color} />
+      <ChevronRightIcon size={12} className="text-muted-foreground" />
     </Animated.View>
   );
 }
@@ -391,12 +366,11 @@ function SectionHeader({
   onToggle: () => void;
   onAdd: () => void;
 }) {
-  const theme = useTheme();
   const [hover, setHover] = useState(false);
   const showAdd = hover || Platform.OS !== "web";
   return (
     <View
-      style={styles.sectionHeader}
+      className="flex-row items-center pl-1.5 pr-0.5"
       {...(Platform.OS === "web" ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } : {})}
     >
       <Pressable
@@ -404,26 +378,23 @@ function SectionHeader({
         accessibilityState={{ expanded: !collapsed }}
         accessibilityLabel={`${section.label}, ${section.items.length} items`}
         onPress={onToggle}
-        style={styles.sectionToggle}
+        className="min-h-8 flex-1 flex-row items-center gap-1.5"
       >
-        <Chevron open={!collapsed} color={theme.textSecondary} />
-        <Text numberOfLines={1} style={[styles.sectionLabel, { color: theme.text }]}>
+        <Chevron open={!collapsed} />
+        <Text numberOfLines={1} className="shrink text-[13px] font-semibold text-foreground">
           {section.label}
         </Text>
-        <Text style={[styles.sectionCount, { color: theme.textSecondary }]}>{section.items.length}</Text>
-        {section.shipped ? (
-          <View style={[styles.shipped, { backgroundColor: theme.backgroundSelected }]}>
-            <Text style={{ color: theme.accent, fontSize: 10, fontWeight: "600" }}>Shipped</Text>
-          </View>
-        ) : null}
+        <Text className="text-xs tabular-nums text-muted-foreground">{section.items.length}</Text>
+        {section.shipped ? <Badge variant="info">Shipped</Badge> : null}
       </Pressable>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Add item to ${section.label}`}
         onPress={onAdd}
-        style={({ pressed }) => [styles.sectionAdd, { opacity: showAdd ? (pressed ? 0.5 : 1) : 0 }]}
+        className="h-8 w-8 items-center justify-center rounded-lg"
+        style={{ opacity: showAdd ? 1 : 0 }}
       >
-        <SymbolView name={IconNames.add} size={14} tintColor={theme.textSecondary} />
+        <PlusIcon size={14} className="text-muted-foreground" />
       </Pressable>
     </View>
   );
@@ -456,50 +427,45 @@ function ItemRow({
     ...item.tags,
   ].filter((part): part is string => !!part);
   return (
-    <Pressable
-      accessibilityRole="button"
+    <Row
       accessibilityLabel={`${item.title}, ${KIND[item.kind].label}, ${status.label}`}
       accessibilityState={{ selected }}
       onPress={onOpen}
       onLongPress={Platform.OS === "web" ? undefined : () => {}}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.row,
-        selected
-          ? { backgroundColor: theme.backgroundSelected }
-          : (pressed || hovered) && { backgroundColor: theme.subtleHover },
-      ]}
+      className={`items-start rounded-[10px] py-2 pl-2.5 pr-1 ${selected ? "bg-primary/15" : ""}`}
     >
-      <SymbolView name={IconNames[status.icon]} size={16} tintColor={statusColor(theme, item.status)} />
-      <View style={styles.rowCopy}>
-        <Text
+      <Row.Media>
+        <SymbolView name={IconNames[status.icon]} size={16} tintColor={statusColor(theme, item.status)} />
+      </Row.Media>
+      <Row.Content>
+        <Row.Title
           numberOfLines={2}
-          style={[
-            styles.rowTitle,
-            { color: closed ? theme.textSecondary : theme.text },
-            item.status === "dropped" && { textDecorationLine: "line-through" },
-          ]}
+          className={closed ? "text-muted-foreground" : undefined}
+          style={item.status === "dropped" ? { textDecorationLine: "line-through" } : undefined}
         >
           {item.title}
-        </Text>
+        </Row.Title>
         {meta.length > 0 || item.links.length > 0 ? (
-          <View style={styles.rowMeta}>
+          <View className="flex-row flex-wrap items-center gap-x-1">
             {meta.map((part, index) => (
-              <Text key={`${part}:${index}`} style={[styles.rowMetaText, { color: theme.textSecondary }]}>
+              <Text key={`${part}:${index}`} className="text-xs leading-4 tabular-nums text-muted-foreground">
                 {index > 0 ? "· " : ""}
                 {part}
               </Text>
             ))}
             {item.links.length > 0 ? (
-              <View style={styles.linkCount}>
+              <View className="ml-1 flex-row items-center gap-0.5">
                 <SymbolView name={IconNames.link} size={11} tintColor={theme.textSecondary} />
-                <Text style={[styles.rowMetaText, { color: theme.textSecondary }]}>{item.links.length}</Text>
+                <Text className="text-xs leading-4 tabular-nums text-muted-foreground">{item.links.length}</Text>
               </View>
             ) : null}
           </View>
         ) : null}
-      </View>
-      <SymbolView name={IconNames[KIND[item.kind].icon]} size={13} tintColor={kindColor(theme, item.kind)} />
-    </Pressable>
+      </Row.Content>
+      <Row.Actions>
+        <SymbolView name={IconNames[KIND[item.kind].icon]} size={13} tintColor={kindColor(theme, item.kind)} />
+      </Row.Actions>
+    </Row>
   );
 }
 
@@ -543,44 +509,43 @@ function Composer({
     <Animated.View
       entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)}
       exiting={reduced ? undefined : FadeOut.duration(120)}
-      style={[styles.composer, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}
+      className="mx-2.5 my-1.5 gap-2 rounded-xl border border-border bg-card p-2"
     >
-      <TextInput
+      <Input
         value={title}
         onChangeText={setTitle}
         autoFocus
+        variant="filled"
         placeholder={placeholder}
-        placeholderTextColor={theme.textSecondary}
         returnKeyType="done"
         submitBehavior="submit"
         onSubmitEditing={() => void submit(false)}
         onKeyPress={(e) => {
           if (e.nativeEvent.key === "Escape") onClose();
         }}
-        style={[styles.composerInput, { color: theme.text }, Platform.OS === "web" && ({ outlineStyle: "none" } as object)]}
       />
-      <View style={styles.composerBar}>
-        <View accessibilityRole="radiogroup" style={styles.kindToggle}>
+      <View className="flex-row flex-wrap items-center justify-between gap-1.5">
+        <View accessibilityRole="radiogroup" className="flex-row gap-0.5">
           {(["feature", "fix"] as RoadmapKind[]).map((k) => (
-            <Pressable
+            <Chip
               key={k}
               accessibilityRole="radio"
               accessibilityState={{ selected: kind === k }}
+              selected={kind === k}
+              size="sm"
               onPress={() => setKind(k)}
-              style={[styles.kindOption, kind === k && { backgroundColor: theme.subtleHover }]}
-            >
-              <SymbolView
-                name={IconNames[KIND[k].icon]}
-                size={12}
-                tintColor={kind === k ? kindColor(theme, k) : theme.textSecondary}
-              />
-              <Text style={{ color: kind === k ? theme.text : theme.textSecondary, fontSize: 12, fontWeight: "500" }}>
-                {KIND[k].label}
-              </Text>
-            </Pressable>
+              start={
+                <SymbolView
+                  name={IconNames[KIND[k].icon]}
+                  size={12}
+                  tintColor={kind === k ? kindColor(theme, k) : theme.textSecondary}
+                />
+              }>
+              <Chip.Label>{KIND[k].label}</Chip.Label>
+            </Chip>
           ))}
         </View>
-        <View style={styles.composerActions}>
+        <View className="flex-row items-center gap-0.5">
           <Action label="Cancel" onPress={onClose} />
           <Action label={busy ? "Adding…" : "Add"} emphasis disabled={!title.trim() || busy} onPress={() => void submit(true)} />
         </View>
@@ -590,113 +555,17 @@ function Composer({
 }
 
 function EmptyRoadmap({ onNew, onImport }: { onNew: () => void; onImport: () => void }) {
-  const theme = useTheme();
   return (
-    <View style={styles.empty}>
-      <View style={[styles.emptyMark, { backgroundColor: theme.backgroundSelected }]}>
-        <SymbolView name={IconNames.layers} size={22} tintColor={theme.accent} />
-      </View>
-      <Text style={[styles.emptyTitle, { color: theme.text }]}>Plan what's next</Text>
-      <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
-        Add the Features and Fixes you want to build. Group them by Category, then start a Session when you're ready.
-      </Text>
-      <View style={styles.emptyActions}>
-        <Action label="New item" emphasis onPress={onNew} />
-        <Action label="Import GitHub issue" onPress={onImport} />
-      </View>
-    </View>
+    <EmptyState
+      icon="layers"
+      title="Plan what's next"
+      body="Add the Features and Fixes you want to build. Group them by Category, then start a Session when you're ready."
+      action={
+        <View className="flex-row flex-wrap justify-center gap-1.5">
+          <Action label="New item" emphasis onPress={onNew} />
+          <Action label="Import GitHub issue" onPress={onImport} />
+        </View>
+      }
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 0 },
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingLeft: 12,
-    paddingRight: 6,
-    paddingVertical: 6,
-  },
-  toolbarEnd: { flexDirection: "row", alignItems: "center" },
-  segmented: { flexDirection: "row", padding: 2, borderRadius: 9, borderCurve: "continuous" },
-  indicator: {
-    position: "absolute",
-    top: 2,
-    bottom: 2,
-    borderRadius: 7,
-    borderCurve: "continuous",
-    boxShadow: "0 1px 2px rgba(0,0,0,0.18)",
-  },
-  segment: { paddingHorizontal: 10, height: 28, justifyContent: "center" },
-  error: { paddingHorizontal: 12 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  list: { paddingHorizontal: 6, paddingBottom: 40 },
-  section: { marginTop: 8 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", paddingLeft: 6, paddingRight: 2 },
-  sectionToggle: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7, minHeight: 32 },
-  sectionLabel: { fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  sectionCount: { fontSize: 12, fontVariant: ["tabular-nums"] },
-  sectionAdd: { width: 32, height: 32, alignItems: "center", justifyContent: "center", borderRadius: 8 },
-  shipped: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderCurve: "continuous" },
-  row: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    paddingVertical: 9,
-    paddingLeft: 10,
-    paddingRight: 4,
-    borderRadius: 10,
-    borderCurve: "continuous",
-  },
-  rowCopy: { flex: 1, minWidth: 0, gap: 3, marginTop: -1 },
-  rowTitle: { fontSize: 14, lineHeight: 19, fontWeight: "500" },
-  rowMeta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 4 },
-  rowMetaText: { fontSize: 12, lineHeight: 16, fontVariant: ["tabular-nums"] },
-  linkCount: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: 4 },
-  hiddenNote: { paddingHorizontal: 36, paddingVertical: 6 },
-  hiddenText: { fontSize: 12 },
-  composer: {
-    marginHorizontal: 10,
-    marginVertical: 6,
-    borderWidth: 1,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-  },
-  composerInput: { fontSize: 14, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 },
-  composerBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 6,
-    paddingBottom: 6,
-  },
-  kindToggle: { flexDirection: "row", gap: 2 },
-  kindOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    height: 30,
-    paddingHorizontal: 9,
-    borderRadius: 8,
-    borderCurve: "continuous",
-  },
-  composerActions: { flexDirection: "row", alignItems: "center", gap: 2 },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28, gap: 10 },
-  emptyMark: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  emptyTitle: { fontSize: 17, fontWeight: "600" },
-  emptyBody: { fontSize: 13, lineHeight: 19, textAlign: "center", maxWidth: 280 },
-  emptyActions: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 8 },
-});

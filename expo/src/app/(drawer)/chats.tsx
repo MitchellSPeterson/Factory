@@ -1,21 +1,16 @@
 import { useMutation, useQuery } from "@/lib/factory";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { SymbolView } from "expo-symbols";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  BackHandler,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Alert, BackHandler, Platform, ScrollView, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button } from "panelui-native/components/button";
+import { Dialog } from "panelui-native/components/dialog";
+import { Fab } from "panelui-native/components/fab";
+import { Menu } from "panelui-native/components/menu";
+import { PencilIcon, TrashIcon } from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
 import type { Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { inProjectScope } from "@/lib/project-scope";
@@ -43,14 +38,6 @@ export default function ChatsPage() {
   const [draftProject, setDraftProject] = useState<Id<"projects"> | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [lastPanel, setLastPanel] = useState<Panel | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
-  const moreRef = useRef<View>(null);
-  function openMenu() {
-    // Anchor under the ⋮ button wherever the header actually put it.
-    moreRef.current?.measureInWindow((x, y, w, h) =>
-      setMenuAnchor({ top: y + h + 4, right: Math.max(8, width - (x + w)) }),
-    );
-  }
   const [gitOpen, setGitOpen] = useState(false);
   const [closing, setClosing] = useState<{
     id: Id<"sessions">;
@@ -129,26 +116,53 @@ export default function ChatsPage() {
       : fullPanel === "files"
         ? "Files"
         : selected?.session.title ?? (creating ? "New chat" : "Chats");
+  const menuItems: MenuItem[] = [
+    ...(desktop
+      ? []
+      : ([
+          {
+            label: panel === "terminal" ? "Close terminal" : "Open terminal",
+            icon: "terminal",
+            disabled: !project,
+            onPress: () => togglePanel("terminal"),
+          },
+          {
+            label: "Open git controls",
+            icon: "git",
+            disabled: !project,
+            onPress: () => setGitOpen(true),
+          },
+        ] satisfies MenuItem[])),
+    ...(selected
+      ? [
+          {
+            label: "Delete chat",
+            icon: "trash" as const,
+            danger: true,
+            onPress: () =>
+              setClosing({ id: selected.session._id, title: selected.session.title }),
+          },
+        ]
+      : []),
+  ];
   useLayoutEffect(() => {
     navigation.setOptions({
       title: chatTitle,
       headerTitle:
         fullPanel === "terminal" || fullPanel === "files"
           ? () => (
-              <View style={styles.terminalTitle}>
+              <View className="max-w-full items-center">
                 <Text
                   numberOfLines={1}
                   ellipsizeMode="tail"
-                  style={[styles.terminalHeading, { color: theme.text }]}
-                >
+                  className="text-[17px] font-semibold text-foreground">
                   {chatTitle}
                 </Text>
                 {project?.name ? (
                   <Text
                     numberOfLines={1}
                     ellipsizeMode="tail"
-                    style={[styles.terminalSub, { color: theme.textSecondary }]}
-                  >
+                    className="mt-px text-xs text-muted-foreground">
                     {project.name}
                   </Text>
                 ) : null}
@@ -158,8 +172,11 @@ export default function ChatsPage() {
               <Text
                 numberOfLines={1}
                 ellipsizeMode="tail"
-                style={[styles.headerTitle, { color: theme.text }]}
-              >
+                className={
+                  Platform.OS === "android"
+                    ? "max-w-full shrink text-xl font-semibold text-foreground"
+                    : "max-w-full shrink text-[17px] font-semibold text-foreground"
+                }>
                 {chatTitle}
               </Text>
             ),
@@ -187,57 +204,69 @@ export default function ChatsPage() {
         : desktop
           ? () => null
           : () => <DrawerToggleButton tintColor={theme.text} />,
-      headerRight:
-        hasHeaderActions
-          ? () => (
-              <View style={styles.headerRight}>
+      headerRight: hasHeaderActions
+        ? () => (
+            <View className="mr-2 flex-row items-center gap-1">
+              <View className={panel === "files" ? "rounded-xl bg-primary/15" : undefined}>
                 <IconButton
                   icon="folder"
                   accessibilityLabel="Files"
                   disabled={!project}
                   onPress={() => togglePanel("files")}
-                  style={
-                    panel === "files"
-                      ? { backgroundColor: theme.backgroundSelected }
-                      : { backgroundColor: "transparent" }
-                  }
+                  style={{ backgroundColor: "transparent" }}
                 />
-                {desktop &&
-                  ([
-                    { id: "git", icon: "git", label: "Git" },
-                    { id: "terminal", icon: "terminal", label: "Terminal" },
-                    { id: "device", icon: "devices", label: "Device" },
-                  ] as const).map((item) => (
+              </View>
+              {desktop &&
+                ([
+                  { id: "git", icon: "git", label: "Git" },
+                  { id: "terminal", icon: "terminal", label: "Terminal" },
+                  { id: "device", icon: "devices", label: "Device" },
+                ] as const).map((item) => (
+                  <View
+                    key={item.id}
+                    className={panel === item.id ? "rounded-xl bg-primary/15" : undefined}>
                     <IconButton
-                      key={item.id}
                       icon={item.icon}
                       accessibilityLabel={item.label}
                       disabled={item.id !== "device" && !project}
                       onPress={() => togglePanel(item.id)}
-                      style={
-                        panel === item.id
-                          ? { backgroundColor: theme.backgroundSelected }
-                          : { backgroundColor: "transparent" }
-                      }
+                      style={{ backgroundColor: "transparent" }}
                     />
-                  ))}
-                {(!desktop || selected) && (
-                <View ref={moreRef} collapsable={false}>
-                  <IconButton
-                    icon="more"
-                    accessibilityLabel="More"
-                    onPress={openMenu}
-                    style={
-                      panel === "terminal" && !desktop
-                        ? { backgroundColor: theme.backgroundSelected }
-                        : { backgroundColor: "transparent" }
-                    }
-                  />
-                </View>
-                )}
-              </View>
-            )
-          : () => null,
+                  </View>
+                ))}
+              {(!desktop || selected) && (
+                <Menu>
+                  <Menu.Trigger>
+                    <IconButton
+                      icon="more"
+                      accessibilityLabel="More"
+                      onPress={() => undefined}
+                      style={{ backgroundColor: "transparent" }}
+                    />
+                  </Menu.Trigger>
+                  <Menu.Content align="end" minWidth={220}>
+                    {menuItems.map((item) => (
+                      <Menu.Item
+                        key={item.label}
+                        variant={item.danger ? "destructive" : "default"}
+                        disabled={item.disabled}
+                        icon={
+                          item.danger ? (
+                            <TrashIcon size={16} />
+                          ) : (
+                            <SymbolView name={IconNames[item.icon]} size={16} />
+                          )
+                        }
+                        onSelect={item.onPress}>
+                        {item.label}
+                      </Menu.Item>
+                    ))}
+                  </Menu.Content>
+                </Menu>
+              )}
+            </View>
+          )
+        : () => null,
     });
   }, [
     hasHeaderActions,
@@ -252,9 +281,7 @@ export default function ChatsPage() {
     selected?.session.title,
     project?.name,
     showingConversation,
-    theme.backgroundSelected,
     theme.text,
-    theme.textSecondary,
     titleMaxWidth,
     wide,
   ]);
@@ -276,58 +303,32 @@ export default function ChatsPage() {
     return () => sub.remove();
   }, [inChat, panel]);
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: theme.background },
-      ]}
-    >
+    <View className="min-h-0 flex-1 flex-row bg-background">
       {showList && (
         <View
-          style={[
-            styles.listPane,
-            {
-              width: wide ? 290 : "100%",
-              borderColor: theme.line,
-              backgroundColor: wide ? theme.sidebar : theme.background,
-              paddingBottom: insets.bottom,
-            },
-          ]}
-        >
+          className={`min-h-0 border-r border-border ${wide ? "bg-surface" : "bg-background"}`}
+          style={{ width: wide ? 290 : "100%", paddingBottom: insets.bottom }}>
           <ChatList
             selectedId={selected?.session._id}
             onOpen={open}
             onDelete={(id, title) => setClosing({ id, title })}
           />
-          <Pressable
-            accessibilityRole="button"
+          <Fab
             accessibilityLabel="New chat"
+            icon={<PencilIcon size={22} />}
+            placement="bottom-right"
+            offset={insets.bottom + 16}
             onPress={newChat}
-            style={({ pressed }) => [
-              styles.fab,
-              {
-                backgroundColor: theme.text,
-                bottom: insets.bottom + 16,
-              },
-              pressed && styles.fabPressed,
-            ]}
-          >
-            <SymbolView
-              name={IconNames.compose}
-              size={22}
-              tintColor={theme.sidebar}
-            />
-          </Pressable>
+          />
         </View>
       )}
       {(wide || showingConversation) && (
-        <View style={styles.main}>
+        <View className="min-w-0 flex-1">
           {!selected && !currentProject && (
             <ScrollView
               horizontal
-              style={styles.projects}
-              contentContainerStyle={styles.projectOptions}
-            >
+              className="max-h-16 grow-0"
+              contentContainerClassName="gap-1 p-2">
               {projects?.map((item) => (
                 <Action
                   key={item._id}
@@ -338,14 +339,8 @@ export default function ChatsPage() {
               ))}
             </ScrollView>
           )}
-          <View style={styles.work}>
-            <View
-              style={{
-                flex: 1,
-                minWidth: 0,
-                display: fullPanel && !sideBySide ? "none" : "flex",
-              }}
-            >
+          <View className="min-h-0 flex-1 flex-row">
+            <View className={fullPanel && !sideBySide ? "hidden" : "min-w-0 flex-1"}>
               <Conversation
                 key={selected?.session._id ?? `new-${projectId}`}
                 sessionId={selected?.session._id ?? null}
@@ -368,16 +363,8 @@ export default function ChatsPage() {
             ) : null}
             {!desktop && lastPanel && project && (
               <View
-                style={[
-                  styles.tools,
-                  {
-                    width: sideBySide ? 400 : "100%",
-                    flexShrink: 0,
-                    display: panel ? "flex" : "none",
-                    borderColor: theme.line,
-                  },
-                ]}
-              >
+                className={`shrink-0 border-l border-border ${panel ? "flex" : "hidden"} ${sideBySide ? "" : "w-full"}`}
+                style={sideBySide ? { width: 400 } : undefined}>
                 {lastPanel === "files" ? (
                   <FilesPanel
                     key={project._id}
@@ -401,90 +388,22 @@ export default function ChatsPage() {
       {project ? (
         <GitSheet project={project} visible={gitOpen} onClose={() => setGitOpen(false)} />
       ) : null}
-      <HeaderMenu
-        anchor={menuAnchor}
-        onClose={() => setMenuAnchor(null)}
-        items={[
-          // Desktop shows Terminal and Git as header buttons.
-          ...(desktop ? [] : ([
-          {
-            label: panel === "terminal" ? "Close terminal" : "Open terminal",
-            icon: "terminal",
-            disabled: !project,
-            onPress: () => togglePanel("terminal"),
-          },
-          {
-            label: "Open git controls",
-            icon: "git",
-            disabled: !project,
-            onPress: () => setGitOpen(true),
-          },
-          ] satisfies MenuItem[])),
-          ...(selected
-            ? [
-                {
-                  label: "Delete chat",
-                  icon: "trash" as const,
-                  danger: true,
-                  onPress: () =>
-                    setClosing({ id: selected.session._id, title: selected.session.title }),
-                },
-              ]
-            : []),
-        ]}
-      />
-      <Modal
-        visible={!!closing}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setClosing(null)}
-      >
-        <View style={styles.overlay}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss"
-            onPress={() => setClosing(null)}
-            style={StyleSheet.absoluteFill}
-          />
-          <View
-            style={[
-              styles.dialog,
-              {
-                backgroundColor: theme.backgroundElement,
-                borderColor: theme.line,
-              },
-            ]}
-          >
-            <Text style={[styles.dialogTitle, { color: theme.text }]}>
-              Delete {closing?.title}?
-            </Text>
-            <Text style={[styles.dialogBody, { color: theme.textSecondary }]}>
-              This deletes the conversation and its messages.
-            </Text>
-            <View style={styles.dialogActions}>
-              <Action label="Cancel" onPress={() => setClosing(null)} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Delete chat"
-                onPress={() => {
-                  if (closing) void deleteChat(closing.id);
-                }}
-                style={({ pressed }) => [
-                  styles.dialogDelete,
-                  pressed && {
-                    backgroundColor: theme.subtleHover,
-                    transform: [{ scale: 0.97 }],
-                  },
-                ]}
-              >
-                <Text style={{ color: theme.danger, fontSize: 13, fontWeight: "500" }}>
-                  Delete chat
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <Dialog open={!!closing} onOpenChange={(next) => { if (!next) setClosing(null); }}>
+        <Dialog.Content className="w-full max-w-[360px] gap-2">
+          <Dialog.Title>Delete {closing?.title}?</Dialog.Title>
+          <Dialog.Description>This deletes the conversation and its messages.</Dialog.Description>
+          <Dialog.Footer>
+            <Button variant="ghost" onPress={() => setClosing(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onPress={() => {
+                if (closing) void deleteChat(closing.id);
+              }}>
+              Delete chat
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
     </View>
   );
 }
@@ -497,157 +416,3 @@ type MenuItem = {
   disabled?: boolean;
   danger?: boolean;
 };
-
-/** Small anchored popover for the chat header's ⋮ button. */
-function HeaderMenu({
-  anchor,
-  items,
-  onClose,
-}: {
-  anchor: { top: number; right: number } | null;
-  items: MenuItem[];
-  onClose: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Modal
-      visible={!!anchor}
-      transparent
-      animationType="fade"
-      // Full-window modal on Android so measured window coordinates line up.
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={onClose}
-    >
-      <Pressable accessibilityLabel="Close menu" onPress={onClose} style={StyleSheet.absoluteFill} />
-      <View
-        accessibilityRole="menu"
-        style={[
-          styles.menu,
-          { top: anchor?.top ?? 0, right: anchor?.right ?? 12, backgroundColor: theme.backgroundElement, borderColor: theme.line },
-        ]}
-      >
-        {items.map((item) => (
-          <Pressable
-            key={item.label}
-            accessibilityRole="menuitem"
-            accessibilityState={{ disabled: !!item.disabled }}
-            disabled={item.disabled}
-            onPress={() => {
-              onClose();
-              item.onPress();
-            }}
-            style={({ pressed }) => [
-              styles.menuItem,
-              pressed && { backgroundColor: theme.subtleHover },
-              item.disabled && { opacity: 0.4 },
-            ]}
-          >
-            <SymbolView
-              name={IconNames[item.icon]}
-              size={18}
-              tintColor={item.danger ? theme.danger : theme.text}
-            />
-            <Text style={[styles.menuLabel, { color: item.danger ? theme.danger : theme.text }]}>
-              {item.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </Modal>
-  );
-}
-
-const styles = StyleSheet.create({
-  menu: {
-    position: "absolute",
-    minWidth: 220,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    borderWidth: StyleSheet.hairlineWidth,
-    boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
-  },
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 46,
-    paddingHorizontal: 16,
-  },
-  menuLabel: { fontSize: 16 },
-  root: { flex: 1, flexDirection: "row", minHeight: 0 },
-  listPane: { borderRightWidth: 1 },
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    padding: 16,
-  },
-  dialog: {
-    width: 360,
-    maxWidth: "100%",
-    alignSelf: "center",
-    padding: 20,
-    gap: 8,
-    borderWidth: 1,
-    borderRadius: 16,
-    borderCurve: "continuous",
-  },
-  dialogTitle: { fontSize: 17, fontWeight: "600" },
-  dialogBody: { fontSize: 13, lineHeight: 20 },
-  dialogActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "flex-end",
-    alignItems: "center",
-    marginTop: 8,
-    gap: 4,
-  },
-  dialogDelete: {
-    minHeight: 44,
-    minWidth: 44,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  main: { flex: 1, minWidth: 0 },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: Platform.select({ ios: 17, android: 20, default: 18 }),
-    fontWeight: "600",
-    flexShrink: 1,
-    maxWidth: "100%",
-  },
-  fab: {
-    position: "absolute",
-    right: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  fabPressed: { transform: [{ scale: 0.97 }] },
-  work: { flex: 1, flexDirection: "row", minHeight: 0 },
-  tools: { borderLeftWidth: 1 },
-  projects: { flexGrow: 0, maxHeight: 64 },
-  projectOptions: { padding: 8, gap: 4 },
-  terminalTitle: { alignItems: "center", maxWidth: "100%" },
-  terminalHeading: { fontSize: 17, fontWeight: "600" },
-  terminalSub: { fontSize: 12, marginTop: 1 },
-});

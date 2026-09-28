@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { View } from "react-native";
 
-import { ThemedText } from "@/components/themed-text";
-import { useTheme } from "@/hooks/use-theme";
+import { Button } from "panelui-native/components/button";
+import { Input } from "panelui-native/components/input";
+import { Text } from "panelui-native/primitives/text";
+
 import { pairFromWorker, writeWorkerPairing, type WorkerPairing } from "@/lib/pairing";
 
 export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) => void }) {
-  const theme = useTheme();
   const [workerUrl, setWorkerUrl] = useState("");
   const [token, setToken] = useState("");
   const [host, setHost] = useState("");
@@ -42,75 +43,50 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
   }
 
   return (
-    <View style={[styles.wrap, { backgroundColor: theme.sidebar }]}>
-      <ThemedText type="heading" style={styles.title}>
+    <View className="flex-1 justify-center gap-3 bg-background p-6">
+      <Text size="2xl" weight="semibold" className="mb-1">
         Connect this phone
-      </ThemedText>
-      <ThemedText themeColor="textSecondary" style={styles.copy}>
+      </Text>
+      <Text muted className="mb-2 text-base leading-6">
         On the same Wi-Fi or tailnet, type the Mac IP. Away from home, paste the tunnel URL and pairing token from Mac Settings.
-      </ThemedText>
-      <TextInput
+      </Text>
+      <Input
         accessibilityLabel="Worker URL"
         autoCapitalize="none"
         autoComplete="off"
         autoCorrect={false}
         placeholder="http://100.x.x.x:3402 or https://factory.example"
-        placeholderTextColor={theme.textSecondary}
         value={workerUrl}
         onChangeText={setWorkerUrl}
-        style={[styles.field, { color: theme.text, borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
       />
-      <TextInput
+      <Input
         accessibilityLabel="Pairing token"
         autoCapitalize="none"
         autoComplete="off"
         autoCorrect={false}
         placeholder="Pairing token"
-        placeholderTextColor={theme.textSecondary}
         value={token}
         onChangeText={setToken}
-        style={[styles.field, { color: theme.text, borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
       />
-      <Pressable accessibilityRole="button" onPress={saveUrl} style={[styles.button, { backgroundColor: theme.accent }]}>
-        <ThemedText style={styles.buttonLabel}>Use this Factory</ThemedText>
-      </Pressable>
-      <ThemedText themeColor="textSecondary" style={styles.or}>
+      <Button onPress={saveUrl}>Use this Factory</Button>
+      <Text muted className="mt-2 text-center">
         or pair by IP
-      </ThemedText>
-      <TextInput
+      </Text>
+      <Input
         accessibilityLabel="Mac IP"
         autoCapitalize="none"
         autoComplete="off"
         autoCorrect={false}
         placeholder="192.168.1.20"
-        placeholderTextColor={theme.textSecondary}
         value={host}
         onChangeText={setHost}
-        style={[styles.field, { color: theme.text, borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
       />
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        onPress={() => void pair()}
-        style={[styles.button, { backgroundColor: theme.backgroundElement, opacity: busy ? 0.6 : 1 }]}>
-        <ThemedText>Ask the Mac for its URL</ThemedText>
-      </Pressable>
+      <Button variant="secondary" loading={busy} onPress={() => void pair()}>
+        Ask the Mac for its URL
+      </Button>
       {error ? (
-        <ThemedText themeColor="danger" style={styles.error}>
-          {error}
-        </ThemedText>
+        <Text className="mt-2 text-destructive">{error}</Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 28 },
-  copy: { fontSize: 16, lineHeight: 22, marginBottom: 8 },
-  field: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 16 },
-  button: { borderRadius: 10, paddingVertical: 12, alignItems: "center" },
-  buttonLabel: { color: "#fff", fontWeight: "600" },
-  or: { textAlign: "center", marginTop: 8 },
-  error: { marginTop: 8 },
-});

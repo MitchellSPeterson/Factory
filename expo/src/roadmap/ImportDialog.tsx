@@ -1,13 +1,12 @@
 // Import a GitHub issue as a Roadmap Item. Opened from the Roadmap's ⋯ menu.
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { FadeIn, useReducedMotion, ZoomIn } from "react-native-reanimated";
+import { Button } from "panelui-native/components/button";
+import { Dialog } from "panelui-native/components/dialog";
+import { Input } from "panelui-native/components/input";
 import { useAction } from "@/lib/factory";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
-import { useTheme } from "@/hooks/use-theme";
-import { Action, Notice } from "@/chats/ui";
-import { EASE_OUT } from "./meta";
+import { Notice } from "@/chats/ui";
 
 export function ImportDialog({
   projectId,
@@ -20,8 +19,6 @@ export function ImportDialog({
   onClose: () => void;
   onImported: (id: Id<"roadmapItems">) => void;
 }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
   const importIssue = useAction(api.roadmap.importIssue);
   const [ref, setRef] = useState("");
   const [error, setError] = useState("");
@@ -48,57 +45,30 @@ export function ImportDialog({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} style={styles.overlay}>
-        <Pressable accessibilityLabel="Close" onPress={onClose} style={StyleSheet.absoluteFill} />
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <Animated.View
-            entering={reduced ? undefined : ZoomIn.duration(200).easing(EASE_OUT)}
-            accessibilityViewIsModal
-            style={[styles.dialog, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}
-          >
-            <Text style={[styles.title, { color: theme.text }]}>Import GitHub issue</Text>
-            <Text style={[styles.body, { color: theme.textSecondary }]}>
-              The issue's title, body, and labels become a Roadmap item. Checklist lines become Requirements.
-            </Text>
-            <TextInput
-              value={ref}
-              onChangeText={setRef}
-              autoFocus
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="#123, owner/repo#123, or issue URL"
-              placeholderTextColor={theme.textSecondary}
-              onSubmitEditing={() => void submit()}
-              style={[styles.input, { color: theme.text, borderColor: theme.line, backgroundColor: theme.background }]}
-            />
-            {error ? <Notice text={error} error /> : null}
-            <View style={styles.actions}>
-              <Action label="Cancel" onPress={onClose} />
-              <Action label={busy ? "Importing…" : "Import"} emphasis disabled={!ref.trim() || busy} onPress={() => void submit()} />
-            </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </Animated.View>
-    </Modal>
+    <Dialog open={visible} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Content className="w-full max-w-[420px] gap-2.5">
+        <Dialog.Title>Import GitHub issue</Dialog.Title>
+        <Dialog.Description>
+          The issue's title, body, and labels become a Roadmap item. Checklist lines become Requirements.
+        </Dialog.Description>
+        <Input
+          value={ref}
+          onChangeText={setRef}
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="#123, owner/repo#123, or issue URL"
+          onSubmitEditing={() => void submit()}
+          avoidKeyboard
+        />
+        {error ? <Notice text={error} error /> : null}
+        <Dialog.Footer>
+          <Button variant="ghost" onPress={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!ref.trim() || busy} onPress={() => void submit()}>
+            {busy ? "Importing…" : "Import"}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", padding: 16 },
-  dialog: {
-    width: 420,
-    maxWidth: "100%",
-    alignSelf: "center",
-    padding: 20,
-    gap: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    boxShadow: "0 20px 48px rgba(0,0,0,0.3)",
-  },
-  title: { fontSize: 17, fontWeight: "600" },
-  body: { fontSize: 13, lineHeight: 19 },
-  input: { height: 42, paddingHorizontal: 12, borderRadius: 10, borderCurve: "continuous", borderWidth: 1, fontSize: 14 },
-  actions: { flexDirection: "row", justifyContent: "flex-end", gap: 4, marginTop: 4 },
-});

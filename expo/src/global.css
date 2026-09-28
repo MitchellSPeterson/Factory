@@ -1,3 +1,45 @@
+@import 'tailwindcss';
+@import 'uniwind';
+@import 'panelui-native/theme.css';
+
+@source '../node_modules/panelui-native/src';
+
+/* Factory palette mapped onto PanelUI tokens (see src/constants/theme.ts). */
+@layer theme {
+  :root {
+    @variant light {
+      --color-background: #f7f7f8;
+      --color-foreground: #17171a;
+      --color-card: #ffffff;
+      --color-card-foreground: #17171a;
+      --color-muted-foreground: #6f6f78;
+      --color-border: #dedee3;
+      --color-input: #c8c8cf;
+      --color-primary: #8b7cf6;
+      --color-primary-foreground: #ffffff;
+      --color-ring: #8b7cf6;
+      --color-destructive: #f85149;
+      --color-success: #3fb950;
+      --color-surface: #f0f0f2;
+    }
+    @variant dark {
+      --color-background: #181818;
+      --color-foreground: #ffffff;
+      --color-card: #1c1c1c;
+      --color-card-foreground: #ffffff;
+      --color-muted-foreground: #8e8e8e;
+      --color-border: #2a2a2a;
+      --color-input: #3a3a3a;
+      --color-primary: #8b7cf6;
+      --color-primary-foreground: #ffffff;
+      --color-ring: #8b7cf6;
+      --color-destructive: #f85149;
+      --color-success: #3fb950;
+      --color-surface: #121212;
+    }
+  }
+}
+
 :root {
   color-scheme: light dark;
   --font-display: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;

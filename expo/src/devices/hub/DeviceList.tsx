@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, FlatList, Pressable, View } from 'react-native';
+import { Alert, FlatList, View } from 'react-native';
+import { EmptyState } from 'panelui-native/components/empty-state';
+import { Item } from 'panelui-native/components/item';
 import { ActionButton } from '@/components/action-button';
-import { useTheme } from '@/hooks/use-theme';
 import { type HubDevice, hubRequest } from './api';
 import { items, record, text } from './protocol';
 import { Choice, Field, Group, Label, Sheet, styles, options } from './controls';
@@ -10,7 +11,6 @@ export function DeviceList({ visible, onClose, devices, selected, onSelect, base
   visible: boolean; onClose: () => void; devices: HubDevice[]; selected?: string;
   onSelect: (device: HubDevice) => void; baseUrl: string; refresh: () => Promise<void>;
 }) {
-  const t = useTheme();
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -21,10 +21,15 @@ export function DeviceList({ visible, onClose, devices, selected, onSelect, base
     finally { setBusy(''); }
   }
   return <Sheet title="Devices" visible={visible} onClose={onClose} scroll={false}>
-    <View style={{ padding: 16, gap: 12 }}><ActionButton label="Add device" onPress={() => setCreating(true)} />{error ? <Label>{error}</Label> : null}</View>
-    <FlatList style={styles.sheetFill} nestedScrollEnabled keyboardShouldPersistTaps="handled" data={devices} keyExtractor={d => `${d.platform}:${d.id}`} ListEmptyComponent={<View style={{ padding: 16 }}><Label muted>No devices installed. Add a device to get started.</Label></View>} renderItem={({ item }) => <View style={[styles.option, { borderColor: t.line, backgroundColor: selected === item.id ? t.backgroundSelected : 'transparent', flexDirection: 'column' }]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Select ${item.name}`} disabled={!item.booted || !item.supported} onPress={() => { onSelect(item); onClose(); }} style={{ minHeight: 44, gap: 4 }}><Label>{item.name}</Label><Label muted>{item.version} · {item.booted ? 'Running' : 'Shut down'}{!item.supported ? ' · Unsupported' : ''}</Label></Pressable>
-      <View style={{ flexDirection: 'row', gap: 8 }}><ActionButton variant="ghost" label={busy === item.id ? 'Working…' : item.booted ? 'Shut down' : 'Boot'} disabled={!!busy || item.physical} onPress={() => void action(item, item.booted ? 'shutdown' : 'boot')} />
+    <View className="gap-3 p-4"><ActionButton label="Add device" onPress={() => setCreating(true)} />{error ? <Label>{error}</Label> : null}</View>
+    <FlatList style={styles.sheetFill} nestedScrollEnabled keyboardShouldPersistTaps="handled" data={devices} keyExtractor={d => `${d.platform}:${d.id}`} ListEmptyComponent={<EmptyState size="sm" className="px-4 py-8"><EmptyState.Title>No devices installed</EmptyState.Title><EmptyState.Description>Add a device to get started.</EmptyState.Description></EmptyState>} renderItem={({ item }) => <View className={`gap-2 border-b border-border p-2 ${selected === item.id ? 'bg-primary/15' : ''}`}>
+      <Item accessibilityLabel={`Select ${item.name}`} disabled={!item.booted || !item.supported} onPress={() => { onSelect(item); onClose(); }} className="p-2">
+        <Item.Content>
+          <Item.Title>{item.name}</Item.Title>
+          <Item.Description>{item.version} · {item.booted ? 'Running' : 'Shut down'}{!item.supported ? ' · Unsupported' : ''}</Item.Description>
+        </Item.Content>
+      </Item>
+      <View className="flex-row gap-2"><ActionButton variant="ghost" label={busy === item.id ? 'Working…' : item.booted ? 'Shut down' : 'Boot'} disabled={!!busy || item.physical} onPress={() => void action(item, item.booted ? 'shutdown' : 'boot')} />
         {!item.physical && <ActionButton variant="ghost" label="Remove" disabled={!!busy} onPress={() => Alert.alert(`Remove ${item.name}?`, 'This deletes the device and its data.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Remove', style: 'destructive', onPress: () => void action(item, 'remove') }])} />}</View>
     </View>} />
     <CreateDevice visible={creating} baseUrl={baseUrl} onClose={() => setCreating(false)} onCreated={refresh} />

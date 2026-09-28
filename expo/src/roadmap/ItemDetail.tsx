@@ -1,31 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Linking, Platform, Pressable, ScrollView, TextInput, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import Markdown from "react-native-markdown-display";
 import { useRouter } from "expo-router";
-import Animated, {
-  FadeIn,
-  FadeOut,
-  LinearTransition,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSequence,
-  withSpring,
-  withTiming,
-  ZoomIn,
-} from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, LinearTransition, useReducedMotion, ZoomIn } from "react-native-reanimated";
+import { Button } from "panelui-native/components/button";
+import { Checkbox } from "panelui-native/components/checkbox";
+import { Chip as FilterChip } from "panelui-native/components/chip";
+import { Dialog } from "panelui-native/components/dialog";
+import { Item } from "panelui-native/components/item";
+import { Progress as Bar } from "panelui-native/components/progress";
+import { Spinner } from "panelui-native/components/spinner";
+import { Textarea } from "panelui-native/components/textarea";
+import { ChevronDownIcon, ChevronRightIcon, XIcon } from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
 import { useMutation, useQuery, useAction } from "@/lib/factory";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
@@ -94,15 +82,15 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
 
   if (item === undefined) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={theme.textSecondary} />
+      <View className="flex-1 items-center justify-center">
+        <Spinner label="Loading item" />
       </View>
     );
   }
   if (item === null) {
     return (
-      <View style={styles.center}>
-        <Text style={{ color: theme.textSecondary, fontSize: 14 }}>This item was deleted.</Text>
+      <View className="flex-1 items-center justify-center">
+        <Text className="text-sm text-muted-foreground">This item was deleted.</Text>
       </View>
     );
   }
@@ -151,8 +139,8 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
   const existingBuild = (builds ?? []).find((b) => b.roadmapItemId === item._id && b.status !== "stopped");
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.topBar}>
+    <ScrollView className="flex-1" contentContainerClassName="w-full max-w-[760px] self-center px-5 pb-16 pt-3" keyboardShouldPersistTaps="handled">
+      <View className="-ml-2 flex-row items-center justify-between gap-2">
         <Popover
           align="left"
           items={(["feature", "fix"] as RoadmapKind[]).map((k) => ({
@@ -173,7 +161,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
             />
           )}
         </Popover>
-        <View style={styles.topBarEnd}>
+        <View className="flex-row items-center gap-1">
           <Action
             label="Start Session"
             emphasis
@@ -196,12 +184,14 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
             ]}
           >
             {(open, isOpen) => (
-              <IconButton
-                icon="more"
-                accessibilityLabel="Item actions"
-                onPress={open}
-                style={{ backgroundColor: isOpen ? theme.subtleHover : "transparent" }}
-              />
+              <View className={isOpen ? "rounded-xl bg-muted" : undefined}>
+                <IconButton
+                  icon="more"
+                  accessibilityLabel="Item actions"
+                  onPress={open}
+                  style={{ backgroundColor: "transparent" }}
+                />
+              </View>
             )}
           </Popover>
         </View>
@@ -216,7 +206,8 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
         multiline={!web}
         submitBehavior="blurAndSubmit"
         accessibilityLabel="Title"
-        style={[styles.title, { color: theme.text }, noOutline]}
+        className="mt-1 py-2 text-[26px] font-bold leading-[33px] tracking-tight text-foreground"
+        style={noOutline}
       />
 
       {error ? (
@@ -229,17 +220,19 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
         <Animated.View
           entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)}
           exiting={reduced ? undefined : FadeOut.duration(140)}
-          style={[styles.banner, { backgroundColor: theme.backgroundSelected }]}
+          className="mt-2"
         >
-          <SymbolView name={IconNames.done} size={18} tintColor={theme.accent} />
-          <Text style={[styles.bannerText, { color: theme.text }]}>
-            {allRequirementsDone ? "Every requirement is ticked." : "A linked pull request merged."} Mark this done?
-          </Text>
-          <Action label="Mark done" onPress={() => void patch({ status: "done" })} />
+          <View className="flex-row items-center gap-2 rounded-xl bg-primary/15 py-1 pl-3.5 pr-1">
+            <SymbolView name={IconNames.done} size={18} tintColor={theme.accent} />
+            <Text className="flex-1 text-[13px] leading-[19px] text-foreground">
+              {allRequirementsDone ? "Every requirement is ticked." : "A linked pull request merged."} Mark this done?
+            </Text>
+            <Action label="Mark done" onPress={() => void patch({ status: "done" })} />
+          </View>
         </Animated.View>
       ) : null}
 
-      <Animated.View layout={reduced ? undefined : LAYOUT} style={[styles.props, { borderColor: theme.line }]}>
+      <Animated.View layout={reduced ? undefined : LAYOUT} className="mt-3 rounded-xl border border-border px-3">
         <Property icon="inProgress" label="Status">
           <Popover
             align="left"
@@ -285,22 +278,20 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
 
       <Section title="Description">
         {editingDesc ? (
-          <TextInput
+          <Textarea
             value={desc}
             onChangeText={setDesc}
             onBlur={saveDesc}
-            multiline
             autoFocus
+            rows={5}
             placeholder="What is this, and why does it matter? Markdown works."
-            placeholderTextColor={theme.textSecondary}
-            style={[styles.descInput, { color: theme.text, borderColor: theme.lineStrong }, noOutline]}
           />
         ) : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Edit description"
             onPress={() => setEditingDesc(true)}
-            style={({ hovered }: { hovered?: boolean }) => [styles.descView, hovered && { backgroundColor: theme.subtleHover }]}
+            className="-mx-2 rounded-lg px-2 py-1.5 active:bg-muted"
           >
             {item.description.trim() ? (
               <Markdown
@@ -314,7 +305,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
                 {item.description}
               </Markdown>
             ) : (
-              <Text style={{ color: theme.textSecondary, fontSize: 15 }}>Add a description…</Text>
+              <Text className="text-[15px] text-muted-foreground">Add a description…</Text>
             )}
           </Pressable>
         )}
@@ -324,7 +315,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
         title="Requirements"
         aside={
           item.requirements.length > 0 ? (
-            <Text style={[styles.aside, { color: theme.textSecondary }]}>
+            <Text className="text-xs tabular-nums text-muted-foreground">
               {item.requirements.filter((r) => r.done).length} of {item.requirements.length}
             </Text>
           ) : null
@@ -369,21 +360,21 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
       {linkedSessions.length > 0 ? (
         <Section title="Sessions">
           {linkedSessions.map((row) => (
-            <Pressable
+            <Item
               key={row.session._id}
               accessibilityRole="link"
-              onPress={() => router.push({ pathname: "/chats", params: { session: row.session._id } })}
-              style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-                styles.listRow,
-                (pressed || hovered) && { backgroundColor: theme.subtleHover },
-              ]}
-            >
-              <SymbolView name={IconNames.sessions} size={14} tintColor={theme.textSecondary} />
-              <Text numberOfLines={1} style={[styles.listRowText, { color: theme.text }]}>
-                {row.session.title}
-              </Text>
-              <SymbolView name={IconNames.chevronRight} size={11} tintColor={theme.textSecondary} />
-            </Pressable>
+              className="-mx-2"
+              onPress={() => router.push({ pathname: "/chats", params: { session: row.session._id } })}>
+              <Item.Media>
+                <SymbolView name={IconNames.sessions} size={14} tintColor={theme.textSecondary} />
+              </Item.Media>
+              <Item.Content>
+                <Item.Title numberOfLines={1}>{row.session.title}</Item.Title>
+              </Item.Content>
+              <Item.Actions>
+                <ChevronRightIcon size={14} className="text-muted-foreground" />
+              </Item.Actions>
+            </Item>
           ))}
         </Section>
       ) : null}
@@ -420,34 +411,23 @@ function Chip({
   onPress: () => void;
   accessibilityLabel: string;
 }) {
-  const theme = useTheme();
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.chip,
-        (pressed || hovered) && { backgroundColor: theme.subtleHover },
-        { transform: [{ scale: pressed ? 0.97 : 1 }] },
-      ]}
-    >
-      <SymbolView name={IconNames[icon]} size={14} tintColor={iconColor} />
-      <Text style={{ color: theme.text, fontSize: 13, fontWeight: "500" }}>{label}</Text>
-      <SymbolView name={IconNames.chevronDown} size={10} tintColor={theme.textSecondary} />
-    </Pressable>
+    <FilterChip accessibilityLabel={accessibilityLabel} onPress={onPress} variant="outline" size="sm" start={<SymbolView name={IconNames[icon]} size={14} tintColor={iconColor} />}>
+      <FilterChip.Label>{label}</FilterChip.Label>
+      <ChevronDownIcon size={12} />
+    </FilterChip>
   );
 }
 
 function Property({ icon, label, last, children }: { icon: IconName; label: string; last?: boolean; children: ReactNode }) {
   const theme = useTheme();
   return (
-    <View style={[styles.property, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: theme.line }]}>
-      <View style={styles.propertyLabel}>
+    <View className={`min-h-11 flex-row items-start gap-3 py-1.5 ${last ? "" : "border-b border-border"}`}>
+      <View className="h-8 w-[104px] flex-row items-center gap-2">
         <SymbolView name={IconNames[icon]} size={13} tintColor={theme.textSecondary} />
-        <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{label}</Text>
+        <Text className="text-[13px] text-muted-foreground">{label}</Text>
       </View>
-      <View style={styles.propertyValue}>{children}</View>
+      <View className="min-h-8 min-w-0 flex-1 justify-center">{children}</View>
     </View>
   );
 }
@@ -484,7 +464,7 @@ function ComboField({
   }
 
   return (
-    <View style={styles.combo}>
+    <View className="flex-1">
       <TextInput
         value={editing ? draft : value}
         onFocus={() => setDraft(value)}
@@ -494,17 +474,13 @@ function ComboField({
         onSubmitEditing={() => commit(draft ?? "")}
         placeholder={placeholder}
         placeholderTextColor={theme.textSecondary}
-        style={[
-          styles.comboInput,
-          { color: theme.text, backgroundColor: editing ? theme.background : "transparent" },
-          editing && { borderColor: theme.lineStrong },
-          noOutline,
-        ]}
+        className={`h-8 rounded-lg border px-2 text-[13px] text-foreground ${editing ? "border-input bg-background" : "border-transparent"}`}
+        style={noOutline}
       />
       {editing && (matches.length > 0 || creating) ? (
         <Animated.View
           entering={reduced ? undefined : FadeIn.duration(120)}
-          style={[styles.suggestions, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
+          className="mt-1 rounded-[10px] border border-border bg-card p-1"
         >
           {matches.map((name) => (
             <Suggestion key={name} label={name} onPress={() => commit(name)} />
@@ -521,13 +497,10 @@ function Suggestion({ label, icon, onPress }: { label: string; icon?: IconName; 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.suggestion,
-        (pressed || hovered) && { backgroundColor: theme.subtleHover },
-      ]}
+      className="min-h-[34px] flex-row items-center gap-2 rounded-md px-2 active:bg-muted"
     >
       {icon ? <SymbolView name={IconNames[icon]} size={12} tintColor={theme.textSecondary} /> : null}
-      <Text numberOfLines={1} style={{ color: theme.text, fontSize: 13 }}>
+      <Text numberOfLines={1} className="text-[13px] text-foreground">
         {label}
       </Text>
     </Pressable>
@@ -549,22 +522,13 @@ function TagsField({ tags, options, onChange }: { tags: string[]; options: strin
   }
 
   return (
-    <View style={styles.combo}>
-      <View style={styles.tags}>
+    <View className="flex-1">
+      <View className="min-h-8 flex-row flex-wrap items-center gap-1.5 pl-1">
         {tags.map((tag) => (
           <Animated.View key={tag} entering={reduced ? undefined : ZoomIn.duration(140)} exiting={reduced ? undefined : FadeOut.duration(100)}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Remove tag ${tag}`}
-              onPress={() => onChange(tags.filter((t) => t !== tag))}
-              style={({ hovered }: { hovered?: boolean }) => [
-                styles.tag,
-                { backgroundColor: hovered ? theme.lineStrong : theme.line },
-              ]}
-            >
-              <Text style={{ color: theme.text, fontSize: 12 }}>{tag}</Text>
-              <SymbolView name={IconNames.close} size={9} tintColor={theme.textSecondary} />
-            </Pressable>
+            <FilterChip size="sm" onClose={() => onChange(tags.filter((t) => t !== tag))} closeLabel={`Remove tag ${tag}`}>
+              {tag}
+            </FilterChip>
           </Animated.View>
         ))}
         <TextInput
@@ -576,13 +540,14 @@ function TagsField({ tags, options, onChange }: { tags: string[]; options: strin
           submitBehavior="submit"
           placeholder={tags.length ? "Add" : "Add tag"}
           placeholderTextColor={theme.textSecondary}
-          style={[styles.tagInput, { color: theme.text }, noOutline]}
+          className="h-7 min-w-20 flex-grow px-1 text-[13px] text-foreground"
+          style={noOutline}
         />
       </View>
       {focused && matches.length > 0 ? (
         <Animated.View
           entering={reduced ? undefined : FadeIn.duration(120)}
-          style={[styles.suggestions, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
+          className="mt-1 rounded-[10px] border border-border bg-card p-1"
         >
           {matches.map((tag) => (
             <Suggestion key={tag} label={tag} onPress={() => add(tag)} />
@@ -594,12 +559,11 @@ function TagsField({ tags, options, onChange }: { tags: string[]; options: strin
 }
 
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
-  const theme = useTheme();
   const reduced = useReducedMotion();
   return (
-    <Animated.View layout={reduced ? undefined : LAYOUT} style={styles.section}>
-      <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>{title}</Text>
+    <Animated.View layout={reduced ? undefined : LAYOUT} className="mt-7 gap-1.5">
+      <View className="min-h-7 flex-row items-center justify-between">
+        <Text className="text-sm font-semibold text-foreground">{title}</Text>
         {aside}
       </View>
       {children}
@@ -608,18 +572,8 @@ function Section({ title, aside, children }: { title: string; aside?: ReactNode;
 }
 
 function Progress({ requirements }: { requirements: Requirement[] }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
   const ratio = requirements.filter((r) => r.done).length / requirements.length;
-  const fill = useAnimatedStyle(
-    () => ({ width: withTiming(`${ratio * 100}%`, { duration: reduced ? 0 : 320, easing: EASE_OUT }) }),
-    [ratio, reduced],
-  );
-  return (
-    <View style={[styles.progress, { backgroundColor: theme.line }]}>
-      <Animated.View style={[styles.progressFill, { backgroundColor: ratio === 1 ? theme.success : theme.accent }, fill]} />
-    </View>
-  );
+  return <Bar value={ratio * 100} color={ratio === 1 ? "success" : "primary"} size="sm" className="mb-1" />;
 }
 
 function Requirements({ requirements, onChange }: { requirements: Requirement[]; onChange: (next: Requirement[]) => void }) {
@@ -663,17 +617,9 @@ function RequirementRow({
   onEdit: (text: string) => void;
   onDelete: () => void;
 }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
   const [draft, setDraft] = useState<string | null>(null);
   const [hover, setHover] = useState(false);
-  const scale = useSharedValue(1);
-  const box = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  function toggle() {
-    if (!reduced) scale.value = withSequence(withTiming(0.8, { duration: 70 }), withSpring(1, { damping: 9, stiffness: 320 }));
-    onToggle();
-  }
   function save() {
     const text = (draft ?? "").trim();
     setDraft(null);
@@ -682,30 +628,10 @@ function RequirementRow({
 
   return (
     <View
-      style={[styles.reqRow, hover && { backgroundColor: theme.subtleHover }]}
+      className={`-mx-2 min-h-[38px] flex-row items-center gap-2.5 rounded-lg pl-2 ${hover ? "bg-muted" : ""}`}
       {...(web ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } : {})}
     >
-      <Pressable
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: req.done }}
-        accessibilityLabel={req.text}
-        onPress={toggle}
-        hitSlop={8}
-      >
-        <Animated.View
-          style={[
-            styles.checkbox,
-            { borderColor: req.done ? theme.accent : theme.lineStrong, backgroundColor: req.done ? theme.accent : "transparent" },
-            box,
-          ]}
-        >
-          {req.done ? (
-            <Animated.View entering={reduced ? undefined : ZoomIn.duration(160).easing(EASE_OUT)}>
-              <SymbolView name={IconNames.check} size={11} tintColor="#ffffff" />
-            </Animated.View>
-          ) : null}
-        </Animated.View>
-      </Pressable>
+      <Checkbox checked={req.done} onCheckedChange={() => onToggle()} />
       {draft !== null ? (
         <TextInput
           value={draft}
@@ -713,16 +639,13 @@ function RequirementRow({
           onBlur={save}
           onSubmitEditing={save}
           autoFocus
-          style={[styles.reqInput, { color: theme.text }, noOutline]}
+          className="h-9 flex-1 text-sm text-foreground"
+          style={noOutline}
         />
       ) : (
-        <Pressable style={styles.reqTextWrap} onPress={() => setDraft(req.text)} accessibilityHint="Edit requirement">
+        <Pressable className="flex-1 py-2" onPress={() => setDraft(req.text)} accessibilityHint="Edit requirement">
           <Text
-            style={[
-              styles.reqText,
-              { color: req.done ? theme.textSecondary : theme.text },
-              req.done && { textDecorationLine: "line-through" },
-            ]}
+            className={`text-sm leading-5 ${req.done ? "text-muted-foreground line-through" : "text-foreground"}`}
           >
             {req.text}
           </Text>
@@ -732,9 +655,10 @@ function RequirementRow({
         accessibilityRole="button"
         accessibilityLabel={`Delete ${req.text}`}
         onPress={onDelete}
-        style={[styles.rowIcon, { opacity: hover || !web ? 1 : 0 }]}
+        className="h-9 w-9 items-center justify-center"
+        style={{ opacity: hover || !web ? 1 : 0 }}
       >
-        <SymbolView name={IconNames.close} size={12} tintColor={theme.textSecondary} />
+        <XIcon size={14} className="text-muted-foreground" />
       </Pressable>
     </View>
   );
@@ -744,22 +668,21 @@ function LinkRow({ link, onRemove }: { link: GithubLink; onRemove: () => void })
   const theme = useTheme();
   const [hover, setHover] = useState(false);
   const color = linkStateColor(theme, link.state);
+  const stateClass = link.state === "merged" ? "text-primary" : link.state === "open" ? "text-success" : "text-muted-foreground";
   return (
     <View
-      style={[styles.listRow, hover && { backgroundColor: theme.subtleHover }]}
+      className={`-mx-2 min-h-11 flex-row items-center gap-2.5 rounded-lg px-2 ${hover ? "bg-muted" : ""}`}
       {...(web ? { onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) } : {})}
     >
-      <Pressable accessibilityRole="link" style={styles.linkMain} onPress={() => void Linking.openURL(link.url)}>
+      <Pressable accessibilityRole="link" className="min-w-0 flex-1 flex-row items-center gap-2.5 py-1.5" onPress={() => void Linking.openURL(link.url)}>
         <SymbolView name={link.kind === "pr" ? IconNames.pullRequest : IconNames.issue} size={14} tintColor={color} />
-        <View style={styles.linkCopy}>
-          <Text numberOfLines={1} style={[styles.listRowText, { color: theme.text }]}>
+        <View className="min-w-0 flex-1 gap-px">
+          <Text numberOfLines={1} className="text-sm text-foreground">
             {link.title ?? `${link.repo}#${link.number}`}
           </Text>
-          <Text numberOfLines={1} style={{ color: theme.textSecondary, fontSize: 12 }}>
+          <Text numberOfLines={1} className="text-xs text-muted-foreground">
             {link.repo}#{link.number}
-            {link.state ? (
-              <Text style={{ color }}> · {LINK_STATE[link.state]}</Text>
-            ) : null}
+            {link.state ? <Text className={stateClass}> · {LINK_STATE[link.state]}</Text> : null}
           </Text>
         </View>
       </Pressable>
@@ -767,9 +690,10 @@ function LinkRow({ link, onRemove }: { link: GithubLink; onRemove: () => void })
         accessibilityRole="button"
         accessibilityLabel={`Remove ${link.repo}#${link.number}`}
         onPress={onRemove}
-        style={[styles.rowIcon, { opacity: hover || !web ? 1 : 0 }]}
+        className="h-9 w-9 items-center justify-center"
+        style={{ opacity: hover || !web ? 1 : 0 }}
       >
-        <SymbolView name={IconNames.close} size={12} tintColor={theme.textSecondary} />
+        <XIcon size={14} className="text-muted-foreground" />
       </Pressable>
     </View>
   );
@@ -788,12 +712,8 @@ function GhostInput({ placeholder, onSubmit }: { placeholder: string; onSubmit: 
     setBusy(false);
   }
   return (
-    <View style={styles.ghost}>
-      {busy ? (
-        <ActivityIndicator size="small" color={theme.textSecondary} style={styles.ghostIcon} />
-      ) : (
-        <SymbolView name={IconNames.add} size={14} tintColor={theme.textSecondary} style={styles.ghostIcon} />
-      )}
+    <View className="min-h-[38px] flex-row items-center gap-2.5">
+      {busy ? <Spinner size="sm" /> : <SymbolView name={IconNames.add} size={14} tintColor={theme.textSecondary} />}
       <TextInput
         value={text}
         onChangeText={setText}
@@ -803,7 +723,8 @@ function GhostInput({ placeholder, onSubmit }: { placeholder: string; onSubmit: 
         autoCapitalize="sentences"
         placeholder={placeholder}
         placeholderTextColor={theme.textSecondary}
-        style={[styles.ghostInput, { color: theme.text }, noOutline]}
+        className="h-9 flex-1 text-sm text-foreground"
+        style={noOutline}
       />
     </View>
   );
@@ -820,195 +741,19 @@ function ConfirmDelete({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onCancel}>
-      <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} style={styles.overlay}>
-        <Pressable accessibilityLabel="Dismiss" onPress={onCancel} style={StyleSheet.absoluteFill} />
-        <Animated.View
-          entering={reduced ? undefined : ZoomIn.duration(200).easing(EASE_OUT)}
-          accessibilityViewIsModal
-          style={[styles.dialog, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}
-        >
-          <Text style={[styles.dialogTitle, { color: theme.text }]}>Delete “{title}”?</Text>
-          <Text style={[styles.dialogBody, { color: theme.textSecondary }]}>
-            This removes the item and its Requirements. Linked Sessions and GitHub issues stay.
-          </Text>
-          <View style={styles.dialogActions}>
-            <Action label="Cancel" onPress={onCancel} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Delete item"
-              onPress={onConfirm}
-              style={({ pressed }) => [styles.dialogDelete, { backgroundColor: pressed ? "#d63f38" : theme.danger }]}
-            >
-              <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "600" }}>Delete</Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-      </Animated.View>
-    </Modal>
+    <Dialog open={visible} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <Dialog.Content className="w-full max-w-[380px] gap-2">
+        <Dialog.Title>Delete “{title}”?</Dialog.Title>
+        <Dialog.Description>
+          This removes the item and its Requirements. Linked Sessions and GitHub issues stay.
+        </Dialog.Description>
+        <Dialog.Footer>
+          <Button variant="ghost" onPress={onCancel}>Cancel</Button>
+          <Button variant="destructive" onPress={onConfirm}>Delete</Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 64, maxWidth: 760, width: "100%", alignSelf: "center" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, marginLeft: -8 },
-  topBarEnd: { flexDirection: "row", alignItems: "center", gap: 4 },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    height: 32,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    alignSelf: "flex-start",
-  },
-  title: { fontSize: 26, lineHeight: 33, fontWeight: "700", letterSpacing: -0.4, paddingVertical: 8, marginTop: 4 },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingLeft: 14,
-    paddingRight: 4,
-    paddingVertical: 4,
-    marginTop: 8,
-    borderRadius: 12,
-    borderCurve: "continuous",
-  },
-  bannerText: { flex: 1, fontSize: 13, lineHeight: 19 },
-  props: {
-    marginTop: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    borderCurve: "continuous",
-    paddingHorizontal: 12,
-  },
-  property: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 6, minHeight: 44 },
-  propertyLabel: { flexDirection: "row", alignItems: "center", gap: 8, width: 104, height: 32 },
-  propertyValue: { flex: 1, minWidth: 0, justifyContent: "center", minHeight: 32 },
-  combo: { flex: 1 },
-  comboInput: {
-    height: 32,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    borderColor: "transparent",
-    fontSize: 13,
-  },
-  suggestions: {
-    marginTop: 4,
-    padding: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    borderCurve: "continuous",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.16)",
-  },
-  suggestion: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minHeight: 34,
-    paddingHorizontal: 8,
-    borderRadius: 7,
-    borderCurve: "continuous",
-  },
-  tags: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 5, minHeight: 32, paddingLeft: 4 },
-  tag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    height: 24,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    borderCurve: "continuous",
-  },
-  tagInput: { flexGrow: 1, minWidth: 80, height: 28, paddingHorizontal: 4, fontSize: 13 },
-  section: { marginTop: 28, gap: 6 },
-  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 28 },
-  sectionTitle: { fontSize: 14, fontWeight: "600" },
-  aside: { fontSize: 12, fontVariant: ["tabular-nums"] },
-  descView: { marginHorizontal: -8, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8, borderCurve: "continuous" },
-  descInput: {
-    minHeight: 120,
-    marginHorizontal: -8,
-    padding: 8,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    fontSize: 15,
-    lineHeight: 23,
-    textAlignVertical: "top",
-  },
-  progress: { height: 4, borderRadius: 2, overflow: "hidden", marginBottom: 4 },
-  progressFill: { height: 4, borderRadius: 2 },
-  reqRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 38,
-    marginHorizontal: -8,
-    paddingLeft: 8,
-    borderRadius: 8,
-    borderCurve: "continuous",
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 5,
-    borderCurve: "continuous",
-    borderWidth: 1.5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reqTextWrap: { flex: 1, paddingVertical: 8 },
-  reqText: { fontSize: 14, lineHeight: 20 },
-  reqInput: { flex: 1, fontSize: 14, height: 36 },
-  rowIcon: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  listRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 44,
-    marginHorizontal: -8,
-    paddingLeft: 8,
-    paddingRight: 8,
-    borderRadius: 8,
-    borderCurve: "continuous",
-  },
-  listRowText: { flex: 1, fontSize: 14 },
-  linkMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
-  linkCopy: { flex: 1, minWidth: 0, gap: 1 },
-  ghost: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 38 },
-  ghostIcon: { width: 18 },
-  ghostInput: { flex: 1, fontSize: 14, height: 36 },
-  overlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", padding: 16 },
-  dialog: {
-    width: 380,
-    maxWidth: "100%",
-    alignSelf: "center",
-    padding: 20,
-    gap: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    boxShadow: "0 20px 48px rgba(0,0,0,0.3)",
-  },
-  dialogTitle: { fontSize: 17, fontWeight: "600" },
-  dialogBody: { fontSize: 13, lineHeight: 20 },
-  dialogActions: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginTop: 10, gap: 6 },
-  dialogDelete: {
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
 

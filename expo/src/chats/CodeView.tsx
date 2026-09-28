@@ -1,24 +1,20 @@
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { ScrollView } from "react-native";
 
-import { Fonts } from "@/constants/theme";
-import { useTheme } from "@/hooks/use-theme";
+import { Card } from "panelui-native/components/card";
+import { Text } from "panelui-native/primitives/text";
 
-// Native fallback: no syntax highlighting lib here, just the plain selectable
-// monospace text FilesPanel used to render inline.
+// CodeBlock scrolls sideways only and its lines are not selectable, so a file
+// stays plain monospace text inside the card.
 export function CodeView({ text }: { path: string; text: string }) {
-  const theme = useTheme();
   return (
-    <ScrollView contentContainerStyle={styles.body}>
-      <ScrollView horizontal>
-        <Text selectable style={[styles.code, { color: theme.text }]}>
-          {text}
-        </Text>
+    <Card className="min-h-0 flex-1 overflow-hidden rounded-none border-0 bg-surface shadow-none">
+      <ScrollView className="min-h-0 flex-1" contentContainerClassName="p-3 pb-12">
+        <ScrollView horizontal>
+          <Text selectable className="font-mono text-xs leading-[18px] text-foreground">
+            {text}
+          </Text>
+        </ScrollView>
       </ScrollView>
-    </ScrollView>
+    </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  body: { padding: 12, paddingBottom: 48 },
-  code: { fontFamily: Fonts?.mono, fontSize: 12, lineHeight: 18 },
-});

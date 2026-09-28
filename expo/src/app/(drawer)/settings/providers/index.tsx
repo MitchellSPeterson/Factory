@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { Switch } from 'react-native';
+import { Switch } from 'panelui-native/components/switch';
 
 import { ProviderMark } from '@/chats/model-picker';
 import { api } from '@/lib/api';

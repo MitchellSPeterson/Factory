@@ -1,7 +1,7 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { PanelUIProvider } from 'panelui-native/provider';
 import { StatusBar } from 'expo-status-bar';
 
 import { Colors } from '@/constants/theme';
@@ -44,7 +44,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <PanelUIProvider>
       <AppearanceProvider>
         <FactoryProvider>
           <ProjectScopeProvider>
@@ -52,7 +52,7 @@ export default function RootLayout() {
           </ProjectScopeProvider>
         </FactoryProvider>
       </AppearanceProvider>
-    </GestureHandlerRootView>
+    </PanelUIProvider>
   );
 }
 

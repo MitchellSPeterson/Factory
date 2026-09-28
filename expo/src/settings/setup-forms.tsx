@@ -1,16 +1,17 @@
 import { useMutation } from "@/lib/factory";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { View } from "react-native";
 
-import { ThemedText } from "@/components/themed-text";
-import { useTheme } from "@/hooks/use-theme";
+import { Button } from "panelui-native/components/button";
+import { Input } from "panelui-native/components/input";
+import { Text } from "panelui-native/primitives/text";
+
 import { api } from "@/lib/api";
 import { pairingBase } from "@/lib/pairing";
 import { sealSecret, serverVariableNames } from "@/lib/workerSettings";
 import { SettingsGroup, SettingsIcons, SettingsMessage, SettingsRow } from "@/settings/ui";
 
 export function PairPhone() {
-  const theme = useTheme();
   const [status, setStatus] = useState<{ pairing: string; tailscale: string; tunnel: string; token: string }>({
     pairing: "",
     tailscale: "",
@@ -61,20 +62,19 @@ export function PairPhone() {
       />
     </SettingsGroup>
     <SettingsGroup title="Away From Home" footer="Save a public tunnel URL, then pair the phone with that URL and the token above.">
-      <View style={styles.pad}>
-        <TextInput
+      <View className="gap-2 px-4 py-3">
+        <Input
           accessibilityLabel="Public tunnel URL"
           autoCapitalize="none"
           autoComplete="off"
           autoCorrect={false}
           placeholder="https://factory.example"
-          placeholderTextColor={theme.textSecondary}
           value={tunnel}
           onChangeText={setTunnel}
-          style={[styles.field, { color: theme.text, borderColor: theme.line }]}
         />
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="ghost"
+          className="self-start px-0"
           onPress={() => {
             void (async () => {
               try {
@@ -98,9 +98,9 @@ export function PairPhone() {
               }
             })();
           }}>
-          <ThemedText style={{ color: theme.accent }}>Save public tunnel</ThemedText>
-        </Pressable>
-        {message ? <ThemedText themeColor="textSecondary">{message}</ThemedText> : null}
+          Save public tunnel
+        </Button>
+        {message ? <Text size="sm" muted>{message}</Text> : null}
       </View>
     </SettingsGroup>
     </>
@@ -123,36 +123,33 @@ export function VariableField({
   saved: boolean;
   publicKey?: string;
 }) {
-  const theme = useTheme();
   const setVariable = useMutation(api.servers.setVariable);
   const [value, setValue] = useState("");
   const [message, setMessage] = useState("");
   return (
-    <View style={styles.pad}>
-      <View style={styles.fieldHeader}>
-        <ThemedText style={styles.fieldLabel}>{label}</ThemedText>
-        <ThemedText themeColor={saved ? "success" : "textSecondary"} style={styles.fieldStatus}>
+    <View className="gap-2 px-4 py-3">
+      <View className="flex-row items-baseline justify-between">
+        <Text className="text-[15px] font-medium text-foreground">{label}</Text>
+        <Text className={saved ? "text-[13px] text-success" : "text-[13px] text-muted-foreground"}>
           {saved ? "Saved" : "Not set"}
-        </ThemedText>
+        </Text>
       </View>
-      <View style={styles.fieldRow}>
-        <TextInput
+      <View className="flex-row items-center gap-2">
+        <Input
+          containerClassName="flex-1"
           accessibilityLabel={label}
           autoCapitalize="none"
           autoComplete={secret ? "new-password" : "off"}
           autoCorrect={false}
           secureTextEntry={secret}
           placeholder={saved ? "Enter a new value to replace it" : placeholder}
-          placeholderTextColor={theme.textSecondary}
           value={value}
           onChangeText={(text) => {
             setValue(text);
             setMessage("");
           }}
-          style={[styles.field, { flex: 1, color: theme.text, borderColor: theme.line }]}
         />
-        <Pressable
-          accessibilityRole="button"
+        <Button
           accessibilityLabel={`Save ${label}`}
           disabled={!value.trim()}
           onPress={() => {
@@ -166,15 +163,11 @@ export function VariableField({
                 setMessage(error instanceof Error ? error.message : "Could not save.");
               }
             })();
-          }}
-          style={({ pressed }) => [
-            styles.save,
-            { backgroundColor: theme.accent, opacity: !value.trim() ? 0.4 : pressed ? 0.8 : 1 },
-          ]}>
-          <ThemedText style={styles.saveLabel}>Save</ThemedText>
-        </Pressable>
+          }}>
+          Save
+        </Button>
       </View>
-      {message ? <ThemedText themeColor="textSecondary" style={styles.hint}>{message}</ThemedText> : null}
+      {message ? <Text size="sm" muted>{message}</Text> : null}
     </View>
   );
 }
@@ -186,7 +179,6 @@ export function GitHubGroup({
   github: { login: string; token: string } | null | undefined;
   disconnectGithub: () => Promise<null>;
 }) {
-  const theme = useTheme();
   if (github === undefined) {
     return (
       <SettingsGroup title="GitHub">
@@ -204,23 +196,11 @@ export function GitHubGroup({
   return (
     <SettingsGroup title="GitHub" footer="Used to list and clone repositories into the Worker folder.">
       <SettingsRow icon={SettingsIcons.project} label={github.login} value="Connected" />
-      <View style={styles.pad}>
-        <Pressable accessibilityRole="button" onPress={() => void disconnectGithub()}>
-          <ThemedText style={{ color: theme.danger }}>Disconnect</ThemedText>
-        </Pressable>
+      <View className="px-4 py-3">
+        <Button variant="ghost" className="self-start px-0" labelClassName="text-destructive" onPress={() => void disconnectGithub()}>
+          Disconnect
+        </Button>
       </View>
     </SettingsGroup>
   );
 }
-
-const styles = StyleSheet.create({
-  pad: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  field: { borderWidth: 1, borderRadius: 10, borderCurve: "continuous", paddingHorizontal: 12, paddingVertical: 9, fontSize: 15 },
-  fieldHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  fieldLabel: { fontSize: 15, lineHeight: 20, fontWeight: 500 },
-  fieldStatus: { fontSize: 13, lineHeight: 18 },
-  fieldRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  save: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderCurve: "continuous" },
-  saveLabel: { color: "#ffffff", fontSize: 15, fontWeight: 600 },
-  hint: { fontSize: 13, lineHeight: 18 },
-});

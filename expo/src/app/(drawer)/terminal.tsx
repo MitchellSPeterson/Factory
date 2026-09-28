@@ -1,38 +1,33 @@
 import { useMutation, useQuery } from "@/lib/factory";
 import { Drawer } from "expo-router/drawer";
 import * as Clipboard from "expo-clipboard";
-import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { Alert } from "panelui-native/components/alert";
+import { Button } from "panelui-native/components/button";
+import { EmptyState as PanelEmpty } from "panelui-native/components/empty-state";
+import { Spinner } from "panelui-native/components/spinner";
+import { CheckCircleIcon, PlusIcon, XIcon } from "panelui-native/icons";
+
 import type { Doc, Id } from "@/lib/dataModel";
 import { api } from "@/lib/api";
 import { useProjectScope } from "@/lib/project-scope-context";
-import { useTheme } from "@/hooks/use-theme";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
-import { Action } from "@/chats/ui";
 import { ProjectSwitcher } from "@/components/project-switcher";
 import { TerminalDisplay } from "@/terminals/TerminalDisplay";
 import { readSelection, writeSelection } from "@/terminals/selection";
 
-const TERMINAL_BG = "#101113";
-
 export default function TerminalPage() {
   const { currentProject, projects } = useProjectScope();
-  const theme = useTheme();
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <View className="min-h-0 flex-1 bg-background">
       <Drawer.Screen options={{ title: "Terminal" }} />
       {!projects ? (
-        <ActivityIndicator style={styles.empty} />
+        <View className="flex-1 items-center justify-center">
+          <Spinner />
+        </View>
       ) : currentProject ? (
         <ProjectTerminals key={currentProject._id} project={currentProject} />
       ) : (
@@ -52,7 +47,6 @@ export function ProjectTerminals({
 }: {
   project: Pick<Doc<"projects">, "_id" | "name" | "localPath">;
 }) {
-  const theme = useTheme();
   const tabs = useQuery(api.terminals.list, { projectId: project._id });
   const create = useMutation(api.terminals.create);
   const close = useMutation(api.terminals.close);
@@ -94,42 +88,35 @@ export function ProjectTerminals({
       setError(e instanceof Error ? e.message : "Could not close terminal.");
     }
   }
-  if (tabs === undefined) return <ActivityIndicator style={styles.empty} />;
+  if (tabs === undefined)
+    return (
+      <View className="flex-1 items-center justify-center">
+        <Spinner />
+      </View>
+    );
   if (!tabs.length)
     return (
-      <Empty
-        icon
-        title="No terminals open"
-        body={`Open a shell in ${project.localPath}. Tabs and recent output are saved, and shells keep running while this Mac's worker is on.`}
-        error={error}
-      >
-        <Action
-          icon="add"
-          label={pending ? "Opening…" : "Open terminal"}
-          emphasis
-          disabled={pending}
-          onPress={() => void add()}
-        />
+      <Empty icon title="No terminals open" body={`Open a shell in ${project.localPath}. Tabs and recent output are saved, and shells keep running while this Mac's worker is on.`} error={error}>
+        <Button variant="primary" startContent={<PlusIcon size={16} />} disabled={pending} onPress={() => void add()}>
+          {pending ? "Opening…" : "Open terminal"}
+        </Button>
       </Empty>
     );
   return (
-    <View style={styles.root}>
-      <View style={[styles.tabs, { borderColor: theme.line }]}>
+    <View className="min-h-0 flex-1">
+      <View className="flex-row items-center gap-1 border-b border-border px-2 py-1">
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={{ flex: 1 }}
-          contentContainerStyle={styles.tabList}
+          contentContainerClassName="items-center gap-1"
         >
           {tabs.map((tab) => {
             const on = active?._id === tab._id;
             return (
               <View
                 key={tab._id}
-                style={[
-                  styles.tab,
-                  on && { backgroundColor: theme.backgroundSelected },
-                ]}
+                className={`flex-row items-center rounded-[10px] ${on ? "bg-accent" : ""}`}
               >
                 <Pressable
                   accessibilityRole="tab"
@@ -137,57 +124,37 @@ export function ProjectTerminals({
                   aria-selected={on}
                   accessibilityState={{ selected: on }}
                   onPress={() => select(tab._id)}
-                  style={[styles.tabLabel, !on && { paddingRight: 14 }]}
+                  className={`min-h-11 flex-row items-center gap-2 pl-3.5 ${on ? "" : "pr-3.5"}`}
                 >
-                  <View
-                    style={[styles.dot, { backgroundColor: stateColor(tab, theme) }]}
-                  />
+                  <View className={`h-2 w-2 rounded-full ${stateDotClass(tab)}`} />
                   <Text
                     numberOfLines={1}
-                    style={{
-                      color: on ? theme.text : theme.textSecondary,
-                      fontSize: 13,
-                      fontWeight: on ? "600" : "500",
-                      maxWidth: 160,
-                    }}
+                    className={on ? "text-[13px] font-semibold text-foreground" : "text-[13px] font-medium text-muted-foreground"}
+                    style={{ maxWidth: 160 }}
                   >
                     {tab.title}
                   </Text>
                 </Pressable>
                 {on ? (
-                  <Action
-                    icon="close"
-                    label={`Close ${tab.title}`}
-                    compact
-                    onPress={() => setClosing(tab._id)}
-                  />
+                  <Button variant="ghost" size="icon" accessibilityLabel={`Close ${tab.title}`} onPress={() => setClosing(tab._id)}>
+                    <XIcon size={14} />
+                  </Button>
                 ) : null}
               </View>
             );
           })}
         </ScrollView>
-        <Action
-          icon="add"
-          label="New terminal"
-          compact
-          disabled={pending}
-          onPress={() => void add()}
-        />
+        <Button variant="ghost" size="icon" accessibilityLabel="New terminal" disabled={pending} onPress={() => void add()}>
+          <PlusIcon size={16} />
+        </Button>
       </View>
       {error ? (
         <Banner tone="danger" text={error} onClose={() => setError("")} />
       ) : null}
       {closingTab ? (
-        <Banner
-          tone="danger"
-          text={`Close ${closingTab.title}? Anything running in it will stop.`}
-        >
-          <Action label="Cancel" onPress={() => setClosing(null)} />
-          <Action
-            label="Close"
-            emphasis
-            onPress={() => void remove(closingTab._id)}
-          />
+        <Banner tone="danger" text={`Close ${closingTab.title}? Anything running in it will stop.`}>
+          <Button variant="ghost" size="sm" onPress={() => setClosing(null)}>Cancel</Button>
+          <Button variant="destructive" size="sm" onPress={() => void remove(closingTab._id)}>Close</Button>
         </Banner>
       ) : null}
       {active ? (
@@ -197,14 +164,13 @@ export function ProjectTerminals({
   );
 }
 
-type Theme = ReturnType<typeof useTheme>;
 function live(tab: Doc<"terminals">) {
   return tab.state === "running" && tab.leaseUntil > Date.now();
 }
-function stateColor(tab: Doc<"terminals">, theme: Theme) {
-  if (live(tab)) return theme.success;
-  if (tab.state === "queued" || tab.state === "running") return theme.accent;
-  return theme.textSecondary;
+function stateDotClass(tab: Doc<"terminals">) {
+  if (live(tab)) return "bg-success";
+  if (tab.state === "queued" || tab.state === "running") return "bg-primary";
+  return "bg-muted-foreground";
 }
 function stateLabel(tab: Doc<"terminals">) {
   if (live(tab)) return "running";
@@ -237,7 +203,6 @@ function TerminalSession({
   tab: Doc<"terminals">;
   onNew: () => void;
 }) {
-  const theme = useTheme();
   const output = useQuery(api.terminals.output, { id: tab._id });
   const send = useMutation(api.terminals.input);
   const resize = useMutation(api.terminals.resize);
@@ -315,16 +280,16 @@ function TerminalSession({
   const touch = Platform.OS !== "web";
   return (
     <View
-      style={[
-        styles.root,
-        { backgroundColor: TERMINAL_BG, paddingBottom: Math.max(keyboard, insets.bottom) },
-      ]}
+      className="min-h-0 flex-1 bg-background"
+      style={{ paddingBottom: Math.max(keyboard, insets.bottom) }}
     >
       {tab.state === "queued" ? (
         <Banner tone="busy" text="Starting shell…" />
       ) : tab.state === "exited" ? (
         <Banner tone="muted" text={tab.message ?? "This shell has exited."}>
-          <Action icon="add" label="New terminal" onPress={onNew} />
+          <Button variant="secondary" size="sm" startContent={<PlusIcon size={14} />} onPress={onNew}>
+            New terminal
+          </Button>
         </Banner>
       ) : !enabled ? (
         <Banner tone="busy" text="Reconnecting to this Mac's worker…" />
@@ -344,8 +309,8 @@ function TerminalSession({
           horizontal
           keyboardShouldPersistTaps="always"
           showsHorizontalScrollIndicator={false}
-          style={[styles.keys, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}
-          contentContainerStyle={styles.keyList}
+          className="flex-grow-0 border-t border-border bg-card"
+          contentContainerClassName="gap-1.5 px-2 py-1.5"
         >
           <Key
             label="ctrl"
@@ -390,7 +355,6 @@ function Key({
   disabled?: boolean;
   onPress: () => void;
 }) {
-  const theme = useTheme();
   return (
     <Pressable
       accessibilityRole={on === undefined ? "button" : "switch"}
@@ -398,16 +362,11 @@ function Key({
       accessibilityState={{ disabled: !!disabled, checked: on }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.key,
-        {
-          backgroundColor: on ? theme.accent : pressed ? theme.backgroundSelected : theme.subtleHover,
-          borderColor: on ? theme.accent : theme.line,
-          opacity: disabled ? 0.4 : 1,
-        },
-      ]}
+      className={`h-[38px] min-w-11 items-center justify-center rounded-lg border px-2.5 active:opacity-80 ${
+        on ? "border-primary bg-primary" : "border-border bg-muted"
+      } ${disabled ? "opacity-40" : ""}`}
     >
-      <Text style={{ color: on ? "#ffffff" : theme.text, fontSize: 14, fontWeight: "600" }}>
+      <Text className={`text-sm font-semibold ${on ? "text-primary-foreground" : "text-foreground"}`}>
         {label}
       </Text>
     </Pressable>
@@ -425,35 +384,20 @@ function Banner({
   onClose?: () => void;
   children?: React.ReactNode;
 }) {
-  const theme = useTheme();
+  const variant = tone === "danger" ? "destructive" : tone === "busy" ? "info" : "default";
   return (
-    <View
-      accessibilityRole={tone === "danger" ? "alert" : undefined}
-      accessibilityLiveRegion="polite"
-      style={[styles.banner, { borderColor: theme.line, backgroundColor: theme.background }]}
-    >
-      {tone === "busy" ? (
-        <ActivityIndicator size="small" color={theme.accent} />
-      ) : (
-        <SymbolView
-          name={
-            tone === "danger"
-              ? { ios: "exclamationmark.triangle.fill", android: "warning", web: "warning" }
-              : { ios: "info.circle", android: "info", web: "info" }
-          }
-          size={16}
-          tintColor={tone === "danger" ? theme.danger : theme.textSecondary}
-        />
-      )}
-      <Text
-        selectable
-        style={{ flex: 1, color: tone === "danger" ? theme.danger : theme.text, fontSize: 14 }}
-      >
-        {text}
-      </Text>
+    <Alert variant={variant} className="rounded-none border-x-0 border-t-0">
+      {tone === "busy" ? <Spinner size="sm" /> : <Alert.Indicator />}
+      <Alert.Content className="flex-1">
+        <Alert.Description selectable>{text}</Alert.Description>
+      </Alert.Content>
       {children}
-      {onClose ? <Action icon="close" label="Dismiss" compact onPress={onClose} /> : null}
-    </View>
+      {onClose ? (
+        <Button variant="ghost" size="icon" accessibilityLabel="Dismiss" onPress={onClose}>
+          <XIcon size={16} />
+        </Button>
+      ) : null}
+    </Alert>
   );
 }
 
@@ -470,91 +414,17 @@ function Empty({
   error?: string;
   children?: React.ReactNode;
 }) {
-  const theme = useTheme();
   return (
-    <View style={styles.empty}>
+    <PanelEmpty className="max-w-[440px] flex-1 self-center px-6">
       {icon ? (
-        <View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSelected }]}>
-          <SymbolView
-            name={{ ios: "terminal", android: "terminal", web: "terminal" }}
-            size={28}
-            tintColor={theme.accent}
-          />
-        </View>
+        <PanelEmpty.Media variant="icon">
+          <CheckCircleIcon size={28} />
+        </PanelEmpty.Media>
       ) : null}
-      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-      <Text style={[styles.body, { color: theme.textSecondary }]}>{body}</Text>
-      {error ? <Text style={[styles.body, { color: theme.danger }]}>{error}</Text> : null}
-      {children}
-    </View>
+      <PanelEmpty.Title className="text-center">{title}</PanelEmpty.Title>
+      <PanelEmpty.Description className="text-center">{body}</PanelEmpty.Description>
+      {error ? <Text className="text-center text-sm leading-5 text-destructive">{error}</Text> : null}
+      {children ? <PanelEmpty.Content>{children}</PanelEmpty.Content> : null}
+    </PanelEmpty>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 0 },
-  title: { fontSize: 18, fontWeight: "600", textAlign: "center" },
-  body: { fontSize: 14, lineHeight: 20, textAlign: "center" },
-  tabs: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 4,
-  },
-  tabList: { alignItems: "center", gap: 4 },
-  tab: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 10,
-    borderCurve: "continuous",
-  },
-  tabLabel: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minHeight: 44,
-    paddingLeft: 14,
-  },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
-    paddingLeft: 16,
-    paddingRight: 8,
-    paddingVertical: 6,
-    minHeight: 48,
-    borderBottomWidth: 1,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    alignSelf: "center",
-    padding: 24,
-    maxWidth: 440,
-    gap: 12,
-  },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  keys: { flexGrow: 0, borderTopWidth: 1 },
-  keyList: { gap: 6, paddingHorizontal: 8, paddingVertical: 6 },
-  key: {
-    minWidth: 44,
-    height: 38,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

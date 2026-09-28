@@ -1,21 +1,64 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SymbolView } from "expo-symbols";
+import { ScrollView, View } from "react-native";
+import { useCSSVariable } from "uniwind";
 
-import { useTheme } from "@/hooks/use-theme";
+import { Alert } from "panelui-native/components/alert";
+import { Button } from "panelui-native/components/button";
+import { EmptyState } from "panelui-native/components/empty-state";
+import { Item } from "panelui-native/components/item";
+import { Spinner } from "panelui-native/components/spinner";
+import { ChevronLeftIcon, ChevronRightIcon, FileIcon, FolderIcon, RotateCwIcon } from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
+
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
 import { useMutation, useQuery } from "@/lib/factory";
 import { CodeView } from "./CodeView";
 import { formatBytes, parentPath } from "./files";
 
-const icons = {
-  folder: { ios: "folder.fill", android: "folder", web: "folder" },
-  file: { ios: "doc.text", android: "description", web: "description" },
-  up: { ios: "chevron.left", android: "arrow_back", web: "arrow_back" },
-  chevron: { ios: "chevron.right", android: "chevron_right", web: "chevron_right" },
-  refresh: { ios: "arrow.clockwise", android: "refresh", web: "refresh" },
-} as const;
+function FileRow({
+  name,
+  dir,
+  size,
+  folderColor,
+  fileColor,
+  onPress,
+}: {
+  name: string;
+  dir: boolean;
+  size?: number;
+  folderColor?: string;
+  fileColor?: string;
+  onPress: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <Item
+      size="sm"
+      accessibilityLabel={`${dir ? "Folder" : "File"} ${name}`}
+      onPress={onPress}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      className={`min-h-11 ${hovered ? "bg-surface" : "bg-transparent"}`}
+    >
+      <Item.Media>
+        {dir ? <FolderIcon size={18} color={folderColor} /> : <FileIcon size={18} color={fileColor} />}
+      </Item.Media>
+      <Item.Content>
+        <Item.Title numberOfLines={1} className="text-[15px] font-normal">
+          {name}
+        </Item.Title>
+      </Item.Content>
+      <Item.Actions>
+        {dir ? (
+          <ChevronRightIcon size={11} color={fileColor} />
+        ) : size !== undefined ? (
+          <Text className="text-xs tabular-nums text-muted-foreground">{formatBytes(size)}</Text>
+        ) : null}
+      </Item.Actions>
+    </Item>
+  );
+}
 
 export function FilesPanel({
   projectId,
@@ -26,7 +69,10 @@ export function FilesPanel({
   projectName: string;
   visible: boolean;
 }) {
-  const theme = useTheme();
+  const [primary, muted] = useCSSVariable(["--color-primary", "--color-muted-foreground"]) as (
+    | string
+    | undefined
+  )[];
   const rows = useQuery(api.projectOperations.list, { projectId });
   const enqueue = useMutation(api.projectOperations.enqueue);
   const [dir, setDir] = useState("");
@@ -50,7 +96,7 @@ export function FilesPanel({
   );
   const shown = matching?.find((row) => row.state === "done" || row.state === "failed");
   const loading = matching?.[0] && (matching[0].state === "queued" || matching[0].state === "running");
-  const failed = error || (shown?.state === "failed" ? shown.error ?? "Could not read files." : "");
+  const failed = error || (shown?.state === "failed" ? (shown.error ?? "Could not read files.") : "");
 
   function up() {
     if (file !== null) setFile(null);
@@ -60,79 +106,78 @@ export function FilesPanel({
   const crumbs = [projectName, ...(target ? target.split("/") : [])];
 
   return (
-    <View style={styles.root}>
-      <View style={[styles.bar, { borderBottomColor: theme.line }]}>
+    <View className="min-h-0 flex-1">
+      <View className="min-h-11 flex-row items-center gap-1.5 border-b border-border px-2.5">
         {target ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Up" hitSlop={8} onPress={up} style={styles.barButton}>
-            <SymbolView name={icons.up} size={16} tintColor={theme.text} />
-          </Pressable>
+          <Button variant="ghost" size="icon" accessibilityLabel="Up" onPress={up} className="h-8 w-8">
+            <ChevronLeftIcon size={16} />
+          </Button>
         ) : null}
-        <Text numberOfLines={1} ellipsizeMode="head" style={[styles.crumbs, { color: theme.textSecondary }]}>
+        <Text
+          numberOfLines={1}
+          ellipsizeMode="head"
+          className="flex-1 text-[13px] font-medium text-muted-foreground"
+        >
           {crumbs.join(" / ")}
         </Text>
-        {loading ? <ActivityIndicator size="small" color={theme.textSecondary} /> : null}
-        <Pressable
-          accessibilityRole="button"
+        {loading ? <Spinner size="sm" /> : null}
+        <Button
+          variant="ghost"
+          size="icon"
           accessibilityLabel="Refresh"
-          hitSlop={8}
           onPress={() => setNonce((n) => n + 1)}
-          style={styles.barButton}>
-          <SymbolView name={icons.refresh} size={15} tintColor={theme.textSecondary} />
-        </Pressable>
+          className="h-8 w-8"
+        >
+          <RotateCwIcon size={15} />
+        </Button>
       </View>
 
-      {failed ? <Text style={[styles.message, { color: theme.danger }]}>{failed}</Text> : null}
+      {failed ? (
+        <Alert variant="destructive" className="mx-3 mt-3">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>{failed}</Alert.Title>
+          </Alert.Content>
+        </Alert>
+      ) : null}
 
       {shown?.result?.kind === "files" ? (
-        <ScrollView contentContainerStyle={styles.list}>
+        <ScrollView contentContainerClassName="p-1.5 pb-12">
           {shown.result.entries.length === 0 ? (
-            <Text style={[styles.message, { color: theme.textSecondary }]}>This folder is empty.</Text>
+            <EmptyState size="sm" className="flex-none py-6">
+              <EmptyState.Description>This folder is empty.</EmptyState.Description>
+            </EmptyState>
           ) : null}
           {shown.result.entries.map((entry) => {
             const next = dir ? `${dir}/${entry.name}` : entry.name;
             return (
-              <Pressable
+              <FileRow
                 key={entry.name}
-                accessibilityRole="button"
-                accessibilityLabel={`${entry.dir ? "Folder" : "File"} ${entry.name}`}
+                name={entry.name}
+                dir={entry.dir}
+                size={entry.size}
+                folderColor={primary}
+                fileColor={muted}
                 onPress={() => (entry.dir ? setDir(next) : setFile(next))}
-                style={(state) => [
-                  styles.entry,
-                  state.pressed && { backgroundColor: theme.subtleHover },
-                  (state as { hovered?: boolean }).hovered && { backgroundColor: theme.subtleHover },
-                ]}>
-                <SymbolView
-                  name={entry.dir ? icons.folder : icons.file}
-                  size={18}
-                  tintColor={entry.dir ? theme.accent : theme.textSecondary}
-                />
-                <Text numberOfLines={1} style={[styles.name, { color: theme.text }]}>
-                  {entry.name}
-                </Text>
-                {entry.dir ? (
-                  <SymbolView name={icons.chevron} size={11} tintColor={theme.textSecondary} />
-                ) : entry.size !== undefined ? (
-                  <Text style={[styles.size, { color: theme.textSecondary }]}>{formatBytes(entry.size)}</Text>
-                ) : null}
-              </Pressable>
+              />
             );
           })}
           {shown.result.truncated ? (
-            <Text style={[styles.message, { color: theme.textSecondary }]}>
+            <Text className="p-4 text-[13px] leading-[19px] text-muted-foreground">
               Showing the first 2,000 items. Use the terminal to see the rest.
             </Text>
           ) : null}
         </ScrollView>
       ) : shown?.result?.kind === "file" ? (
         shown.result.binary ? (
-          <Text style={[styles.message, { color: theme.textSecondary }]}>
+          <Text className="p-4 text-[13px] leading-[19px] text-muted-foreground">
             Binary file · {formatBytes(shown.result.size)}. It can’t be previewed.
           </Text>
         ) : (
           // CodeView owns scrolling, so the web viewer's scrollbars stay on screen.
-          <View style={styles.root}>
+          <View className="min-h-0 flex-1">
             {shown.result.truncated ? (
-              <Text style={[styles.note, { color: theme.textSecondary }]}>
+              <Text className="px-3 py-2 text-xs text-muted-foreground">
                 Showing the first 100 KB of {formatBytes(shown.result.size)}.
               </Text>
             ) : null}
@@ -140,39 +185,10 @@ export function FilesPanel({
           </View>
         )
       ) : !failed ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.textSecondary} />
+        <View className="flex-1 items-center justify-center p-6">
+          <Spinner label="Loading files" />
         </View>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, minHeight: 0 },
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 44,
-    paddingHorizontal: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  barButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  crumbs: { flex: 1, fontSize: 13, fontWeight: "500" },
-  list: { padding: 6, paddingBottom: 48 },
-  entry: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    borderCurve: "continuous",
-  },
-  name: { flex: 1, fontSize: 15 },
-  size: { fontSize: 12, fontVariant: ["tabular-nums"] },
-  note: { fontSize: 12, paddingHorizontal: 12, paddingVertical: 8 },
-  message: { fontSize: 13, lineHeight: 19, padding: 16 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-});

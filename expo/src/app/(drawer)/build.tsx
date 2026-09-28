@@ -1,15 +1,19 @@
 import { useLayoutEffect } from "react";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { ScrollView, View, useWindowDimensions } from "react-native";
 import { SymbolView } from "expo-symbols";
 import Animated, { FadeIn, useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ChevronRightIcon } from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
 import type { Id } from "@/lib/dataModel";
 import { useProjectScope } from "@/lib/project-scope-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useDesktop } from "@/hooks/use-desktop";
+import { EmptyState } from "@/components/empty-state";
 import { IconButton, IconNames } from "@/components/icon-button";
+import { Item } from "panelui-native/components/item";
 import { ProjectPicture } from "@/components/project-picture";
 import { BuildList } from "@/build/BuildList";
 import { BuildDetail, BuildActionCard } from "@/build/BuildDetail";
@@ -49,106 +53,63 @@ export default function BuildPage() {
 
   if (scope.kind === "viewAll") {
     return (
-      <View style={[styles.root, { backgroundColor: theme.background }]}>
-        <Animated.View entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)} style={styles.pick}>
-          <View style={[styles.pickMark, { backgroundColor: theme.backgroundSelected }]}>
+      <View className="min-h-0 flex-1 flex-row bg-background">
+        <Animated.View entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)} style={{ flex: 1 }}>
+        <View className="flex-1 items-center justify-center gap-2 p-6">
+          <View className="mb-1.5 h-12 w-12 items-center justify-center rounded-[14px] bg-primary/15">
             <SymbolView name={IconNames.loop} size={22} tintColor={theme.accent} />
           </View>
-          <Text style={[styles.pickTitle, { color: theme.text }]}>Each Project has its own Builds</Text>
-          <Text style={[styles.pickBody, { color: theme.textSecondary }]}>Choose one to see what's running.</Text>
-          <ScrollView style={[styles.pickList, { borderColor: theme.line }]} contentContainerStyle={{ padding: 4 }}>
-            {projects?.map((project) => (
-              <Pressable
-                key={project._id}
-                accessibilityRole="button"
-                onPress={() => setScope({ kind: "project", projectId: project._id })}
-                style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-                  styles.pickRow,
-                  (pressed || hovered) && { backgroundColor: theme.subtleHover },
-                ]}
-              >
-                <ProjectPicture githubRepo={project.githubRepo} name={project.name} size={24} />
-                <Text numberOfLines={1} style={[styles.pickName, { color: theme.text }]}>
-                  {project.name}
-                </Text>
-                <SymbolView name={IconNames.chevronRight} size={11} tintColor={theme.textSecondary} />
-              </Pressable>
-            ))}
+          <Text className="text-center text-[17px] font-semibold text-foreground">Each Project has its own Builds</Text>
+          <Text className="text-center text-[13px] text-muted-foreground">Choose one to see what's running.</Text>
+          <ScrollView className="mt-3 max-h-[360px] w-[340] max-w-full grow-0 rounded-xl border border-border" contentContainerClassName="p-1">
+            <Item.Group>
+              {projects?.map((project) => (
+                <Item
+                  key={project._id}
+                  accessibilityRole="button"
+                  onPress={() => setScope({ kind: "project", projectId: project._id })}>
+                  <Item.Media>
+                    <ProjectPicture githubRepo={project.githubRepo} name={project.name} size={24} />
+                  </Item.Media>
+                  <Item.Content>
+                    <Item.Title numberOfLines={1}>{project.name}</Item.Title>
+                  </Item.Content>
+                  <Item.Actions>
+                    <ChevronRightIcon size={14} className="text-muted-foreground" />
+                  </Item.Actions>
+                </Item>
+              ))}
+            </Item.Group>
           </ScrollView>
+        </View>
         </Animated.View>
       </View>
     );
   }
 
-  if (!currentProject) return <View style={[styles.root, { backgroundColor: theme.background }]} />;
+  if (!currentProject) return <View className="min-h-0 flex-1 flex-row bg-background" />;
 
   return (
-    <View style={[styles.root, { backgroundColor: theme.background }]}>
+    <View className="min-h-0 flex-1 flex-row bg-background">
       {(wide || !buildId) && (
         <View
-          style={[
-            styles.listPane,
-            wide ? { width: 360, borderRightWidth: StyleSheet.hairlineWidth } : styles.fill,
-            { borderColor: theme.line, backgroundColor: wide ? theme.sidebar : theme.background, paddingBottom: insets.bottom },
-          ]}
-        >
+          className={`min-h-0 border-border ${wide ? "border-r bg-surface" : "flex-1 bg-background"}`}
+          style={[{ paddingBottom: insets.bottom }, wide ? { width: 360 } : null]}>
           <BuildList key={currentProject._id} projectId={currentProject._id} selectedId={buildId} onOpen={open} />
         </View>
       )}
       {(wide || buildId) && (
-        <View style={[styles.fill, { paddingBottom: insets.bottom }]}>
+        <View className="min-w-0 flex-1" style={{ paddingBottom: insets.bottom }}>
           {buildId ? (
-            <Animated.View key={buildId} entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)} style={styles.fill}>
+            <Animated.View key={buildId} entering={reduced ? undefined : FadeIn.duration(MOTION_MS).easing(EASE_OUT)} style={{ flex: 1, minWidth: 0 }}>
               <BuildDetail buildId={buildId} onClose={close} />
               <BuildActionCard buildId={buildId} />
             </Animated.View>
           ) : (
-            <View style={styles.noItem}>
-              <SymbolView name={IconNames.loop} size={28} tintColor={theme.lineStrong} />
-              <Text style={{ color: theme.textSecondary, fontSize: 14 }}>Select a Build to see its details.</Text>
-            </View>
+            <EmptyState title="Select a Build to see its details." body="" icon="loop" />
           )}
         </View>
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, flexDirection: "row", minHeight: 0 },
-  fill: { flex: 1, minWidth: 0 },
-  listPane: { minHeight: 0 },
-  noItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
-  pick: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 8 },
-  pickMark: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    borderCurve: "continuous",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  pickTitle: { fontSize: 17, fontWeight: "600", textAlign: "center" },
-  pickBody: { fontSize: 13, textAlign: "center" },
-  pickList: {
-    flexGrow: 0,
-    width: 340,
-    maxWidth: "100%",
-    maxHeight: 360,
-    marginTop: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 12,
-    borderCurve: "continuous",
-  },
-  pickRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderCurve: "continuous",
-  },
-  pickName: { flex: 1, fontSize: 14, fontWeight: "500" },
-});

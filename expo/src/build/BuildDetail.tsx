@@ -1,25 +1,23 @@
 // One Build: the loop visual for the active Checkpoint, the Checkpoint timeline below it, and
 // a sticky action card when it's the engineer's turn. Mirrors roadmap/ItemDetail.tsx's shell.
 import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type LayoutRectangle,
-} from "react-native";
+import { Pressable, ScrollView, View, type LayoutRectangle } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useRouter } from "expo-router";
-import Animated, { FadeIn, LinearTransition, useReducedMotion, ZoomIn } from "react-native-reanimated";
+import Animated, { FadeIn, LinearTransition, useReducedMotion } from "react-native-reanimated";
+import { useCSSVariable } from "uniwind";
+import { Badge } from "panelui-native/components/badge";
+import { Button } from "panelui-native/components/button";
+import { Chip } from "panelui-native/components/chip";
+import { Dialog } from "panelui-native/components/dialog";
+import { Input } from "panelui-native/components/input";
+import { Spinner } from "panelui-native/components/spinner";
+import { Textarea } from "panelui-native/components/textarea";
+import { XIcon } from "panelui-native/icons";
+import { Text } from "panelui-native/primitives/text";
 import { useMutation, useQuery } from "@/lib/factory";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
-import { useTheme } from "@/hooks/use-theme";
 import { Action, Notice } from "@/chats/ui";
 import { IconButton, IconNames, type IconName } from "@/components/icon-button";
 import { Popover } from "@/roadmap/Popover";
@@ -27,12 +25,32 @@ import { DragRow } from "@/roadmap/DragRow";
 import { dropTarget, type DropSection } from "@/roadmap/reorder";
 import { EASE_OUT, MOTION_MS } from "@/roadmap/meta";
 import { LoopVisual } from "@/build/LoopVisual";
-import { BUILD_STATUS_LABEL, GATE_LABEL, GATE_STATE_LABEL, LOOP_NODES, buildStatusColor, gateStateColor } from "@/build/meta";
+import { BUILD_STATUS_LABEL, GATE_LABEL, GATE_STATE_LABEL, LOOP_NODES } from "@/build/meta";
 import { GATES, type BuildEvent, type Checkpoint, type GateKey, type PlannedCheckpoint, type Step } from "../../../shared/helix";
 
 const LAYOUT = LinearTransition.duration(MOTION_MS).easing(EASE_OUT);
-const web = Platform.OS === "web";
-const noOutline = web ? ({ outlineStyle: "none" } as object) : null;
+
+function statusDot(status: string) {
+  if (status === "done") return "bg-success";
+  if (status === "paused") return "bg-destructive";
+  if (status === "stopped") return "bg-muted-foreground";
+  return "bg-primary";
+}
+
+function useInk() {
+  const [success, danger, primary, muted] = useCSSVariable([
+    "--color-success",
+    "--color-destructive",
+    "--color-primary",
+    "--color-muted-foreground",
+  ]) as (string | undefined)[];
+  return (state: string) => {
+    if (state === "pass" || state === "done") return success;
+    if (state === "fail" || state === "paused") return danger;
+    if (state === "running") return primary;
+    return muted;
+  };
+}
 
 function activeGateKey(step: Step): GateKey | null {
   if (step.kind === "check") return "behavior";
@@ -58,7 +76,6 @@ function measure(view: View | null | undefined) {
 }
 
 export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClose: () => void }) {
-  const theme = useTheme();
   const router = useRouter();
   const reduced = useReducedMotion();
   const build = useQuery(api.builds.get, { buildId });
@@ -81,15 +98,15 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
 
   if (build === undefined) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={theme.textSecondary} />
+      <View className="flex-1 items-center justify-center">
+        <Spinner label="Loading Build" />
       </View>
     );
   }
   if (build === null) {
     return (
-      <View style={styles.center}>
-        <Text style={{ color: theme.textSecondary, fontSize: 14 }}>This Build was removed.</Text>
+      <View className="flex-1 items-center justify-center">
+        <Text className="text-sm text-muted-foreground">This Build was removed.</Text>
       </View>
     );
   }
@@ -98,23 +115,23 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
   const stoppable = build.status !== "done" && build.status !== "stopped";
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.topBar}>
-        <View style={styles.titleWrap}>
-          <Text numberOfLines={2} style={[styles.title, { color: theme.text }]}>
+    <ScrollView className="flex-1" contentContainerClassName="w-full max-w-[760px] self-center px-5 pb-6 pt-3" keyboardShouldPersistTaps="handled">
+      <View className="-mr-2 flex-row items-start justify-between gap-2">
+        <View className="min-w-0 flex-1 gap-1">
+          <Text numberOfLines={2} className="text-[22px] font-bold leading-7 tracking-tight text-foreground">
             {build.title}
           </Text>
-          <View style={styles.statusRow}>
-            <View style={[styles.statusDot, { backgroundColor: buildStatusColor(theme, build.status) }]} />
-            <Text style={{ color: theme.textSecondary, fontSize: 13 }}>{BUILD_STATUS_LABEL[build.status]}</Text>
+          <View className="flex-row flex-wrap items-center gap-1.5">
+            <View className={`h-1.5 w-1.5 rounded-full ${statusDot(build.status)}`} />
+            <Text className="text-[13px] text-muted-foreground">{BUILD_STATUS_LABEL[build.status]}</Text>
             {build.checkpoints.length > 0 ? (
-              <Text style={{ color: theme.textSecondary, fontSize: 13 }}>
+              <Text className="text-[13px] text-muted-foreground">
                 {" · Checkpoint "}
                 {build.current + 1} of {build.checkpoints.length}
               </Text>
             ) : null}
             {cp && cp.attempts > 0 ? (
-              <Text style={{ color: theme.textSecondary, fontSize: 13, fontVariant: ["tabular-nums"] }}>
+              <Text className="text-[13px] tabular-nums text-muted-foreground">
                 {" · Attempt "}
                 {cp.attempts}
               </Text>
@@ -124,12 +141,14 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
         {stoppable ? (
           <Popover items={[{ label: "Stop Build", icon: "close", danger: true, onPress: () => setConfirmStop(true) }]}>
             {(open, isOpen) => (
-              <IconButton
-                icon="more"
-                accessibilityLabel="Build actions"
-                onPress={open}
-                style={{ backgroundColor: isOpen ? theme.subtleHover : "transparent" }}
-              />
+              <View className={isOpen ? "rounded-xl bg-foreground/5" : undefined}>
+                <IconButton
+                  icon="more"
+                  accessibilityLabel="Build actions"
+                  onPress={open}
+                  style={{ backgroundColor: "transparent" }}
+                />
+              </View>
             )}
           </Popover>
         ) : null}
@@ -142,18 +161,18 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
       ) : null}
 
       {build.checkpoints.length === 0 ? (
-        <View style={styles.planning}>
-          <ActivityIndicator color={theme.textSecondary} />
-          <Text style={{ color: theme.textSecondary, fontSize: 13 }}>Reading the Roadmap Item and drafting Checkpoints…</Text>
+        <View className="items-center justify-center gap-2.5 py-12">
+          <Spinner size="sm" />
+          <Text className="text-[13px] text-muted-foreground">Reading the Roadmap Item and drafting Checkpoints…</Text>
         </View>
       ) : (
         <>
-          <View style={[styles.card, { borderColor: theme.line }]}>
+          <View className="mt-4 rounded-[14px] border border-border p-4">
             <LoopVisual build={build} />
           </View>
 
-          <Animated.View layout={reduced ? undefined : LAYOUT} style={styles.timeline}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Checkpoints</Text>
+          <Animated.View layout={reduced ? undefined : LAYOUT} className="mt-6 gap-2">
+            <Text className="text-sm font-semibold text-foreground">Checkpoints</Text>
             {build.checkpoints.map((checkpoint, index) => (
               <CheckpointRow
                 key={checkpoint.id}
@@ -167,10 +186,10 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
           </Animated.View>
 
           {build.notes.length > 0 ? (
-            <View style={styles.notes}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Remembered feedback</Text>
+            <View className="mt-6 gap-1">
+              <Text className="text-sm font-semibold text-foreground">Remembered feedback</Text>
               {build.notes.map((note, i) => (
-                <Text key={i} style={[styles.note, { color: theme.textSecondary }]}>
+                <Text key={i} className="text-[13px] leading-5 text-muted-foreground">
                   • {note}
                 </Text>
               ))}
@@ -204,22 +223,22 @@ function CheckpointRow({
   sessionIds: Id<"sessions">[];
   onOpenSession: (id: Id<"sessions">) => void;
 }) {
-  const theme = useTheme();
+  const ink = useInk();
   if (!current) {
     const dimmed = checkpoint.status === "pending";
     return (
-      <View style={[styles.cpRow, dimmed && { opacity: 0.5 }]}>
+      <View className={`min-h-9 flex-row items-center gap-2.5 ${dimmed ? "opacity-50" : ""}`}>
         <SymbolView
           name={checkpoint.status === "done" ? IconNames.done : IconNames.planned}
           size={16}
-          tintColor={checkpoint.status === "done" ? theme.success : theme.textSecondary}
+          tintColor={ink(checkpoint.status === "done" ? "pass" : "waiting")}
         />
-        <Text numberOfLines={1} style={[styles.cpTitle, { color: theme.text, flex: 1 }]}>
+        <Text numberOfLines={1} className="flex-1 text-sm font-medium text-foreground">
           {checkpoint.title}
         </Text>
         {checkpoint.ui ? <UiBadge /> : null}
         {checkpoint.commit ? (
-          <Text selectable numberOfLines={1} style={[styles.commit, { color: theme.textSecondary }]}>
+          <Text selectable numberOfLines={1} className="font-mono text-xs text-muted-foreground">
             {checkpoint.commit.slice(0, 10)}
           </Text>
         ) : null}
@@ -228,14 +247,14 @@ function CheckpointRow({
   }
 
   return (
-    <View style={[styles.cpCurrent, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
-      <View style={styles.cpTitleRow}>
-        <Text style={[styles.cpTitle, { color: theme.text, flex: 1 }]}>{checkpoint.title}</Text>
+    <View className="gap-2 rounded-xl border border-border bg-card p-3">
+      <View className="flex-row items-center gap-2">
+        <Text className="flex-1 text-sm font-medium text-foreground">{checkpoint.title}</Text>
         {checkpoint.ui ? <UiBadge /> : null}
       </View>
-      {checkpoint.description ? <Text style={[styles.cpDesc, { color: theme.textSecondary }]}>{checkpoint.description}</Text> : null}
+      {checkpoint.description ? <Text className="text-[13px] leading-5 text-muted-foreground">{checkpoint.description}</Text> : null}
       {checkpoint.prototype ? (
-        <Text selectable style={[styles.commit, { color: theme.textSecondary }]}>
+        <Text selectable className="font-mono text-xs text-muted-foreground">
           {checkpoint.prototype}
         </Text>
       ) : null}
@@ -268,20 +287,17 @@ function CheckpointRow({
         );
       })}
       {checkpoint.findings ? (
-        <View style={styles.findings}>
-          <Notice text={checkpoint.findings} error={checkpoint.gates.behavior === "fail" || checkpoint.gates.review === "fail"} />
-        </View>
+        <Notice text={checkpoint.findings} error={checkpoint.gates.behavior === "fail" || checkpoint.gates.review === "fail"} />
       ) : null}
     </View>
   );
 }
 
 function UiBadge() {
-  const theme = useTheme();
   return (
-    <View style={[styles.uiBadge, { borderColor: theme.line }]}>
-      <Text style={{ color: theme.textSecondary, fontSize: 10, fontWeight: "700" }}>UI</Text>
-    </View>
+    <Badge variant="outline" className="h-[18px] px-1.5">
+      UI
+    </Badge>
   );
 }
 
@@ -296,69 +312,49 @@ function GateLine({
   state: Checkpoint["gates"][GateKey];
   onPress?: () => void;
 }) {
-  const theme = useTheme();
-  const color = gateStateColor(theme, state);
+  const ink = useInk();
+  const color = ink(state);
   const content = (
     <>
       <SymbolView name={IconNames[icon]} size={14} tintColor={color} />
-      <Text style={[styles.gateLabel, { color: theme.text }]}>{label}</Text>
-      <Text style={{ color, fontSize: 12, fontWeight: "600" }}>{GATE_STATE_LABEL[state]}</Text>
-      {onPress ? <SymbolView name={IconNames.chevronRight} size={11} tintColor={theme.textSecondary} /> : null}
+      <Text className="flex-1 text-[13px] text-foreground">{label}</Text>
+      <Text className={`text-xs font-semibold ${state === "pass" ? "text-success" : state === "fail" ? "text-destructive" : state === "running" ? "text-primary" : "text-muted-foreground"}`}>
+        {GATE_STATE_LABEL[state]}
+      </Text>
+      {onPress ? <SymbolView name={IconNames.chevronRight} size={11} tintColor={ink("waiting")} /> : null}
     </>
   );
-  if (!onPress) return <View style={styles.gateRow}>{content}</View>;
+  if (!onPress) return <View className="min-h-8 flex-row items-center gap-2 rounded-lg px-1">{content}</View>;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Open ${label} Session`}
       onPress={onPress}
-      style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [
-        styles.gateRow,
-        styles.gateRowPress,
-        (pressed || hovered) && { backgroundColor: theme.subtleHover },
-      ]}
-    >
+      className="min-h-8 flex-row items-center gap-2 rounded-lg px-1 active:bg-foreground/5">
       {content}
     </Pressable>
   );
 }
 
 function ConfirmStop({ visible, onCancel, onConfirm }: { visible: boolean; onCancel: () => void; onConfirm: () => void }) {
-  const theme = useTheme();
-  const reduced = useReducedMotion();
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onCancel}>
-      <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} style={styles.overlay}>
-        <Pressable accessibilityLabel="Dismiss" onPress={onCancel} style={StyleSheet.absoluteFill} />
-        <Animated.View
-          entering={reduced ? undefined : ZoomIn.duration(200).easing(EASE_OUT)}
-          accessibilityViewIsModal
-          style={[styles.dialog, { backgroundColor: theme.backgroundElement, borderColor: theme.line }]}
-        >
-          <Text style={[styles.dialogTitle, { color: theme.text }]}>Stop this Build?</Text>
-          <Text style={[styles.dialogBody, { color: theme.textSecondary }]}>
-            This can't be undone. The worktree and branch stay on disk; nothing more will be committed.
-          </Text>
-          <View style={styles.dialogActions}>
-            <Action label="Cancel" onPress={onCancel} />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Stop Build"
-              onPress={onConfirm}
-              style={({ pressed }) => [styles.dialogDanger, { backgroundColor: pressed ? "#d63f38" : theme.danger }]}
-            >
-              <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "600" }}>Stop</Text>
-            </Pressable>
-          </View>
-        </Animated.View>
-      </Animated.View>
-    </Modal>
+    <Dialog open={visible} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <Dialog.Content className="w-full max-w-[380px]">
+        <Dialog.Title>Stop this Build?</Dialog.Title>
+        <Dialog.Description>
+          This can&apos;t be undone. The worktree and branch stay on disk; nothing more will be committed.
+        </Dialog.Description>
+        <Dialog.Footer>
+          <Button variant="ghost" onPress={onCancel}>Cancel</Button>
+          <Button variant="destructive" onPress={onConfirm}>Stop</Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
 /** Sticky bottom card: whatever action is yours to take, or nothing while the Worker has it. */
 export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
-  const theme = useTheme();
   const build = useQuery(api.builds.get, { buildId });
   const send = useMutation(api.builds.send);
   const [error, setError] = useState("");
@@ -417,7 +413,7 @@ export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
 
   if (build.status === "paused") {
     return (
-      <View style={[styles.actionCard, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
+      <View className="w-full max-w-[760px] gap-2.5 self-center border-t border-border bg-card p-4">
         {build.error ? <Notice text={build.error} error /> : null}
         {error ? <Notice text={error} error /> : null}
         <Action label={busy ? "Resuming…" : "Resume"} emphasis disabled={busy} onPress={() => void send_({ kind: "resume" })} />
@@ -428,14 +424,14 @@ export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
 
   if (build.step.kind === "approvePlan") {
     return (
-      <View style={[styles.actionCard, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Approve the Checkpoints</Text>
+      <View className="w-full max-w-[760px] gap-2.5 self-center border-t border-border bg-card p-4">
+        <Text className="text-sm font-semibold text-foreground">Approve the Checkpoints</Text>
         {error ? <Notice text={error} error /> : null}
-        <ScrollView style={styles.planList} keyboardShouldPersistTaps="handled">
+        <ScrollView className="max-h-[280px]" keyboardShouldPersistTaps="handled">
           {draft.map((row) => (
             <DragRow
               key={row.id}
-              surface={theme.backgroundElement}
+              surface="bg-card"
               rowRef={(view) => {
                 if (view) rowRefs.current.set(row.id, view);
                 else rowRefs.current.delete(row.id);
@@ -450,7 +446,7 @@ export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
             </DragRow>
           ))}
         </ScrollView>
-        <View style={styles.planActions}>
+        <View className="mt-1 flex-row items-center justify-between">
           <Action
             icon="add"
             label="Add Checkpoint"
@@ -478,14 +474,14 @@ export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
 
   if (build.step.kind === "finalReview" && build.status === "waiting") {
     return (
-      <View style={[styles.actionCard, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
-        <Text style={[styles.sectionTitle, { color: theme.text }]}>Try the Build</Text>
-        <Text style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19 }}>
-          Every Checkpoint is committed on <Text style={{ fontFamily: "ui-monospace" }}>{build.branch}</Text>. Run it from the worktree below,
+      <View className="w-full max-w-[760px] gap-2.5 self-center border-t border-border bg-card p-4">
+        <Text className="text-sm font-semibold text-foreground">Try the Build</Text>
+        <Text className="text-[13px] leading-5 text-muted-foreground">
+          Every Checkpoint is committed on <Text className="font-mono">{build.branch}</Text>. Run it from the worktree below,
           then approve or send feedback — feedback becomes new Checkpoints that run through every Gate.
         </Text>
         {build.worktree ? (
-          <Text selectable style={[styles.worktree, { color: theme.textSecondary }]}>
+          <Text selectable className="mt-1 font-mono text-xs text-muted-foreground">
             {build.worktree}
           </Text>
         ) : null}
@@ -498,12 +494,12 @@ export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
 
   if (build.status === "done") {
     return (
-      <View style={[styles.actionCard, { borderColor: theme.line, backgroundColor: theme.backgroundElement }]}>
-        <Text style={{ color: theme.text, fontSize: 14, fontWeight: "500" }}>
-          All Checkpoints committed on <Text style={{ fontFamily: "ui-monospace" }}>{build.branch}</Text>.
+      <View className="w-full max-w-[760px] gap-2.5 self-center border-t border-border bg-card p-4">
+        <Text className="text-sm font-medium text-foreground">
+          All Checkpoints committed on <Text className="font-mono">{build.branch}</Text>.
         </Text>
         {build.worktree ? (
-          <Text selectable style={[styles.worktree, { color: theme.textSecondary }]}>
+          <Text selectable className="mt-1 font-mono text-xs text-muted-foreground">
             {build.worktree}
           </Text>
         ) : null}
@@ -525,16 +521,13 @@ function FeedbackField({
   busy: boolean;
   onSend: () => void;
 }) {
-  const theme = useTheme();
   return (
-    <View style={styles.feedbackRow}>
-      <TextInput
+    <View className="gap-2">
+      <Textarea
         value={value}
         onChangeText={onChange}
         placeholder="Feedback for the next Checkpoint…"
-        placeholderTextColor={theme.textSecondary}
-        multiline
-        style={[styles.feedbackInput, { color: theme.text, borderColor: theme.line }, noOutline]}
+        rows={3}
       />
       <Action label="Send feedback" disabled={busy || !value.trim()} onPress={onSend} />
     </View>
@@ -550,122 +543,44 @@ function PlanRow({
   onChange: (next: PlannedCheckpoint & { id: string }) => void;
   onDelete: () => void;
 }) {
-  const theme = useTheme();
   return (
-    <View style={[styles.planRow, { borderColor: theme.line }]}>
-      <View style={styles.planRowTop}>
-        <TextInput
+    <View className="my-0.5 gap-1 rounded-[10px] border border-border p-2">
+      <View className="flex-row items-center gap-1.5">
+        <Input
           value={row.title}
           onChangeText={(title) => onChange({ ...row, title })}
           placeholder="Checkpoint title"
-          placeholderTextColor={theme.textSecondary}
-          style={[styles.planTitleInput, { color: theme.text }, noOutline]}
+          containerClassName="flex-1"
+          accessibilityLabel="Checkpoint title"
         />
-        <Pressable
-          accessibilityRole="button"
+        <Chip
+          size="sm"
+          selected={row.ui}
           accessibilityLabel={row.ui ? "UI Gate on for this Checkpoint" : "UI Gate off for this Checkpoint"}
-          accessibilityState={{ selected: row.ui }}
-          onPress={() => onChange({ ...row, ui: !row.ui })}
-          style={[styles.uiToggle, { borderColor: row.ui ? theme.accent : theme.line }, row.ui && { backgroundColor: theme.accent }]}
-        >
-          <Text style={{ color: row.ui ? theme.background : theme.textSecondary, fontSize: 10, fontWeight: "700" }}>UI</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Delete Checkpoint" onPress={onDelete} style={styles.planDelete}>
-          <SymbolView name={IconNames.close} size={13} tintColor={theme.textSecondary} />
-        </Pressable>
+          onPress={() => onChange({ ...row, ui: !row.ui })}>
+          UI
+        </Chip>
+        <Button size="icon" variant="ghost" accessibilityLabel="Delete Checkpoint" onPress={onDelete}>
+          <XIcon size={14} />
+        </Button>
       </View>
-      <TextInput
+      <Textarea
         value={row.description}
         onChangeText={(description) => onChange({ ...row, description })}
         placeholder="What does this slice do?"
-        placeholderTextColor={theme.textSecondary}
-        multiline
-        style={[styles.planDescInput, { color: theme.textSecondary }, noOutline]}
+        rows={2}
       />
-      <TextInput
+      <Textarea
         value={row.tests}
         onChangeText={(tests) => onChange({ ...row, tests })}
         placeholder="Test plan"
-        placeholderTextColor={theme.textSecondary}
-        multiline
-        style={[styles.planDescInput, { color: theme.textSecondary }, noOutline]}
+        rows={2}
       />
       {row.prototype ? (
-        <Text selectable numberOfLines={1} style={[styles.commit, { color: theme.textSecondary }]}>
+        <Text selectable numberOfLines={1} className="font-mono text-xs text-muted-foreground">
           {row.prototype}
         </Text>
       ) : null}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24, maxWidth: 760, width: "100%", alignSelf: "center" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  topBar: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginRight: -8 },
-  titleWrap: { flex: 1, gap: 4, minWidth: 0 },
-  title: { fontSize: 22, lineHeight: 28, fontWeight: "700", letterSpacing: -0.3 },
-  statusRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6 },
-  statusDot: { width: 7, height: 7, borderRadius: 3.5 },
-  planning: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 48 },
-  card: { marginTop: 16, borderWidth: StyleSheet.hairlineWidth, borderRadius: 14, borderCurve: "continuous", padding: 16 },
-  timeline: { marginTop: 24, gap: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: "600" },
-  cpRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 36 },
-  cpTitle: { fontSize: 14, fontWeight: "500" },
-  cpDesc: { fontSize: 13, lineHeight: 19, marginTop: 2 },
-  commit: { fontFamily: "ui-monospace", fontSize: 12 },
-  cpCurrent: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, borderCurve: "continuous", padding: 12, gap: 8 },
-  cpTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  uiBadge: { height: 18, paddingHorizontal: 6, borderRadius: 5, borderCurve: "continuous", borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
-  gateRow: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 32, paddingHorizontal: 4, borderRadius: 8, borderCurve: "continuous" },
-  gateRowPress: { marginHorizontal: -4 },
-  gateLabel: { flex: 1, fontSize: 13 },
-  findings: { marginTop: 2 },
-  notes: { marginTop: 24, gap: 4 },
-  note: { fontSize: 13, lineHeight: 19 },
-  overlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.5)", justifyContent: "center", padding: 16 },
-  dialog: {
-    width: 380,
-    maxWidth: "100%",
-    alignSelf: "center",
-    padding: 20,
-    gap: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    borderCurve: "continuous",
-    boxShadow: "0 20px 48px rgba(0,0,0,0.3)",
-  },
-  dialogTitle: { fontSize: 17, fontWeight: "600" },
-  dialogBody: { fontSize: 13, lineHeight: 20 },
-  dialogActions: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", marginTop: 10, gap: 6 },
-  dialogDanger: { minHeight: 40, paddingHorizontal: 16, borderRadius: 10, borderCurve: "continuous", alignItems: "center", justifyContent: "center" },
-  actionCard: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    gap: 10,
-    maxWidth: 760,
-    width: "100%",
-    alignSelf: "center",
-  },
-  feedbackRow: { gap: 8 },
-  feedbackInput: {
-    minHeight: 60,
-    padding: 10,
-    borderRadius: 10,
-    borderCurve: "continuous",
-    borderWidth: 1,
-    fontSize: 13,
-    textAlignVertical: "top",
-  },
-  worktree: { fontFamily: "ui-monospace", fontSize: 12, marginTop: 4 },
-  planList: { maxHeight: 280 },
-  planActions: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 },
-  planRow: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, borderCurve: "continuous", padding: 8, marginVertical: 3, gap: 4 },
-  planRowTop: { flexDirection: "row", alignItems: "center", gap: 6 },
-  planTitleInput: { flex: 1, fontSize: 14, fontWeight: "500", height: 32 },
-  planDelete: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
-  uiToggle: { height: 22, minWidth: 30, paddingHorizontal: 7, borderRadius: 6, borderCurve: "continuous", borderWidth: StyleSheet.hairlineWidth, alignItems: "center", justifyContent: "center" },
-  planDescInput: { fontSize: 12, lineHeight: 17, minHeight: 32 },
-});

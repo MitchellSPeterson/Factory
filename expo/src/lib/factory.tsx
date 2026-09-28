@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { Platform, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
-import { useTheme } from "@/hooks/use-theme";
 import { PairingScreen } from "@/settings/pairing-screen";
 import { pairLocalWorker, readWorkerPairing, writeWorkerPairing, type WorkerPairing } from "@/lib/pairing";
 import type { ApiFn } from "../../../shared/mailboxApi";
@@ -59,9 +58,8 @@ function subscribe(client: FactoryClient, onTick: () => void) {
 }
 
 function LookingForWorker({ detail }: { detail: string }) {
-  const theme = useTheme();
   return (
-    <View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: theme.sidebar }}>
+    <View className="flex-1 justify-center bg-surface p-6">
       <ThemedText type="heading" style={{ fontSize: 28 }}>
         Looking for Factory on this Mac
       </ThemedText>

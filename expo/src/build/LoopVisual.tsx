@@ -1,8 +1,7 @@
-// The Helix Loop, drawn from Views (no react-native-svg dependency in this app):
-// Tests → Implement → Behavior → UI → Review → Commit, with a return arc that lights up
-// from whichever Gate just failed back to Implement.
+// The Helix Loop: Tests → Implement → Behavior → UI → Review → Commit,
+// with a return arc from the Gate that just failed back to Implement.
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import Animated, {
   Easing,
@@ -12,70 +11,97 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import { useTheme } from "@/hooks/use-theme";
+import { useCSSVariable } from "uniwind";
 import { IconNames, type IconName } from "@/components/icon-button";
 import type { BuildFields, GateState } from "../../../shared/helix";
-import { LOOP_NODES, gateStateColor, loopNodeState, reworkOrigin, type LoopNodeKey } from "./meta";
+import { LOOP_NODES, loopNodeState, reworkOrigin, type LoopNodeKey } from "./meta";
 
-// Center-x fraction of a node in the row, derived from its position among LOOP_NODES.
 const nodeX = (key: LoopNodeKey) => (LOOP_NODES.findIndex((n) => n.key === key) + 0.5) / LOOP_NODES.length;
+
+function usePalette() {
+  const [success, danger, primary, muted, foreground, line, lineStrong, background] = useCSSVariable([
+    "--color-success",
+    "--color-destructive",
+    "--color-primary",
+    "--color-muted-foreground",
+    "--color-foreground",
+    "--color-border",
+    "--color-input",
+    "--color-background",
+  ]) as (string | undefined)[];
+  return { success, danger, primary, muted, foreground, line, lineStrong, background };
+}
+
+function stateColor(palette: ReturnType<typeof usePalette>, state: GateState) {
+  if (state === "pass") return palette.success;
+  if (state === "fail") return palette.danger;
+  if (state === "running") return palette.primary;
+  return palette.muted;
+}
 
 export function LoopVisual({
   build,
 }: {
   build: Pick<BuildFields, "step" | "status" | "checkpoints" | "current" | "checkCommand">;
 }) {
-  const theme = useTheme();
+  const palette = usePalette();
   const [rowWidth, setRowWidth] = useState(0);
   const origin = reworkOrigin(build);
 
   return (
-    <View style={styles.root}>
-      <View style={styles.row} onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
+    <View className="pb-3.5 pt-1">
+      <View className="flex-row items-start" onLayout={(e) => setRowWidth(e.nativeEvent.layout.width)}>
         {rowWidth > 0 && origin ? (
-          <ReturnArc theme={theme} width={rowWidth} fromX={nodeX(origin)} toX={nodeX("implement")} />
+          <ReturnArc width={rowWidth} fromX={nodeX(origin)} toX={nodeX("implement")} color={palette.danger} />
         ) : null}
-        {LOOP_NODES.map((node, i) => (
-          <View key={node.key} style={styles.slot}>
-            <Node node={node} state={loopNodeState(build, node.key)} />
-            {i < LOOP_NODES.length - 1 ? (
-              <View
-                style={[
-                  styles.connector,
-                  { backgroundColor: connectorColor(theme, loopNodeState(build, node.key)) },
-                ]}
-              />
-            ) : null}
-          </View>
-        ))}
+        {LOOP_NODES.map((node, i) => {
+          const state = loopNodeState(build, node.key);
+          const passed = state === "pass" || state === "skipped";
+          return (
+            <View key={node.key} className="flex-1 flex-row items-start">
+              <Node node={node} state={state} />
+              {i < LOOP_NODES.length - 1 ? (
+                <View
+                  className="mt-[19px] h-0.5 flex-1"
+                  style={{ backgroundColor: passed ? palette.lineStrong : palette.line }}
+                />
+              ) : null}
+            </View>
+          );
+        })}
       </View>
     </View>
   );
 }
 
-function connectorColor(theme: ReturnType<typeof useTheme>, before: GateState) {
-  return before === "pass" || before === "skipped" ? theme.lineStrong : theme.line;
-}
-
 function ReturnArc({
-  theme,
   width,
   fromX,
   toX,
+  color,
 }: {
-  theme: ReturnType<typeof useTheme>;
   width: number;
   fromX: number;
   toX: number;
+  color?: string;
 }) {
   const left = toX * width;
   const right = fromX * width;
   return (
-    <View pointerEvents="none" style={[styles.arc, { left, width: right - left, borderColor: theme.danger }]}>
+    <View
+      pointerEvents="none"
+      className="absolute top-[54px] h-2.5 border-b-2 border-l-2 border-r-2"
+      style={{
+        left,
+        width: right - left,
+        borderColor: color,
+        borderBottomLeftRadius: 6,
+        borderBottomRightRadius: 6,
+      }}>
       <SymbolView
         name={IconNames.chevronRight}
         size={10}
-        tintColor={theme.danger}
+        tintColor={color}
         style={{ transform: [{ scaleX: -1 }], position: "absolute", left: -5, bottom: -6 }}
       />
     </View>
@@ -83,7 +109,7 @@ function ReturnArc({
 }
 
 function Node({ node, state }: { node: { key: LoopNodeKey; label: string; icon: IconName }; state: GateState }) {
-  const theme = useTheme();
+  const palette = usePalette();
   const reduced = useReducedMotion();
   const pulse = useSharedValue(1);
   const running = state === "running";
@@ -97,56 +123,21 @@ function Node({ node, state }: { node: { key: LoopNodeKey; label: string; icon: 
   }, [running, reduced, pulse]);
 
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
-  const color = gateStateColor(theme, state);
+  const color = stateColor(palette, state);
+  const filled = state === "pass" || state === "running";
 
   return (
-    <View style={styles.node}>
+    <View className="w-14 items-center gap-1.5">
       <Animated.View
-        style={[
-          styles.circle,
-          {
-            borderColor: color,
-            backgroundColor: state === "pass" || state === "running" ? color : "transparent",
-          },
-          running && pulseStyle,
-        ]}
-      >
-        <SymbolView
-          name={IconNames[node.icon]}
-          size={16}
-          tintColor={state === "pass" || state === "running" ? theme.background : color}
-        />
+        className="h-10 w-10 items-center justify-center rounded-full border-2"
+        style={[{ borderColor: color, backgroundColor: filled ? color : "transparent" }, running && pulseStyle]}>
+        <SymbolView name={IconNames[node.icon]} size={16} tintColor={filled ? palette.background : color} />
       </Animated.View>
-      <Text numberOfLines={1} style={[styles.label, { color: state === "waiting" ? theme.textSecondary : theme.text }]}>
+      <Text
+        numberOfLines={1}
+        className={`text-center text-[10px] font-semibold ${state === "waiting" ? "text-muted-foreground" : "text-foreground"}`}>
         {node.label}
       </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { paddingTop: 4, paddingBottom: 14 },
-  row: { flexDirection: "row", alignItems: "flex-start" },
-  slot: { flex: 1, flexDirection: "row", alignItems: "flex-start" },
-  node: { alignItems: "center", gap: 6, width: 56 },
-  circle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  label: { fontSize: 10, fontWeight: "600", textAlign: "center" },
-  connector: { flex: 1, height: 2, marginTop: 19 },
-  arc: {
-    position: "absolute",
-    top: 54,
-    height: 10,
-    borderLeftWidth: 2,
-    borderRightWidth: 2,
-    borderBottomWidth: 2,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
-  },
-});

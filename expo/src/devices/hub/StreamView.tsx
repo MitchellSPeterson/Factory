@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { useTheme } from '@/hooks/use-theme';
 import renderer from './renderer.generated.json';
 import { record, parseMessage, type HubMessage, type StreamSelection } from './protocol';
 
@@ -12,7 +11,6 @@ export function StreamView({ baseUrl, selection, onState, onError, onScreenshot,
   onScreenshot: (data: string) => void;
   bind: (send: ((message: HubMessage) => void) | null) => void;
 }) {
-  const theme = useTheme();
   const web = useRef<WebView>(null);
   const ready = useRef(false);
   const latest = useRef(selection);
@@ -35,7 +33,7 @@ export function StreamView({ baseUrl, selection, onState, onError, onScreenshot,
   useEffect(() => {
     if (ready.current) web.current?.postMessage(JSON.stringify({ type: 'select', target: selection }));
   }, [selection]);
-  return <View style={{ flex: 1, backgroundColor: theme.sidebar }}><WebView
+  return <View className="flex-1 bg-surface"><WebView
     ref={web} source={source} style={{ flex: 1, backgroundColor: 'transparent' }}
     originWhitelist={['http://*', 'https://*', 'about:blank']}
     allowsInlineMediaPlayback mediaPlaybackRequiresUserAction={false}

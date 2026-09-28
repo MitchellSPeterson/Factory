@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Appearance, Platform, useColorScheme as useSystemColorScheme } from 'react-native';
 import * as SystemUI from 'expo-system-ui';
+import { Uniwind } from 'uniwind';
 
 import { Colors } from '@/constants/theme';
 import { resolveScheme, type AppearancePreference, type ColorScheme } from '@/lib/appearance';
@@ -52,6 +53,7 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     applyWebDocument(scheme);
+    Uniwind.setTheme(scheme);
     void SystemUI.setBackgroundColorAsync(Colors[scheme].background).catch(() => {});
   }, [scheme]);
 

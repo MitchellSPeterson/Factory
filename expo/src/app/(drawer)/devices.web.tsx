@@ -1,8 +1,6 @@
 import { Drawer } from 'expo-router/drawer';
 import { View } from 'react-native';
 
-import { useTheme } from '@/hooks/use-theme';
-
 // The worker runs the device hub on this Mac (worker/deviceHubService.cjs, port 3400).
 // Browsers can't call its API cross-origin, so web embeds the hub's own client, which
 // streams over WebRTC and collapses to just the device and its toolbar when narrow.
@@ -21,9 +19,8 @@ export default function DevicesPage() {
 
 /** Also shown in a chat's side panel (`embedded`). */
 export function DevicesView(_: { embedded?: boolean }) {
-  const theme = useTheme();
   return (
-    <View style={{ flex: 1, minHeight: 0, backgroundColor: theme.background }}>
+    <View className="min-h-0 flex-1 bg-background">
       <iframe
         title="Devices"
         src={hubUrl}
