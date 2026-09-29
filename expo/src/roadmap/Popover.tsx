@@ -1,5 +1,5 @@
 // Anchored menu for Roadmap controls (⋯ menus, status picker).
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { SymbolView } from "expo-symbols";
 import { Menu } from "panelui-native/components/menu";
 import { CheckIcon } from "panelui-native/icons";
@@ -15,6 +15,11 @@ export type PopoverItem = {
   onPress: () => void;
 };
 
+// Menu.Trigger clones its child with the real open handler as `onPress`; forward it to the caller's button.
+function Trigger({ render, isOpen, onPress }: { render: (open: () => void, isOpen: boolean) => ReactNode; isOpen: boolean; onPress?: () => void }) {
+  return <>{render(onPress ?? (() => undefined), isOpen)}</>;
+}
+
 /** Wraps a trigger; `children` receives an `open` function to call from the trigger's onPress. */
 export function Popover({
   items,
@@ -26,12 +31,11 @@ export function Popover({
   children: (open: () => void, isOpen: boolean) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  // Menu.Trigger toggles on press after the child's onPress. The callback stays
-  // so existing triggers still compile; opening is the menu's job.
-  const trigger = children(() => undefined, open) as ReactElement<{ onPress?: (...args: unknown[]) => void }>;
   return (
     <Menu open={open} onOpenChange={setOpen}>
-      <Menu.Trigger>{trigger}</Menu.Trigger>
+      <Menu.Trigger>
+        <Trigger render={children} isOpen={open} />
+      </Menu.Trigger>
       <Menu.Content align={align === "right" ? "end" : "start"} minWidth={220}>
         {items.map((item) => (
           <Menu.Item

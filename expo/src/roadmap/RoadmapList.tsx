@@ -328,7 +328,7 @@ export function RoadmapList({
 
 function Segmented({ value, onChange }: { value: GroupBy; onChange: (next: GroupBy) => void }) {
   return (
-    <Tabs value={value} onValueChange={(next) => onChange(next as GroupBy)} defaultValue="category" variant="segmented">
+    <Tabs className="min-w-0 flex-1" value={value} onValueChange={(next) => onChange(next as GroupBy)} defaultValue="category" variant="segmented">
       <Tabs.List>
         {GROUPS.map((group) => (
           <Tabs.Trigger key={group.id} value={group.id}>

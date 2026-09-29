@@ -209,6 +209,8 @@ export const api = {
     >("builds.create"),
     // Runs helix advance(). The page sends planApproved/approved/feedback/resume/stop; the Worker sends the rest.
     send: ref<{ buildId: string; event: BuildEvent }, null>("builds.send"),
+    // Deletes a Build that isn't running. Its worktree, branch, and Sessions stay.
+    remove: ref<{ buildId: string }, null>("builds.remove"),
     // Worker only: Builds whose status is running and whose Step is not done.
     listActive: ref<{ accessKey: string }, Doc<"builds">[]>("builds.listActive"),
     // Worker only: bookkeeping that is not a state change.

@@ -145,6 +145,7 @@ export const ChatList = forwardRef<
   const [search, setSearch] = useState("");
   const filtered = (sessions ?? []).filter(
     (row) =>
+      !row.session.cwd && // Build Sessions (the only ones with a cwd) open from their Build, not this list.
       inProjectScope(row.session.projectId, scope) &&
       `${row.session.title} ${row.projectName}`.toLowerCase().includes(search.toLowerCase()),
   );

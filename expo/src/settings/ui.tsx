@@ -1,5 +1,6 @@
 import { Children, type ReactNode } from 'react';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SymbolView } from 'expo-symbols';
 import { useCSSVariable } from 'uniwind';
 import { Badge } from 'panelui-native/components/badge';
@@ -37,18 +38,23 @@ export type SettingsIcon = (typeof SettingsIcons)[keyof typeof SettingsIcons];
 export function SettingsScroll({ children }: { children: ReactNode }) {
   const wide = useWindowDimensions().width >= 768;
   const desktop = useDesktop();
+  const insets = useSafeAreaInsets();
   return (
     <ScrollView
       className="flex-1 bg-surface"
-      contentContainerClassName="gap-6 py-4"
+      contentContainerClassName="gap-6"
       contentContainerStyle={{
+        paddingTop: 16,
+        paddingBottom: 16 + insets.bottom,
         paddingHorizontal: wide ? 32 : 16,
         maxWidth: desktop ? 680 : wide ? 600 : undefined,
         alignSelf: desktop ? 'flex-start' : undefined,
         width: '100%',
       }}
       keyboardShouldPersistTaps="handled"
-      contentInsetAdjustmentBehavior="automatic">
+      // The screen header already clears the status bar. Automatic inset
+      // adds that height again on iOS.
+      contentInsetAdjustmentBehavior="never">
       {children}
     </ScrollView>
   );
@@ -131,19 +137,22 @@ export function SettingsRow({
             {leading ?? <SymbolView name={icon!} size={20} tintColor={foreground} />}
           </Item.Media>
         ) : null}
-        <Item.Content>
+        <Item.Content className="min-w-0">
           <Item.Title numberOfLines={1}>{label}</Item.Title>
           {detail ? <Item.Description selectable>{detail}</Item.Description> : null}
         </Item.Content>
         {accessory || value || onPress ? (
-          <Item.Actions>
+          // The cap has to be on this slot. It is a direct child of the full-width
+          // row. A percentage on the text itself resolves against this shrink-wrapped
+          // slot and clips the value to about half its own width.
+          <Item.Actions className="min-w-0 max-w-[55%] shrink">
             {accessory ??
               (value ? (
                 <Text
                   selectable
                   numberOfLines={1}
                   ellipsizeMode={valueMode}
-                  className={`max-w-[52%] text-sm ${valueClass(valueTone)}`}>
+                  className={`min-w-0 shrink text-sm leading-5 ${valueClass(valueTone)}`}>
                   {value}
                 </Text>
               ) : null)}

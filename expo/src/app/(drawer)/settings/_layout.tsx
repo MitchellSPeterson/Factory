@@ -1,6 +1,9 @@
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { DrawerToggleButton } from 'expo-router/drawer';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SymbolView } from 'expo-symbols';
+import { Text } from 'panelui-native/primitives/text';
 import { useCSSVariable } from 'uniwind';
 
 import { DrawerLink } from '@/components/app-drawer';
@@ -19,33 +22,68 @@ const sections: { href: string; label: string; icon: IconName }[] = [
   { href: '/settings/pairing', label: 'Pair a Phone', icon: 'devices' },
 ];
 
+function SettingsHeader({
+  title,
+  showMenu,
+  showBack,
+  onBack,
+}: {
+  title: string;
+  showMenu: boolean;
+  showBack: boolean;
+  onBack: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const foreground = useCSSVariable('--color-foreground') as string | undefined;
+  const surface = useCSSVariable('--color-surface') as string | undefined;
+  return (
+    <View style={{ paddingTop: insets.top, backgroundColor: surface }}>
+      <View className="h-11 flex-row items-center gap-1 px-2">
+        {showMenu ? <DrawerToggleButton tintColor={foreground} /> : null}
+        {showBack ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={8}
+            onPress={onBack}
+            style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+              size={22}
+              tintColor={foreground}
+            />
+          </Pressable>
+        ) : null}
+        <Text className="min-w-0 flex-1 text-[17px] font-semibold leading-6" numberOfLines={1}>
+          {title}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function SettingsLayout() {
   const desktop = useDesktop();
   const pathname = usePathname();
   const router = useRouter();
-  const [foreground, surface] = useCSSVariable(['--color-foreground', '--color-surface']) as (
-    | string
-    | undefined
-  )[];
+  const surface = useCSSVariable('--color-surface') as string | undefined;
   const stack = (
     <Stack
       screenOptions={{
-        headerTintColor: foreground,
-        headerStyle: { backgroundColor: surface },
+        header: ({ options, back, navigation }) => (
+          <SettingsHeader
+            title={options.title ?? ''}
+            showMenu={!desktop && !back}
+            showBack={!desktop && !!back && options.headerBackVisible !== false}
+            onBack={() => navigation.goBack()}
+          />
+        ),
         headerShadowVisible: false,
-        headerTitleStyle: { fontWeight: '600' },
-        headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: surface },
         // Desktop: sections are peers picked from the left column, not a drill-down.
         ...(desktop && { headerBackVisible: false, animation: 'none' }),
       }}>
-      <Stack.Screen
-        name="index"
-        options={{
-          title: desktop ? 'General' : 'Settings',
-          headerLeft: desktop ? () => null : () => <DrawerToggleButton tintColor={foreground} />,
-        }}
-      />
+      <Stack.Screen name="index" options={{ title: desktop ? 'General' : 'Settings' }} />
       <Stack.Screen name="providers/index" options={{ title: 'Providers' }} />
       <Stack.Screen name="providers/[provider]" options={{ title: 'Provider', headerBackVisible: true }} />
       <Stack.Screen name="usage" options={{ title: 'Usage' }} />

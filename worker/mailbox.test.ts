@@ -354,7 +354,7 @@ test("sessions.create with cwd runs in the worktree, not the Project folder", as
     cwd: "/tmp/app-build-1",
     title: "Build · Plan",
   });
-  expect(await client.query(api.sessions.list, {})).toEqual([]);
+  expect((await client.query(api.sessions.list, {})).map((row) => row.session._id)).toEqual([sessionId]);
   expect((await client.query(api.sessions.get, { sessionId }))?.session.title).toBe("Build · Plan");
   const launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: key });
   expect(launch?.project.localPath).toBe("/tmp/app-build-1");

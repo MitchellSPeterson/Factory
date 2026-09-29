@@ -80,8 +80,10 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
   const reduced = useReducedMotion();
   const build = useQuery(api.builds.get, { buildId });
   const send = useMutation(api.builds.send);
+  const remove = useMutation(api.builds.remove);
   const [error, setError] = useState("");
   const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function fire(event: BuildEvent) {
     setError("");
@@ -138,8 +140,13 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
             ) : null}
           </View>
         </View>
-        {stoppable ? (
-          <Popover items={[{ label: "Stop Build", icon: "close", danger: true, onPress: () => setConfirmStop(true) }]}>
+        {(
+          <Popover
+            items={
+              stoppable
+                ? [{ label: "Stop Build", icon: "close", danger: true, onPress: () => setConfirmStop(true) }]
+                : [{ label: "Delete Build", icon: "trash", danger: true, onPress: () => setConfirmDelete(true) }]
+            }>
             {(open, isOpen) => (
               <View className={isOpen ? "rounded-xl bg-foreground/5" : undefined}>
                 <IconButton
@@ -151,7 +158,7 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
               </View>
             )}
           </Popover>
-        ) : null}
+        )}
       </View>
 
       {error ? (
@@ -204,6 +211,20 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
         onConfirm={() => {
           setConfirmStop(false);
           void fire({ kind: "stop" });
+        }}
+      />
+      <ConfirmDelete
+        visible={confirmDelete}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={async () => {
+          setConfirmDelete(false);
+          setError("");
+          try {
+            await remove({ buildId });
+            onClose();
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Could not reach the Worker.");
+          }
         }}
       />
     </ScrollView>
@@ -333,6 +354,23 @@ function GateLine({
       className="min-h-8 flex-row items-center gap-2 rounded-lg px-1 active:bg-foreground/5">
       {content}
     </Pressable>
+  );
+}
+
+function ConfirmDelete({ visible, onCancel, onConfirm }: { visible: boolean; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <Dialog open={visible} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <Dialog.Content className="w-full max-w-[380px]">
+        <Dialog.Title>Delete this Build?</Dialog.Title>
+        <Dialog.Description>
+          This can&apos;t be undone. The worktree, branch, and Sessions stay on disk.
+        </Dialog.Description>
+        <Dialog.Footer>
+          <Button variant="ghost" onPress={onCancel}>Cancel</Button>
+          <Button variant="destructive" onPress={onConfirm}>Delete</Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

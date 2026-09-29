@@ -398,9 +398,7 @@ async function fetchGithubLink(token: string, repo: string, number: number): Pro
 
 const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx) => unknown | Promise<unknown>> = {
   "sessions.list": (_args, { store }) => {
-    // Build Sessions (the only ones with a cwd) live on their Build's page, not in the Sessions list.
-    const sessions = store.list("sessions").filter((session) => !session.cwd);
-    return sessions.map((session) => {
+    return store.list("sessions").map((session) => {
       const project = typeof session.projectId === "string" ? store.get(session.projectId) : null;
       return { session, projectName: project?.name ?? "missing" };
     });
@@ -1609,6 +1607,12 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     const { _id: _keep, _creationTime: _time, ...fields } = build;
     const result = advance(fields as BuildFields, args.event as BuildEvent);
     store.patch(build._id, result);
+    return null;
+  },
+  "builds.remove": (args, { store }) => {
+    const build = requireBuild(store, String(args.buildId ?? ""));
+    if (build.status === "running") throw new Error("Stop this Build before deleting it.");
+    store.delete(build._id);
     return null;
   },
   // Worker only: Builds whose status is running (a Step whose Build is done always moves status off "running").
