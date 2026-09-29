@@ -8,6 +8,7 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AppearanceProvider } from '@/lib/appearance-context';
 import { FactoryProvider } from '@/lib/factory';
+import { NoticeBanner } from '@/lib/notice-banner';
 import { ProjectScopeProvider } from '@/lib/project-scope-context';
 
 SplashScreen.preventAutoHideAsync();
@@ -44,15 +45,15 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <PanelUIProvider>
-      <AppearanceProvider>
+    <AppearanceProvider>
+      <PanelUIProvider>
         <FactoryProvider>
           <ProjectScopeProvider>
             <ThemedRoot />
           </ProjectScopeProvider>
         </FactoryProvider>
-      </AppearanceProvider>
-    </PanelUIProvider>
+      </PanelUIProvider>
+    </AppearanceProvider>
   );
 }
 
@@ -62,6 +63,7 @@ function ThemedRoot() {
     <ThemeProvider value={colorScheme === 'dark' ? factoryDark : factoryLight}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }} />
+      <NoticeBanner />
     </ThemeProvider>
   );
 }

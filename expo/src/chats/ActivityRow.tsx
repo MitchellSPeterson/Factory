@@ -1,50 +1,40 @@
 import { useMutation } from "@/lib/factory";
 import { useState } from "react";
-import { View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { Alert } from "panelui-native/components/alert";
 import { Badge } from "panelui-native/components/badge";
 import { Button } from "panelui-native/components/button";
-import { CodeBlock } from "panelui-native/components/code-block";
 import { Message } from "panelui-native/components/message";
 import { Plan } from "panelui-native/components/plan";
-import { Reasoning } from "panelui-native/components/reasoning";
 import { Shimmer } from "panelui-native/components/shimmer";
-import { Task, type TaskStatus } from "panelui-native/components/task";
 import { ThinkingOrb } from "panelui-native/components/thinking-orb";
-import { ShieldAlertIcon } from "panelui-native/icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  EyeIcon,
+  PencilIcon,
+  SearchIcon,
+  ShieldAlertIcon,
+  SparklesIcon,
+} from "panelui-native/icons";
 import { Text } from "panelui-native/primitives/text";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
 import {
   activitySummary,
+  activityTitle,
   liveWorkLabel,
   permissionLabel,
   permissionVariant,
   selectedPermissionLabel,
   summarizeToolGroup,
+  toolGroupAction,
+  toolAction,
   workRowLabel,
+  type ToolAction,
   type ActivityMessage,
   type PermissionVariant,
 } from "./activity";
-
-function taskStatus(message: ActivityMessage, live: boolean): TaskStatus {
-  if (message.status === "failed") return "error";
-  if (live || message.status === "inProgress") return "running";
-  if (message.status === "pending") return "pending";
-  return "complete";
-}
-
-function WorkDetail({ body }: { body: string }) {
-  if (!body.includes("\n")) return <Task.Item>{body}</Task.Item>;
-  return (
-    <CodeBlock code={body}>
-      <CodeBlock.Header>
-        <CodeBlock.Language>output</CodeBlock.Language>
-        <CodeBlock.CopyButton />
-      </CodeBlock.Header>
-    </CodeBlock>
-  );
-}
 
 export function ThinkingRow() {
   return (
@@ -59,42 +49,95 @@ export function ThinkingRow() {
   );
 }
 
-function ReasoningRow({
-  message,
-  streaming,
+function ActionIcon({ action }: { action: ToolAction | "thought" }) {
+  if (action === "read") return <EyeIcon size={14} />;
+  if (action === "edit") return <PencilIcon size={14} />;
+  if (action === "search") return <SearchIcon size={14} />;
+  if (action === "command") return <Text className="font-mono text-xs text-muted-foreground">{">_"}</Text>;
+  return <SparklesIcon size={14} />;
+}
+
+// One quiet line per step (icon, muted label, chevron); tap to reveal the raw detail beneath a left rule.
+function FlatRow({
+  icon,
+  label,
+  detail,
+  live = false,
+  failed = false,
+  defaultOpen = false,
 }: {
-  message: ActivityMessage;
-  streaming: boolean;
+  icon: ToolAction | "thought";
+  label: string;
+  detail?: string;
+  live?: boolean;
+  failed?: boolean;
+  defaultOpen?: boolean;
 }) {
-  const body = (message.detail || message.text || "").trim();
+  const [open, setOpen] = useState(defaultOpen);
+  const expandable = !!detail && detail !== label;
   return (
-    <Reasoning isStreaming={streaming && body !== ""}>
-      <Reasoning.Trigger />
-      {body ? <Reasoning.Content>{body}</Reasoning.Content> : null}
-    </Reasoning>
+    <View>
+      <Pressable
+        accessibilityRole={expandable ? "button" : undefined}
+        accessibilityLabel={failed ? `${label}, failed` : label}
+        accessibilityState={expandable ? { expanded: open } : undefined}
+        disabled={!expandable}
+        onPress={() => setOpen((value) => !value)}
+        className="min-h-8 flex-row items-center gap-1.5 rounded-md px-0.5 active:bg-muted">
+        <View className="h-6 w-6 items-center justify-center opacity-60">
+          <ActionIcon action={icon} />
+        </View>
+        <View className="min-w-0 flex-1">
+          {live && !open ? (
+            <Shimmer textClassName="text-sm">{label}</Shimmer>
+          ) : (
+            <Text
+              className={failed ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+              numberOfLines={open ? undefined : 1}>
+              {label}
+            </Text>
+          )}
+        </View>
+        {expandable ? (
+          <View className="opacity-60">
+            {open ? <ChevronDownIcon size={11} /> : <ChevronRightIcon size={11} />}
+          </View>
+        ) : null}
+      </Pressable>
+      {open && detail ? (
+        <View className="ml-7 border-l border-border pb-1 pl-3 pt-0.5">
+          <ScrollView nestedScrollEnabled className="max-h-60">
+            <Text selectable className="font-mono text-xs leading-normal text-muted-foreground">
+              {detail}
+            </Text>
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
-function ToolRow({
-  message,
-  live,
-}: {
-  message: ActivityMessage;
-  live: boolean;
-}) {
+function stepRow(message: ActivityMessage, live: boolean, sessionLive: boolean) {
   const body = (message.detail || message.text || "").trim();
-  const label = workRowLabel(message);
-  const expandable = body !== "" && body !== label;
-  const status = taskStatus(message, live);
+  if (message.kind === "reasoning") {
+    return (
+      <FlatRow
+        icon="thought"
+        label={activityTitle(message)}
+        detail={body}
+        live={sessionLive && message.status === "inProgress"}
+      />
+    );
+  }
   return (
-    <Task status={status} defaultOpen={status === "running" || status === "error"}>
-      <Task.Trigger title={label} />
-      {expandable ? (
-        <Task.Content>
-          <WorkDetail body={body} />
-        </Task.Content>
-      ) : null}
-    </Task>
+    <FlatRow
+      icon={toolAction(message)}
+      label={workRowLabel(message)}
+      detail={body}
+      live={live}
+      failed={message.status === "failed"}
+      defaultOpen={message.status === "failed"}
+    />
   );
 }
 
@@ -111,52 +154,49 @@ export function WorkGroup({
   live: boolean;
   sessionLive: boolean;
 }) {
+  const [open, setOpen] = useState(live);
+  if (messages.length === 1) return stepRow(messages[0]!, live, sessionLive);
   const tools = messages.filter((message) => message.kind === "tool");
-  if (tools.length === 0) {
-    return (
-      <View className="gap-2">
-        {messages.map((message, index) => (
-          <ReasoningRow
-            key={rowKey(message, index)}
-            message={message}
-            streaming={sessionLive}
-          />
-        ))}
-      </View>
-    );
-  }
-  if (messages.length === 1 && tools[0]) {
-    return <ToolRow message={tools[0]} live={live} />;
-  }
+  const groupAction = toolGroupAction(messages);
+  const groupIcon = !tools.length ? "thought" : groupAction === "mixed" ? "other" : groupAction;
   const failed = tools.some((message) => message.status === "failed");
   const label = live ? liveWorkLabel(messages) : summarizeToolGroup(messages);
-  const running = live || tools.some((message) => message.status === "inProgress");
   return (
-    <Task
-      status={failed ? "error" : running ? "running" : "complete"}
-      defaultOpen={running || failed}
-    >
-      <Task.Trigger title={label} />
-      <Task.Content>
-        <View className="gap-2">
-          {messages.map((message, index) =>
-            message.kind === "reasoning" ? (
-              <ReasoningRow
-                key={rowKey(message, index)}
-                message={message}
-                streaming={false}
-              />
-            ) : (
-              <ToolRow
-                key={rowKey(message, index)}
-                message={message}
-                live={live && message.status === "inProgress"}
-              />
-            ),
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((value) => !value)}
+        className="min-h-8 flex-row items-center gap-1.5 rounded-md px-0.5 active:bg-muted">
+        <View className="h-6 w-6 items-center justify-center opacity-60">
+          <ActionIcon action={groupIcon} />
+        </View>
+        <View className="min-w-0 flex-1">
+          {live ? (
+            <Shimmer textClassName="text-sm">{label}</Shimmer>
+          ) : (
+            <Text
+              className={failed ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+              numberOfLines={1}>
+              {label}
+            </Text>
           )}
         </View>
-      </Task.Content>
-    </Task>
+        <View className="opacity-60">
+          {open ? <ChevronDownIcon size={11} /> : <ChevronRightIcon size={11} />}
+        </View>
+      </Pressable>
+      {open ? (
+        <View className="ml-2">
+          {messages.map((message, index) => (
+            <View key={rowKey(message, index)}>
+              {stepRow(message, live && message.status === "inProgress", sessionLive)}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 

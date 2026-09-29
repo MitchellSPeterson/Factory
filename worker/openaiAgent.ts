@@ -22,6 +22,8 @@ export type OpenAIAgentOptions = {
   prompt: string;
   tools: Record<string, AgentTool>;
   onText?: (text: string) => void;
+  /** Session chats: each tool call as a structured row (running, then completed/failed). */
+  onTool?: (call: { id: string; name: string; args: unknown; status: "running" | "completed" | "error"; result?: string }) => Promise<unknown>;
   onUsage?: (usage: TokenUsage) => void | Promise<void>;
   /** Drain human Stage chat between model turns. */
   pullNotes?: () => Promise<readonly string[]>;
@@ -290,30 +292,31 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
     for (const call of calls) {
       const tool = opts.tools[call.function.name];
       let toolResult: string;
+      let failed = false;
+      let args: Record<string, unknown> = {};
+      try {
+        args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
+      } catch {
+        failed = true;
+      }
+      await opts.onTool?.({ id: call.id, name: call.function.name, args, status: "running" });
       if (!tool) {
+        failed = true;
         toolResult = JSON.stringify({ error: `unknown tool: ${call.function.name}` });
+      } else if (failed) {
+        toolResult = JSON.stringify({ error: "invalid tool arguments JSON" });
       } else {
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
-        } catch {
-          toolResult = JSON.stringify({ error: "invalid tool arguments JSON" });
-          messages.push({
-            role: "tool",
-            tool_call_id: call.id,
-            content: toolResult,
-          });
-          continue;
-        }
         try {
           toolResult = await tool.execute(args);
           if (call.function.name === "finish_stage") finished = true;
         } catch (err) {
+          failed = true;
           toolResult = JSON.stringify({
             error: err instanceof Error ? err.message : String(err),
           });
         }
       }
+      await opts.onTool?.({ id: call.id, name: call.function.name, args, status: failed ? "error" : "completed", result: toolResult });
       messages.push({
         role: "tool",
         tool_call_id: call.id,

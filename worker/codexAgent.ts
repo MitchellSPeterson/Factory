@@ -10,6 +10,7 @@ import {
 import type { PermissionMode, ServiceTier } from "../shared/validators";
 import { addUsage, ZERO_USAGE } from "../shared/tokenUsage";
 import { fromCodexUsage } from "./usage";
+import { codexItemToSessionItem, type SessionItem } from "./sessionItems";
 
 type ThreadHandle = { runStreamed(input: Input): Promise<{ events: AsyncIterable<ThreadEvent> }> };
 type CodexClient = {
@@ -33,6 +34,8 @@ export type CodexAgentOptions = {
   env?: Record<string, string | undefined>;
   onThreadId: (id: string) => Promise<unknown>;
   onText: (text: string) => void;
+  /** Session chats: tool calls and reasoning arrive as structured rows instead of log text. */
+  onItem?: (item: SessionItem) => Promise<unknown>;
   onUsage?: (usage: import("./usage").TokenUsage) => void | Promise<void>;
   getStatus: () => Promise<string | null>;
   createClient?: (options: CodexOptions) => CodexClient;
@@ -110,15 +113,23 @@ export async function runCodexAgent(opts: CodexAgentOptions) {
     }
     if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
       const item = event.item;
+      const completedEvent = event.type === "item.completed";
       if (item.type === "agent_message" || item.type === "reasoning") {
         const previous = seenText.get(item.id) ?? "";
         const delta = item.text.startsWith(previous) ? item.text.slice(previous.length) : item.text;
-        opts.onText(delta);
         seenText.set(item.id, item.text);
-        if (event.type === "item.completed") opts.onText("\n");
+        if (item.type === "reasoning" && opts.onItem) {
+          await opts.onItem({ itemId: item.id, kind: "reasoning", title: "Reasoning", status: completedEvent ? "completed" : "inProgress", text: delta });
+        } else {
+          opts.onText(delta);
+          if (completedEvent) opts.onText("\n");
+        }
+      } else if (opts.onItem) {
+        const mapped = codexItemToSessionItem(item, completedEvent);
+        if (mapped) await opts.onItem(mapped);
       } else if (event.type === "item.started" && item.type === "mcp_tool_call") {
         opts.onText(`\n[${item.server}: ${item.tool}]\n`);
-      } else if (event.type === "item.completed" && item.type === "file_change") {
+      } else if (completedEvent && item.type === "file_change") {
         opts.onText(`\n${item.changes.map(change => `${change.kind}: ${change.path}`).join("\n")}\n`);
       }
     }

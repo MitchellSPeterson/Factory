@@ -16,6 +16,7 @@ import { createLiveLog } from "./liveLog";
 import { runCodexAgent } from "./codexAgent";
 import { grokResumeId } from "./grokAgent";
 import { runGrokAcpSession } from "./grokAcp";
+import { claudeLineToSteps, cursorThinkingToSessionItem, cursorToolToSessionItem, type SessionItem } from "./sessionItems";
 import { claudeBin, collectProviderModels } from "./providerModels";
 import { collectProviderUsage } from "./providerUsage";
 import { runOpenAIAgent } from "./openaiAgent";
@@ -198,6 +199,17 @@ async function runSessionCodex(client: Mailbox, launch: SessionLaunch) {
       imagePaths: await materializeImages(launch.images),
       onThreadId: agentId => client.mutation(api.sessions.bindAgent, { sessionId: launch.sessionId, agentId }),
       onText: text => log.push(text),
+      onItem: item => client.mutation(api.sessions.upsertItem, {
+        sessionId: launch.sessionId,
+        itemId: item.itemId,
+        kind: item.kind,
+        title: item.title,
+        detail: item.detail,
+        status: item.status,
+        text: item.text,
+        requestId: item.requestId,
+        options: item.options,
+      }),
       onUsage: usage => reportSessionUsage(client, launch.sessionId, usage),
       getStatus: () => client.query(api.sessions.getStatus, { sessionId: launch.sessionId }),
     });
@@ -226,13 +238,30 @@ async function runSessionCursor(client: Mailbox, launch: SessionLaunch) {
   );
   let live = false;
   let usage = ZERO_USAGE;
+  let thoughts = 0;
+  let thinking = false;
+  const upsert = (item: SessionItem) => client.mutation(api.sessions.upsertItem, { sessionId: launch.sessionId, ...item });
+  const thought = (text: string) => {
+    thinking = true;
+    return upsert(cursorThinkingToSessionItem(text, `thinking-${thoughts}`));
+  };
+  const endThought = async () => {
+    if (!thinking) return;
+    await upsert({ itemId: `thinking-${thoughts}`, kind: "reasoning", status: "completed" });
+    thinking = false;
+    thoughts += 1;
+  };
   const run = await agent.send(
     cursorUserMessage(launch.prompt, cursorImagesFromPaths(await materializeImages(launch.images))),
     {
     model,
-    onDelta: ({ update }) => {
-      if (update.type === "text-delta" || update.type === "thinking-delta") {
+    onDelta: async ({ update }) => {
+      if (update.type === "thinking-delta") {
         live = true;
+        await thought(update.text);
+      } else if (update.type === "text-delta") {
+        live = true;
+        await endThought();
         log.push(update.text);
       }
     },
@@ -243,14 +272,20 @@ async function runSessionCursor(client: Mailbox, launch: SessionLaunch) {
         const next = fromCursorUsage(event.usage);
         if (next) usage = next;
       }
+      if (event.type === "tool_call") {
+        await endThought();
+        await upsert(cursorToolToSessionItem(event));
+        continue;
+      }
       if (live) continue;
       if (event.type === "assistant") {
         for (const block of event.message.content) {
           if (block.type === "text" && block.text.trim() !== "") log.push(block.text);
         }
       }
-      if (event.type === "thinking" && event.text.trim() !== "") log.push(event.text);
+      if (event.type === "thinking" && event.text.trim() !== "") await thought(event.text);
     }
+    await endThought();
     const result = await run.wait();
     await reportSessionUsage(client, launch.sessionId, fromCursorUsage(result.usage) ?? usage);
     if (result.status === "error") throw new Error("Cursor chat failed");
@@ -274,7 +309,7 @@ async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
       sessionId: launch.sessionId,
       agentId,
     });
-    const args = [bin, "-p", launch.prompt, "--output-format", "text", "--model", launch.model,
+    const args = [bin, "-p", launch.prompt, "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", launch.model,
       "--effort", launch.effort === "ultra" ? "max" : launch.effort,
       // full-access never blocks on a permission prompt; -p has no tty to show one on anyway. Other modes are left
       // to the CLI's own default (fine for a human watching; not wired here for the "ask" case).
@@ -288,12 +323,27 @@ async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
     });
     const reader = proc.stdout.getReader();
     const decoder = new TextDecoder();
+    const heads = new Map<string, string | undefined>();
+    const thoughts = { n: 0, open: false };
+    const handle = async (line: string) => {
+      if (line.trim() === "") return;
+      let parsed: unknown;
+      try { parsed = JSON.parse(line); } catch { return; }
+      for (const step of claudeLineToSteps(parsed, heads, thoughts)) {
+        if ("text" in step) log.push(step.text);
+        else await client.mutation(api.sessions.upsertItem, { sessionId: launch.sessionId, ...step.item });
+      }
+    };
+    let buffer = "";
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      const text = decoder.decode(value);
-      if (text) log.push(text);
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) await handle(line);
     }
+    await handle(buffer);
     const code = await proc.exited;
     if (code !== 0) {
       const err = await new Response(proc.stderr).text();
@@ -325,6 +375,11 @@ async function runSessionOpenAI(client: Mailbox, launch: SessionLaunch) {
       prompt: launch.prompt,
       tools: codingTools(launch.project.localPath),
       onText: (text) => log.push(text),
+      onTool: ({ id, ...call }) =>
+        client.mutation(api.sessions.upsertItem, {
+          sessionId: launch.sessionId,
+          ...cursorToolToSessionItem({ call_id: id, ...call }),
+        }),
       onUsage: (usage) => reportSessionUsage(client, launch.sessionId, usage),
     });
     await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });

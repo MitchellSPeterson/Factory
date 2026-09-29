@@ -200,7 +200,7 @@ export function Conversation(props: {
     keyboardHeight: keyboard,
     insetBottom: insets.bottom,
     platform: Platform.OS,
-    gap: Platform.OS === "ios" ? 16 : 8,
+    gap: keyboard > 0 ? 0 : Platform.OS === "ios" ? 16 : 8,
     webPad: 12,
   });
   return (
@@ -612,6 +612,7 @@ function ConversationBody({
           />
         ) : null}
         <AIInput
+          avoidKeyboard={false}
           value={text}
           onValueChange={(next) => {
             if (slashQuery(next) !== null) setPicker(null);
