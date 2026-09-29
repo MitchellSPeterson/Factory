@@ -3,21 +3,17 @@ import {
   DrawerContentScrollView,
   type DrawerContentComponentProps,
 } from 'expo-router/drawer';
-import { useEffect, useRef } from 'react';
-import { TextInput, View } from 'react-native';
+import { useEffect } from 'react';
+import { View } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Item } from 'panelui-native/components/item';
 import { Text } from 'panelui-native/primitives/text';
 import { useCSSVariable } from 'uniwind';
 
-import { ChatList } from '@/chats/ChatList';
 import { IconNames, type IconName } from '@/components/icon-button';
 import { ProjectSwitcher } from '@/components/project-switcher';
 import { useDesktop } from '@/hooks/use-desktop';
-import { api } from '@/lib/api';
-import type { Id } from '@/lib/dataModel';
-import { useMutation } from '@/lib/factory';
 
 export function FactoryDrawer(props: DrawerContentComponentProps) {
   const pathname = usePathname();
@@ -108,12 +104,10 @@ export function FactoryDrawer(props: DrawerContentComponentProps) {
   );
 }
 
-/** Desktop web: always-on sidebar with nav and the chat list, ChatGPT/Codex style. */
+/** Desktop web: always-on sidebar with nav; the chat list lives on the Chats page. */
 function DesktopSidebar() {
   const pathname = usePathname();
-  const { session } = useGlobalSearchParams<{ session?: string }>();
-  const removeSession = useMutation(api.sessions.remove);
-  const searchRef = useRef<TextInput>(null);
+  const params = useGlobalSearchParams<{ new?: string }>();
 
   function goChats(params: { session?: string; new?: string }) {
     if (pathname === '/chats') router.setParams({ session: undefined, new: undefined, ...params });
@@ -121,25 +115,12 @@ function DesktopSidebar() {
   }
   const newChat = () => goChats({ new: '1' });
 
-  async function deleteChat(id: Id<'sessions'>, title: string) {
-    if (!window.confirm(`Delete ${title}?\n\nThis deletes the conversation and its messages.`)) return;
-    try {
-      await removeSession({ sessionId: id });
-      if (session === id) goChats({});
-    } catch (e) {
-      window.alert(`Could not delete chat. ${e instanceof Error ? e.message : 'Try again.'}`);
-    }
-  }
-
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.shiftKey && e.key.toLowerCase() === 'o') {
         e.preventDefault();
         newChat();
-      } else if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        searchRef.current?.focus();
       }
     }
     // Capture phase: RN-web TextInputs stop keydown from bubbling.
@@ -156,11 +137,17 @@ function DesktopSidebar() {
         icon="compose"
         label="New chat"
         shortcut="⇧⌘O"
-        focused={pathname === '/chats' && !session}
+        focused={pathname === '/chats' && params.new === '1'}
         onPress={newChat}
       />
       <ProjectSwitcher />
       <View className="gap-0.5">
+        <DrawerLink
+          icon="sessions"
+          label="Chats"
+          focused={pathname === '/chats'}
+          onPress={() => goChats({})}
+        />
         <DrawerLink
           icon="layers"
           label="Roadmap"
@@ -182,16 +169,7 @@ function DesktopSidebar() {
           onPress={() => router.navigate('/terminal')}
         />
       </View>
-      <View className="min-h-0 flex-1 pt-2">
-        <ChatList
-          ref={searchRef}
-          dense
-          bottomInset={8}
-          selectedId={pathname === '/chats' ? session : undefined}
-          onOpen={(id) => goChats({ session: id })}
-          onDelete={deleteChat}
-        />
-      </View>
+      <View className="flex-1" />
       <DrawerLink
         icon="settings"
         label="Settings"

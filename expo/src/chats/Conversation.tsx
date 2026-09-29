@@ -384,17 +384,21 @@ function ConversationBody({
     });
   }
   async function attach() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "image/*",
+      multiple: false,
+      copyToCacheDirectory: false,
+    }).catch((e) => {
+      setError(e instanceof Error ? e.message : "Could not attach image.");
+      return null;
+    });
+    const asset = result && !result.canceled ? result.assets[0] : null;
+    if (asset) await upload(asset);
+  }
+  async function upload(asset: { uri: string; name: string; size?: number; mimeType?: string }) {
     setUploading(true);
     setError("");
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: "image/*",
-        multiple: false,
-        copyToCacheDirectory: false,
-      });
-      if (result.canceled) return;
-      const asset = result.assets[0];
-      if (!asset) return;
       if ((asset.size ?? 0) > 10 * 1024 * 1024)
         throw new Error("Choose an image smaller than 10 MB.");
       const body = await readPickedAttachment(asset.uri, Platform.OS);
@@ -426,6 +430,34 @@ function ConversationBody({
       setUploading(false);
     }
   }
+  // Web: drop or paste images anywhere on the page. ponytail: page-wide, not scoped to the composer.
+  const dropRef = useRef<(files: File[]) => void>(() => {});
+  dropRef.current = (files) => {
+    const room = 4 - attachments.length;
+    if (uploading || room <= 0) return;
+    const image = files.find((file) => file.type.startsWith("image/"));
+    if (image) void upload({ uri: URL.createObjectURL(image), name: image.name, size: image.size, mimeType: image.type });
+  };
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const over = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("Files")) e.preventDefault();
+    };
+    const drop = (e: DragEvent) => {
+      if (!e.dataTransfer?.files.length) return;
+      e.preventDefault();
+      dropRef.current([...e.dataTransfer.files]);
+    };
+    const paste = (e: ClipboardEvent) => dropRef.current([...(e.clipboardData?.files ?? [])]);
+    document.addEventListener("dragover", over);
+    document.addEventListener("drop", drop);
+    document.addEventListener("paste", paste);
+    return () => {
+      document.removeEventListener("dragover", over);
+      document.removeEventListener("drop", drop);
+      document.removeEventListener("paste", paste);
+    };
+  }, []);
 
   if (sessionId && view === undefined) {
     return (

@@ -66,7 +66,7 @@ export default function ChatsPage() {
   const projectId =
     selected?.session.projectId ?? currentProject?._id ?? draftProject;
   const project = projects?.find((item) => item._id === projectId);
-  const showList = desktop ? false : wide || !showingConversation;
+  const showList = wide || !showingConversation;
   function open(id: Id<"sessions">) {
     setPanel(null);
     router.setParams({ session: id, new: undefined, roadmapItem: undefined });
@@ -309,6 +309,7 @@ export default function ChatsPage() {
           className={`min-h-0 border-r border-border ${wide ? "bg-surface" : "bg-background"}`}
           style={{ width: wide ? 290 : "100%", paddingBottom: insets.bottom }}>
           <ChatList
+            dense={desktop}
             selectedId={selected?.session._id}
             onOpen={open}
             onDelete={(id, title) => setClosing({ id, title })}

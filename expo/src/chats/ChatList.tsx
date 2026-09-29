@@ -1,6 +1,5 @@
 import { forwardRef, useState } from "react";
 import { Pressable, ScrollView, TextInput, View } from "react-native";
-import Animated, { css, cubicBezier, useReducedMotion } from "react-native-reanimated";
 
 import { Badge } from "panelui-native/components/badge";
 import { Button } from "panelui-native/components/button";
@@ -8,6 +7,7 @@ import { EmptyState } from "panelui-native/components/empty-state";
 import { Item } from "panelui-native/components/item";
 import { SearchBar } from "panelui-native/components/search-bar";
 import { Spinner } from "panelui-native/components/spinner";
+import { ThinkingOrb } from "panelui-native/components/thinking-orb";
 import { TrashIcon } from "panelui-native/icons";
 
 import { useQuery } from "@/lib/factory";
@@ -17,36 +17,16 @@ import { inProjectScope } from "@/lib/project-scope";
 import { useProjectScope } from "@/lib/project-scope-context";
 import { ProviderMark } from "@/chats/model-picker";
 
-const pulse = css.keyframes({
-  "0%, 100%": { opacity: 1 },
-  "50%": { opacity: 0.55 },
-});
-const motion = css.create({
-  pulse: {
-    animationName: pulse,
-    animationDuration: "1.6s",
-    animationTimingFunction: cubicBezier(0.77, 0, 0.175, 1),
-    animationIterationCount: "infinite",
-  },
-});
-
 function statusTone(status: string): "running" | "failed" | "idle" {
   if (status === "running" || status === "queued") return "running";
   if (status === "failed") return "failed";
   return "idle";
 }
 
-function StatusDot({ tone, running }: { tone: "running" | "failed" | "idle"; running: boolean }) {
-  const reduced = useReducedMotion();
-  return (
-    <Animated.View style={running && !reduced ? motion.pulse : undefined}>
-      <Badge
-        shape="dot"
-        variant={tone === "failed" ? "destructive" : "default"}
-        className={tone === "idle" ? "h-2.5 w-2.5 bg-muted-foreground" : "h-2.5 w-2.5"}
-      />
-    </Animated.View>
-  );
+function StatusDot({ tone }: { tone: "running" | "failed" | "idle" }) {
+  if (tone === "idle") return null;
+  if (tone === "running") return <ThinkingOrb state="working" size={16} />;
+  return <Badge shape="dot" variant="destructive" className="h-2.5 w-2.5" />;
 }
 
 function ChatRow({
@@ -118,11 +98,11 @@ function ChatRow({
           pressScale={1}
           className="h-auto w-[34px] self-stretch rounded-lg"
         >
-          {hovered ? <TrashIcon size={15} /> : <StatusDot tone={tone} running={status === "running"} />}
+          {hovered ? <TrashIcon size={15} /> : <StatusDot tone={tone} />}
         </Button>
       ) : (
         <View className="w-[34px] items-center justify-center">
-          <StatusDot tone={tone} running={status === "running"} />
+          <StatusDot tone={tone} />
         </View>
       )}
     </View>
