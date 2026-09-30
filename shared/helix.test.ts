@@ -9,7 +9,7 @@ const base = (over: Partial<BuildFields> = {}): BuildFields => ({
   branch: "build/rotation",
   checkCommand: "bun test",
   agent,
-  reviewers: [agent, agent],
+  reviewer: agent,
   notes: [],
   checkpoints: [],
   current: 0,
@@ -24,7 +24,7 @@ const plan = [
   { title: "One", description: "a", tests: "rotates", ui: false },
   { title: "Two", description: "b", tests: "shows it", ui: true, prototype: "prototypes/rotation/2.html" },
 ];
-const ok: BuildEvent = { kind: "reviewed", verdicts: [{ approve: true, findings: [] }, { approve: true, findings: [] }] };
+const ok: BuildEvent = { kind: "reviewed", verdicts: [{ approve: true, findings: [] }] };
 const pass: BuildEvent = { kind: "checked", pass: true, output: "" };
 const approved = (b: BuildFields) => run(b, { kind: "planned", checkpoints: plan }, { kind: "planApproved", checkpoints: plan });
 
@@ -72,8 +72,8 @@ test("a failed Gate sends findings to a fixer, then every Gate runs again", () =
   expect((b.step as { message: string }).message).toContain("1 test failed");
   expect(b.checkpoints[0]!.gates.behavior).toBe("fail");
   b = run(b, { kind: "implemented" }, pass);
-  // One reviewer approves but still lists a finding: that is a failure.
-  b = run(b, { kind: "reviewed", verdicts: [{ approve: true, findings: [{ severity: "minor", text: "dead code" }] }, { approve: true, findings: [] }] });
+  // A reviewer approves but still lists a finding: that is a failure.
+  b = run(b, { kind: "reviewed", verdicts: [{ approve: true, findings: [{ severity: "minor", text: "dead code" }] }] });
   expect(b.step.kind).toBe("implement");
   expect((b.step as { message: string }).message).toContain("dead code");
   expect(b.checkpoints[0]!.gates).toEqual({ behavior: "waiting", ui: "waiting", review: "fail" });
@@ -84,7 +84,7 @@ test("a failed Gate sends findings to a fixer, then every Gate runs again", () =
 test("a failed UI Gate reworks the Checkpoint", () => {
   let b = run(approved(base()), { kind: "testsWritten" }, { kind: "implemented" }, pass, ok, { kind: "committed", sha: "a" });
   b = run(b, { kind: "testsWritten" }, { kind: "implemented" }, pass);
-  b = run(b, { kind: "reviewed", verdicts: [{ approve: false, findings: [{ severity: "major", text: "padding is 8 not 16" }] }, { approve: true, findings: [] }] });
+  b = run(b, { kind: "reviewed", verdicts: [{ approve: false, findings: [{ severity: "major", text: "padding is 8 not 16" }] }] });
   expect(b.checkpoints[1]!.gates.ui).toBe("fail");
   expect((b.step as { message: string }).message).toContain("padding is 8 not 16");
 });

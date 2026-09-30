@@ -95,7 +95,7 @@ export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClo
   }
 
   function openSession(id: Id<"sessions">) {
-    router.push({ pathname: "/chats", params: { session: id } });
+    router.push({ pathname: "/chats", params: { session: id, back: `/build?build=${buildId}` } });
   }
 
   if (build === undefined) {

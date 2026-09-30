@@ -24,6 +24,7 @@ export type Checkpoint = PlannedCheckpoint & {
   id: string;
   status: "pending" | "active" | "done";
   attempts: number; // implement runs for this Checkpoint, including fixes
+  codeReviews?: number; // completed Review Gate runs in the current autonomous attempt
   gates: Record<GateKey, GateState>;
   sessionId?: Id<"sessions">; // the latest implementer or fixer
   findings?: string; // last gate failure, shown on the page
@@ -53,7 +54,8 @@ export type BuildFields = {
   worktree?: string; // set by the Worker once created
   checkCommand: string; // empty skips the test writer and the Behavior Gate
   agent: AgentPick;
-  reviewers: [AgentPick, AgentPick]; // Review Gate: both adversarial. UI Gate: [0] visual, [1] behavior.
+  reviewer: AgentPick; // Review Gate and UI Gate.
+  maxCodeReviews?: number; // per Checkpoint; older Builds use the default
   notes: string[]; // your feedback, carried into every later prompt (agents also record it in LEARNINGS.md)
   checkpoints: Checkpoint[];
   current: number;
@@ -83,6 +85,7 @@ export type BuildEvent =
 
 // ponytail: Helix retries forever; we pause after this many so an overnight run can't burn a quota on one Checkpoint.
 export const MAX_ATTEMPTS = 5;
+export const DEFAULT_MAX_CODE_REVIEWS = 2;
 
 const idleGates = (): Record<GateKey, GateState> => ({ behavior: "waiting", ui: "waiting", review: "waiting" });
 
@@ -96,6 +99,7 @@ export function newCheckpoints(list: PlannedCheckpoint[], first = 0): Checkpoint
     prototype: c.prototype?.trim() || undefined,
     status: "pending",
     attempts: 0,
+    codeReviews: 0,
     gates: idleGates(),
   }));
 }
@@ -142,7 +146,7 @@ export function advance(build: BuildFields, event: BuildEvent): BuildFields {
   if (event.kind === "failed") return { ...build, status: "paused", error: event.error, started: false, sessionIds: [] };
   if (event.kind === "resume") {
     if (build.status !== "paused") return build;
-    const fresh = build.current < build.checkpoints.length ? withCurrent(build, (c) => ({ ...c, attempts: 0 })) : build;
+    const fresh = build.current < build.checkpoints.length ? withCurrent(build, (c) => ({ ...c, attempts: 0, codeReviews: 0 })) : build;
     const waits = build.step.kind === "approvePlan" || build.step.kind === "finalReview";
     return { ...fresh, status: waits ? "waiting" : "running", started: false, sessionIds: [], error: undefined };
   }
@@ -152,7 +156,7 @@ export function advance(build: BuildFields, event: BuildEvent): BuildFields {
     const noted = { ...build, notes: [...build.notes, text] };
     // At the end, feedback becomes new Checkpoints that go through every Gate.
     if (build.step.kind === "finalReview") return go(noted, { kind: "plan", feedback: text });
-    return rework(withCurrent(noted, (c) => ({ ...c, attempts: 0 })), "human", text);
+    return rework(withCurrent(noted, (c) => ({ ...c, attempts: 0, codeReviews: 0 })), "human", text);
   }
 
   const step = build.step;
@@ -185,9 +189,19 @@ export function advance(build: BuildFields, event: BuildEvent): BuildFields {
       if (step.kind !== "uiReview" && step.kind !== "review") return build;
       const gate: GateKey = step.kind === "uiReview" ? "ui" : "review";
       const findings = event.verdicts.flatMap((v) => v.findings);
+      const reviewed = gate === "review"
+        ? withCurrent(build, (c) => ({ ...c, codeReviews: (c.codeReviews ?? 0) + 1 }))
+        : build;
       // Every finding has to be fixed, even when a reviewer says approve.
-      if (event.verdicts.some((v) => !v.approve) || findings.length > 0) return rework(build, gate, formatFindings(findings));
-      const passed = withCurrent(setGate(build, gate, "pass"), (c) => ({ ...c, findings: undefined }));
+      if (event.verdicts.some((v) => !v.approve) || findings.length > 0) {
+        const fix = rework(reviewed, gate, formatFindings(findings));
+        const count = reviewed.checkpoints[reviewed.current]!.codeReviews ?? 0;
+        const limit = reviewed.maxCodeReviews ?? DEFAULT_MAX_CODE_REVIEWS;
+        return gate === "review" && count >= limit
+          ? { ...fix, status: "paused", error: `Code review limit reached (${count} of ${limit}) for this Checkpoint. Send feedback or resume for another round.` }
+          : fix;
+      }
+      const passed = withCurrent(setGate(reviewed, gate, "pass"), (c) => ({ ...c, findings: undefined }));
       if (gate === "ui") return go(setGate(passed, "review", "running"), { kind: "review" });
       return go(passed, { kind: "commit" });
     }
@@ -303,15 +317,11 @@ export function reviewPrompt(cp: Pick<Checkpoint, "title" | "description">, guid
   ].join("\n\n");
 }
 
-export function uiReviewPrompt(cp: Pick<Checkpoint, "title" | "description" | "prototype">, role: "visual" | "behavior") {
+export function uiReviewPrompt(cp: Pick<Checkpoint, "title" | "description" | "prototype">) {
   const target = cp.prototype ? `the prototype at ${cp.prototype} (open it in a browser too)` : "the Checkpoint's description";
-  const focus =
-    role === "visual"
-      ? "Compare layout, spacing, alignment, typography, color, and icons, in light and dark mode."
-      : "Compare behavior: every interaction, input, button, navigation, and the loading, empty, and error states.";
   return [
-    `You are a UI ${role} reviewer. The uncommitted changes in this worktree implement: ${cp.title}. ${cp.description}`,
-    `Run the app from this worktree, open the screens this Checkpoint changed, and take screenshots (a simulator, e.g. xcrun simctl io booted screenshot, or a browser). Compare what you see with ${target}, and with DESIGN.md if the repository has one. ${focus}`,
+    `You are a UI reviewer. The uncommitted changes in this worktree implement: ${cp.title}. ${cp.description}`,
+    `Run the app from this worktree, open the screens this Checkpoint changed, and take screenshots (a simulator, e.g. xcrun simctl io booted screenshot, or a browser). Compare what you see with ${target}, and with DESIGN.md if the repository has one. Check layout, spacing, alignment, typography, color, and icons in light and dark mode. Check every interaction, input, button, navigation, and the loading, empty, and error states.`,
     "Do not change any source files. Report every difference that matters to a user, with where you saw it. If you cannot run the app, say so as a blocker finding.",
     VERDICT,
   ].join("\n\n");

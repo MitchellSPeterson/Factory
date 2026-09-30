@@ -10,7 +10,7 @@ import { ProjectPicture } from '@/components/project-picture';
 import { useDesktop } from '@/hooks/use-desktop';
 import { api } from '@/lib/api';
 import type { ProviderMeter } from '@/lib/dataModel';
-import { useQuery } from '@/lib/factory';
+import { useConnection, useQuery } from '@/lib/factory';
 import { useProjectScope } from '@/lib/project-scope-context';
 import { formatTokens, formatUsdCents } from '@/settings/format';
 import {
@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const { scope, currentProject } = useProjectScope();
   const [now, setNow] = useState(Date.now());
   const desktop = useDesktop();
+  const { pairing } = useConnection();
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15_000);
@@ -92,13 +93,22 @@ export default function SettingsPage() {
           </SettingsGroup>
 
           <SettingsGroup title="Devices">
-            <SettingsRow
-              icon={SettingsIcons.phone}
-              label="Pair a Phone"
-              onPress={() => router.push('/settings/pairing')}
-            />
+            {process.env.EXPO_OS === 'web' ? (
+              <SettingsRow
+                icon={SettingsIcons.phone}
+                label="Pair a Phone"
+                onPress={() => router.push('/settings/pairing')}
+              />
+            ) : (
+              <SettingsRow
+                icon={SettingsIcons.machine}
+                label="Connect to a Mac"
+                value={pairing?.url}
+                valueMode="middle"
+                onPress={() => router.push('/settings/connection')}
+              />
+            )}
           </SettingsGroup>
-
         </>
       )}
 

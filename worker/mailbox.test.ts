@@ -306,7 +306,7 @@ test("builds.create plans and advances through planApproved", async () => {
     roadmapItemId: itemId,
     checkCommand: "bun test",
     agent,
-    reviewers: [agent, agent],
+    reviewer: agent,
   });
   let build = await client.query(api.builds.get, { buildId });
   expect(build?.status).toBe("running");

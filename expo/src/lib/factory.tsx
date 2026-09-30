@@ -9,6 +9,12 @@ import type { ApiFn } from "../../../shared/mailboxApi";
 type FactoryClient = WorkerPairing;
 
 const FactoryContext = createContext<FactoryClient | null>(null);
+const SetPairingContext = createContext<(next: WorkerPairing) => void>(() => {});
+
+/** The Mac this app talks to, and a way to switch to another one. */
+export function useConnection() {
+  return { pairing: useContext(FactoryContext), setPairing: useContext(SetPairingContext) };
+}
 
 async function rpc(client: FactoryClient, kind: "query" | "mutation" | "action", path: string, args: object) {
   const response = await fetch(`${client.url}/api/${kind}`, {
@@ -105,7 +111,11 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       />
     );
   }
-  return <FactoryContext.Provider value={pairing}>{children}</FactoryContext.Provider>;
+  return (
+    <SetPairingContext.Provider value={setPairing}>
+      <FactoryContext.Provider value={pairing}>{children}</FactoryContext.Provider>
+    </SetPairingContext.Provider>
+  );
 }
 
 export function useQuery<R, A extends object = object>(path: ApiFn<A, R>, args?: A | "skip"): R | undefined {

@@ -30,8 +30,7 @@ export function SendToBuildDialog({
 
   const [checkCommand, setCheckCommand] = useState("");
   const [agent, setAgent] = useState<AgentPick | null>(null);
-  const [reviewerA, setReviewerA] = useState<AgentPick | null>(null);
-  const [reviewerB, setReviewerB] = useState<AgentPick | null>(null);
+  const [reviewer, setReviewer] = useState<AgentPick | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -40,8 +39,7 @@ export function SendToBuildDialog({
     setCheckCommand("");
     setError("");
     setAgent(null);
-    setReviewerA(null);
-    setReviewerB(null);
+    setReviewer(null);
   }, [visible]);
 
   useEffect(() => {
@@ -52,12 +50,11 @@ export function SendToBuildDialog({
     const second = (secondProvider ? models.find((m) => m.provider === secondProvider) : models[1]) ?? first;
     const pick = (m: ChatModelOption): AgentPick => ({ provider: m.provider, model: m.model, effort: DEFAULT_AGENT_EFFORT });
     setAgent(pick(first));
-    setReviewerA(pick(first));
-    setReviewerB(pick(second));
+    setReviewer(pick(second));
   }, [visible, models, agent]);
 
   async function submit() {
-    if (!agent || !reviewerA || !reviewerB || busy) return;
+    if (!agent || !reviewer || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -65,7 +62,7 @@ export function SendToBuildDialog({
         roadmapItemId,
         checkCommand: checkCommand.trim(),
         agent,
-        reviewers: [reviewerA, reviewerB],
+        reviewer,
       });
       onCreated(id);
     } catch (e) {
@@ -75,7 +72,7 @@ export function SendToBuildDialog({
     }
   }
 
-  const ready = !!(agent && reviewerA && reviewerB);
+  const ready = !!(agent && reviewer);
 
   return (
     <Dialog open={visible} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -94,11 +91,10 @@ export function SendToBuildDialog({
             placeholder="bun run check"
             description="Empty skips the Behavior gate."
           />
-          {agent && reviewerA && reviewerB ? (
+          {agent && reviewer ? (
             <>
               <AgentPickField label="Implementer" value={agent} onChange={setAgent} models={models ?? []} />
-              <AgentPickField label="Reviewer A" value={reviewerA} onChange={setReviewerA} models={models ?? []} />
-              <AgentPickField label="Reviewer B" value={reviewerB} onChange={setReviewerB} models={models ?? []} />
+              <AgentPickField label="Reviewer" value={reviewer} onChange={setReviewer} models={models ?? []} />
             </>
           ) : (
             <View className="flex-row items-center gap-2">

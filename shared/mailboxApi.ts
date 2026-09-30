@@ -204,7 +204,7 @@ export const api = {
     get: ref<{ buildId: string }, Doc<"builds"> | null>("builds.get"),
     // Starts planning. The Roadmap Item moves to In progress.
     create: ref<
-      { roadmapItemId: string; checkCommand: string; agent: AgentPick; reviewers: [AgentPick, AgentPick] },
+      { roadmapItemId: string; checkCommand: string; agent: AgentPick; reviewer: AgentPick },
       Id<"builds">
     >("builds.create"),
     // Runs helix advance(). The page sends planApproved/approved/feedback/resume/stop; the Worker sends the rest.

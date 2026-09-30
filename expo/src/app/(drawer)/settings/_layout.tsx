@@ -90,6 +90,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="machine" options={{ title: 'This Mac' }} />
       <Stack.Screen name="projects" options={{ title: 'Projects' }} />
       <Stack.Screen name="pairing" options={{ title: 'Pair a Phone' }} />
+      <Stack.Screen name="connection" options={{ title: 'Connect to a Mac' }} />
     </Stack>
   );
   if (!desktop) return stack;

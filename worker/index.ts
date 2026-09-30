@@ -585,48 +585,38 @@ async function startBuildStep(
     // review
     const cp = build.checkpoints[build.current]!;
     const guides = existingGuides(worktree);
-    const sessionIds: Id<"sessions">[] = [];
-    for (const [i, reviewer] of build.reviewers.entries()) {
-      // ponytail: same crash window; a lost mark here would leave one reviewer Session untracked.
-      const sessionId = await client.mutation(api.sessions.create, {
-        projectId: build.projectId,
-        provider: reviewer.provider,
-        model: reviewer.model,
-        effort: reviewer.effort,
-        permissionMode: "full-access",
-        text: reviewPrompt(cp, guides),
-        cwd: worktree,
-        title: `Build · ${build.current + 1} · Reviewer ${i === 0 ? "A" : "B"}`,
-        roadmapItemId: build.roadmapItemId,
-        accessKey: identity.accessKey,
-      });
-      sessionIds.push(sessionId);
-    }
-    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds });
+    // ponytail: a crash between sessions.create and builds.mark can leave this Session untracked.
+    const sessionId = await client.mutation(api.sessions.create, {
+      projectId: build.projectId,
+      provider: build.reviewer.provider,
+      model: build.reviewer.model,
+      effort: build.reviewer.effort,
+      permissionMode: "full-access",
+      text: reviewPrompt(cp, guides),
+      cwd: worktree,
+      title: `Build · ${build.current + 1} · Reviewer`,
+      roadmapItemId: build.roadmapItemId,
+      accessKey: identity.accessKey,
+    });
+    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds: [sessionId] });
     return;
   }
   if (step.kind === "uiReview") {
     const cp = build.checkpoints[build.current]!;
-    const roles = ["visual", "behavior"] as const;
-    const sessionIds: Id<"sessions">[] = [];
-    for (const [i, role] of roles.entries()) {
-      const reviewer = build.reviewers[i]!;
-      // ponytail: same crash window as the review Step above.
-      const sessionId = await client.mutation(api.sessions.create, {
-        projectId: build.projectId,
-        provider: reviewer.provider,
-        model: reviewer.model,
-        effort: reviewer.effort,
-        permissionMode: "full-access",
-        text: uiReviewPrompt(cp, role),
-        cwd: worktree,
-        title: `Build · UI review ${build.current + 1} · ${role === "visual" ? "Visual" : "Behavior"}`,
-        roadmapItemId: build.roadmapItemId,
-        accessKey: identity.accessKey,
-      });
-      sessionIds.push(sessionId);
-    }
-    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds });
+    // ponytail: same crash window as the review Step above.
+    const sessionId = await client.mutation(api.sessions.create, {
+      projectId: build.projectId,
+      provider: build.reviewer.provider,
+      model: build.reviewer.model,
+      effort: build.reviewer.effort,
+      permissionMode: "full-access",
+      text: uiReviewPrompt(cp),
+      cwd: worktree,
+      title: `Build · UI review ${build.current + 1}`,
+      roadmapItemId: build.roadmapItemId,
+      accessKey: identity.accessKey,
+    });
+    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, started: true, sessionIds: [sessionId] });
     return;
   }
   if (step.kind === "check") {

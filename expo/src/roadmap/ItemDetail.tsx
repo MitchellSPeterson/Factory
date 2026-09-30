@@ -60,7 +60,6 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
   const addLink = useAction(api.roadmap.addLink);
   const refreshLinks = useAction(api.roadmap.refreshLinks);
 
-  const [title, setTitle] = useState("");
   const [editingDesc, setEditingDesc] = useState(false);
   const [desc, setDesc] = useState("");
   const [error, setError] = useState("");
@@ -70,7 +69,6 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
 
   useEffect(() => {
     if (!item) return;
-    setTitle(item.title);
     setDesc(item.description);
   }, [item?._id]);
 
@@ -103,11 +101,6 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that change.");
     }
-  }
-  function saveTitle() {
-    const next = title.trim();
-    if (next && next !== current.title) void patch({ title: next });
-    else setTitle(current.title);
   }
   function saveDesc() {
     setEditingDesc(false);
@@ -197,18 +190,9 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
         </View>
       </View>
 
-      <TextInput
-        value={title}
-        onChangeText={setTitle}
-        onBlur={saveTitle}
-        onSubmitEditing={saveTitle}
-        // Web renders multiline as a fixed two-row textarea; one line reads right there.
-        multiline={!web}
-        submitBehavior="blurAndSubmit"
-        accessibilityLabel="Title"
-        className="mt-1 py-2 text-[26px] font-bold leading-[33px] tracking-tight text-foreground"
-        style={noOutline}
-      />
+      <Text accessibilityRole="header" className="mt-1 py-2 text-[26px] font-bold leading-[33px] tracking-tight text-foreground">
+        {item.title}
+      </Text>
 
       {error ? (
         <Animated.View entering={reduced ? undefined : FadeIn.duration(MOTION_MS)}>
@@ -364,7 +348,7 @@ export function ItemDetail({ itemId, onClose }: { itemId: Id<"roadmapItems">; on
               key={row.session._id}
               accessibilityRole="link"
               className="-mx-2"
-              onPress={() => router.push({ pathname: "/chats", params: { session: row.session._id } })}>
+              onPress={() => router.push({ pathname: "/chats", params: { session: row.session._id, back: `/roadmap?item=${item._id}` } })}>
               <Item.Media>
                 <SymbolView name={IconNames.sessions} size={14} tintColor={theme.textSecondary} />
               </Item.Media>
@@ -474,7 +458,7 @@ function ComboField({
         onSubmitEditing={() => commit(draft ?? "")}
         placeholder={placeholder}
         placeholderTextColor={theme.textSecondary}
-        className={`h-8 rounded-lg border px-2 text-[13px] text-foreground ${editing ? "border-input bg-background" : "border-transparent"}`}
+        className={`h-9 rounded-lg border px-3 py-1.5 text-[13px] text-foreground ${editing ? "border-input bg-background" : "border-transparent"}`}
         style={noOutline}
       />
       {editing && (matches.length > 0 || creating) ? (
@@ -540,7 +524,7 @@ function TagsField({ tags, options, onChange }: { tags: string[]; options: strin
           submitBehavior="submit"
           placeholder={tags.length ? "Add" : "Add tag"}
           placeholderTextColor={theme.textSecondary}
-          className="h-7 min-w-20 flex-grow px-1 text-[13px] text-foreground"
+          className="h-8 min-w-20 flex-grow px-2 py-1 text-[13px] text-foreground"
           style={noOutline}
         />
       </View>

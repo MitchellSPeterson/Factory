@@ -1588,7 +1588,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       branch: branchFor(title),
       checkCommand,
       agent: args.agent,
-      reviewers: args.reviewers,
+      reviewer: args.reviewer,
       notes: [],
       checkpoints: [],
       current: 0,

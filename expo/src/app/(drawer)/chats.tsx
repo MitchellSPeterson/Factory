@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@/lib/factory";
 import { DrawerToggleButton } from "expo-router/drawer";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { type Href, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { SymbolView } from "expo-symbols";
 import { Alert, BackHandler, Platform, ScrollView, useWindowDimensions, View } from "react-native";
@@ -31,7 +31,7 @@ export default function ChatsPage() {
   const theme = useTheme();
   const navigation = useNavigation();
   const router = useRouter();
-  const params = useLocalSearchParams<{ session?: string; new?: string; roadmapItem?: string }>();
+  const params = useLocalSearchParams<{ session?: string; new?: string; roadmapItem?: string; back?: string }>();
   const sessions = useQuery(api.sessions.list);
   const removeSession = useMutation(api.sessions.remove);
   const { scope, projects, currentProject } = useProjectScope();
@@ -77,7 +77,9 @@ export default function ChatsPage() {
   }
   function closeChat() {
     setPanel(null);
-    router.setParams({ session: undefined, new: undefined, roadmapItem: undefined });
+    router.setParams({ session: undefined, new: undefined, roadmapItem: undefined, back: undefined });
+    // Build sessions aren't in the chat list; return to the screen that opened them.
+    if (params.back) router.navigate(params.back as Href);
   }
   async function deleteChat(id: Id<"sessions">) {
     try {
