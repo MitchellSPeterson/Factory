@@ -25,6 +25,7 @@ import { DragRow } from "@/roadmap/DragRow";
 import { dropTarget, type DropSection } from "@/roadmap/reorder";
 import { EASE_OUT, MOTION_MS } from "@/roadmap/meta";
 import { LoopVisual } from "@/build/LoopVisual";
+import { WorkflowDetail } from "@/build/WorkflowDetail";
 import { BUILD_STATUS_LABEL, GATE_LABEL, GATE_STATE_LABEL, LOOP_NODES } from "@/build/meta";
 import { GATES, type BuildEvent, type Checkpoint, type GateKey, type PlannedCheckpoint, type Step } from "../../../shared/helix";
 
@@ -76,6 +77,13 @@ function measure(view: View | null | undefined) {
 }
 
 export function BuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClose: () => void }) {
+  const build = useQuery(api.builds.get, { buildId });
+  if (build === undefined) return <View className="flex-1 items-center justify-center"><Spinner label="Loading Build" /></View>;
+  if (build?.workflow?.version === 2) return <WorkflowDetail key={buildId} build={build} onClose={onClose} />;
+  return <LegacyBuildDetail key={buildId} buildId={buildId} onClose={onClose} />;
+}
+
+function LegacyBuildDetail({ buildId, onClose }: { buildId: Id<"builds">; onClose: () => void }) {
   const router = useRouter();
   const reduced = useReducedMotion();
   const build = useQuery(api.builds.get, { buildId });
@@ -418,7 +426,7 @@ export function BuildActionCard({ buildId }: { buildId: Id<"builds"> }) {
     // Reset the draft only when a fresh plan arrives, not on every poll tick.
   }, [build?._id, build?.step.kind]);
 
-  if (!build) return null;
+  if (!build || build.workflow?.version === 2) return null;
 
   async function send_(event: BuildEvent) {
     setBusy(true);

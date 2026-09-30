@@ -446,9 +446,9 @@ function ConversationBody({
     const drop = (e: DragEvent) => {
       if (!e.dataTransfer?.files.length) return;
       e.preventDefault();
-      dropRef.current([...e.dataTransfer.files]);
+      dropRef.current(Array.from(e.dataTransfer.files));
     };
-    const paste = (e: ClipboardEvent) => dropRef.current([...(e.clipboardData?.files ?? [])]);
+    const paste = (e: ClipboardEvent) => dropRef.current(Array.from(e.clipboardData?.files ?? []));
     document.addEventListener("dragover", over);
     document.addEventListener("drop", drop);
     document.addEventListener("paste", paste);

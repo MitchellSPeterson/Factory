@@ -297,43 +297,22 @@ test("sessions.create with roadmapItemId sets in_progress and tracks the session
   expect(itemAfter?.sessionIds).toEqual([]);
 });
 
-test("builds.create plans and advances through planApproved", async () => {
+test("new Builds refine automatically and require workflow actions", async () => {
   const client = mailbox();
+  await register(client);
   const projectId = await makeProject(client);
   const itemId = await client.mutation(api.roadmap.createItem, { projectId, kind: "feature", title: "Add search" });
   const agent = { provider: "grok" as const, model: "grok-4.6", effort: "medium" as const };
-  const buildId = await client.mutation(api.builds.create, {
-    roadmapItemId: itemId,
-    checkCommand: "bun test",
-    agent,
-    reviewer: agent,
-  });
-  let build = await client.query(api.builds.get, { buildId });
-  expect(build?.status).toBe("running");
-  expect(build?.step).toEqual({ kind: "plan" });
+  const buildId = await client.mutation(api.builds.create, { roadmapItemId: itemId, checkCommand: "bun test", agent, reviewer: agent });
+  const build = await client.query(api.builds.get, { buildId });
+  expect(build?.workflow?.version).toBe(2);
+  expect(build?.workflow?.phase).toBe('setup');
   expect(build?.branch).toBe("build/add-search");
   expect((await client.query(api.roadmap.getItem, { itemId }))?.status).toBe("in_progress");
-  expect((await client.query(api.builds.list, { projectId })).map((row) => row._id)).toEqual([buildId]);
-
-  await client.mutation(api.builds.send, {
-    buildId,
-    event: { kind: "planned", checkpoints: [{ title: "Step 1", description: "", tests: "search returns matches", ui: false }] },
-  });
-  build = await client.query(api.builds.get, { buildId });
-  expect(build?.step).toEqual({ kind: "approvePlan" });
-  expect(build?.status).toBe("waiting");
-
-  await client.mutation(api.builds.send, {
-    buildId,
-    event: { kind: "planApproved", checkpoints: [{ title: "Step 1", description: "", tests: "search returns matches", ui: false }] },
-  });
-  build = await client.query(api.builds.get, { buildId });
-  expect(build?.step).toEqual({ kind: "writeTests" });
-  expect(build?.checkpoints[0]?.status).toBe("active");
-
-  await expect(client.mutation(api.builds.send, { buildId: "missing", event: { kind: "resume" } })).rejects.toThrow(
-    "Build not found",
-  );
+  await expect(client.mutation(api.builds.send, { buildId, event: { kind: 'resume' } })).rejects.toThrow('workflow actions');
+  await client.mutation(api.builds.updateWorkflow, { buildId, accessKey: key, action: { kind: 'setup', id: 'setup', generation: 0, phase: 'setup', config: build!.workflow!.config } });
+  expect((await client.query(api.projects.get, { projectId }))?.buildConfig?.discovered).toBe(true);
+  expect((await client.query(api.builds.get, { buildId }))?.workflow?.phase).toBe('refine');
 });
 
 test("sessions.create with cwd runs in the worktree, not the Project folder", async () => {

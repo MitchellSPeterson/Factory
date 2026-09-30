@@ -2,17 +2,21 @@ import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { Button } from "panelui-native/components/button";
 import { Dialog } from "panelui-native/components/dialog";
-import { Input } from "panelui-native/components/input";
-import { Spinner } from "panelui-native/components/spinner";
 import { Text } from "panelui-native/primitives/text";
-import { useMutation } from "@/lib/factory";
+import { useMutation, useQuery } from "@/lib/factory";
 import { api } from "@/lib/api";
 import type { Id } from "@/lib/dataModel";
 import { Notice } from "@/chats/ui";
 import { useChatModels } from "@/chats/model-picker";
-import { DEFAULT_AGENT_EFFORT } from "../../../shared/agentModel";
-import type { AgentPick } from "../../../shared/helix";
-import { AgentPickField, type ChatModelOption } from "@/build/AgentPickField";
+import {
+  BuildConfigurationForm,
+  cleanBuildConfiguration,
+  initialBuildConfiguration,
+} from "./BuildSettings";
+import type {
+  BuildConfiguration,
+  PrototypeMode,
+} from "../../../shared/buildWorkflow";
 
 export function SendToBuildDialog({
   visible,
@@ -26,87 +30,137 @@ export function SendToBuildDialog({
   onCreated: (id: Id<"builds">) => void;
 }) {
   const models = useChatModels();
+  const item = useQuery(
+    api.roadmap.getItem,
+    visible ? { itemId: roadmapItemId } : "skip",
+  );
+  const project = useQuery(
+    api.projects.get,
+    item ? { projectId: item.projectId } : "skip",
+  );
   const create = useMutation(api.builds.create);
-
-  const [checkCommand, setCheckCommand] = useState("");
-  const [agent, setAgent] = useState<AgentPick | null>(null);
-  const [reviewer, setReviewer] = useState<AgentPick | null>(null);
+  const [config, setConfig] = useState<BuildConfiguration | null>(null);
+  const [overrides, setOverrides] = useState(false);
+  const [prototypeMode, setPrototypeMode] = useState<PrototypeMode>("auto");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-
   useEffect(() => {
-    if (!visible) return;
-    setCheckCommand("");
-    setError("");
-    setAgent(null);
-    setReviewer(null);
-  }, [visible]);
-
+    if (visible) {
+      setError("");
+      setOverrides(false);
+      setPrototypeMode("auto");
+      setConfig(null);
+    }
+  }, [visible, roadmapItemId]);
   useEffect(() => {
-    if (!visible || agent || !models || models.length === 0) return;
-    const providers = [...new Set(models.map((m) => m.provider))];
-    const first = models[0]!;
-    const secondProvider = providers.find((p) => p !== first.provider);
-    const second = (secondProvider ? models.find((m) => m.provider === secondProvider) : models[1]) ?? first;
-    const pick = (m: ChatModelOption): AgentPick => ({ provider: m.provider, model: m.model, effort: DEFAULT_AGENT_EFFORT });
-    setAgent(pick(first));
-    setReviewer(pick(second));
-  }, [visible, models, agent]);
-
+    if (visible && !config && project)
+      setConfig(initialBuildConfiguration(models ?? [], project.buildConfig));
+  }, [visible, config, project, models]);
   async function submit() {
-    if (!agent || !reviewer || busy) return;
+    if (!config || busy) return;
     setBusy(true);
     setError("");
     try {
+      const resolved = cleanBuildConfiguration(config);
       const id = await create({
         roadmapItemId,
-        checkCommand: checkCommand.trim(),
-        agent,
-        reviewer,
+        checkCommand: "",
+        agent: resolved.roles.builder,
+        reviewer: resolved.roles.reviewer,
+        prototypeMode,
+        ...(overrides ? { config: resolved } : {}),
       });
       onCreated(id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not start that Build.");
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Could not start that Build.",
+      );
     } finally {
       setBusy(false);
     }
   }
-
-  const ready = !!(agent && reviewer);
-
   return (
-    <Dialog open={visible} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <Dialog.Content className="max-h-[90%] w-full max-w-[460px]">
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="gap-3.5">
+    <Dialog
+      open={visible}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Dialog.Content className="max-h-[90%] w-full max-w-[560px]">
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="gap-3.5"
+        >
           <Dialog.Title>Send to Build</Dialog.Title>
           <Dialog.Description>
-            Splits this item into Checkpoints and runs each through Behavior, UI, and Review gates. You try the finished Build at the end.
+            Factory refines Requirements, prepares a Prototype when needed,
+            plans automatically, and checks the complete change before PR
+            review.
           </Dialog.Description>
-          <Input
-            label="Check command"
-            value={checkCommand}
-            onChangeText={setCheckCommand}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="bun run check"
-            description="Empty skips the Behavior gate."
-          />
-          {agent && reviewer ? (
-            <>
-              <AgentPickField label="Implementer" value={agent} onChange={setAgent} models={models ?? []} />
-              <AgentPickField label="Reviewer" value={reviewer} onChange={setReviewer} models={models ?? []} />
-            </>
-          ) : (
-            <View className="flex-row items-center gap-2">
-              <Spinner size="sm" />
-              <Text className="text-sm text-muted-foreground">Loading models from the Worker…</Text>
+          <View className="gap-2">
+            <Text className="text-xs font-semibold text-muted-foreground">
+              Prototype
+            </Text>
+            <View className="flex-row flex-wrap gap-1.5">
+              {(
+                [
+                  ["auto", "Automatic"],
+                  ["required", "Require"],
+                  ["skip", "Skip"],
+                ] as const
+              ).map(([mode, label]) => (
+                <Button
+                  key={mode}
+                  variant={prototypeMode === mode ? "primary" : "ghost"}
+                  onPress={() => setPrototypeMode(mode)}
+                >
+                  {label}
+                </Button>
+              ))}
             </View>
+            <Text className="text-xs leading-5 text-muted-foreground">
+              New components and substantial UI redesigns require design
+              approval. Each implementation Batch allows three builder attempts.
+            </Text>
+          </View>
+          <View className="rounded-xl border border-border p-3">
+            <Text className="text-sm text-foreground">
+              {project?.buildConfig?.discovered
+                ? "Using this Project’s saved Build settings"
+                : "The setup agent will discover this Project’s commands"}
+            </Text>
+            <Text className="mt-1 text-xs leading-5 text-muted-foreground">
+              Role settings and selected Skills are preserved when this Build
+              starts.
+            </Text>
+            <Button
+              className="mt-2 self-start"
+              variant="ghost"
+              onPress={() => setOverrides(!overrides)}
+            >
+              {overrides ? "Hide overrides" : "Override for this Build"}
+            </Button>
+          </View>
+          {overrides && config && (
+            <BuildConfigurationForm
+              config={config}
+              onChange={setConfig}
+              models={models ?? []}
+              skills={project?.skills ?? []}
+            />
           )}
-          {error ? <Notice text={error} error /> : null}
+          {!config && (
+            <Text className="text-sm text-muted-foreground">
+              Loading Project settings and models from the Worker…
+            </Text>
+          )}
+          {!!error && <Notice text={error} error />}
         </ScrollView>
         <Dialog.Footer>
-          <Button variant="ghost" onPress={onClose}>Cancel</Button>
-          <Button disabled={!ready || busy} onPress={() => void submit()}>
+          <Button variant="ghost" onPress={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!config || busy} onPress={() => void submit()}>
             {busy ? "Starting…" : "Start Build"}
           </Button>
         </Dialog.Footer>

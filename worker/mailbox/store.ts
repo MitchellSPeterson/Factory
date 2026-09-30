@@ -15,6 +15,7 @@ export type Store = {
   delete: (id: string) => void;
   subscribe: (fn: () => void) => () => void;
   close: () => void;
+  transaction: <T>(run: () => T) => T;
 };
 
 export function openStore(file: string): Store {
@@ -28,13 +29,26 @@ export function openStore(file: string): Store {
   )`);
   db.exec("CREATE INDEX IF NOT EXISTS docs_table ON docs(table_name)");
   const listeners = new Set<() => void>();
+  let transactionDepth = 0;
+  let pendingNotification = false;
   function notify() {
+    if (transactionDepth) { pendingNotification = true; return; }
     for (const fn of listeners) fn();
   }
   function parse(row: { id: string; created_at: number; json: string }): Doc {
     return { ...(JSON.parse(row.json) as Record<string, unknown>), _id: row.id, _creationTime: row.created_at };
   }
   return {
+    transaction(run) {
+      const priorNotification = pendingNotification;
+      transactionDepth += 1;
+      let result: ReturnType<typeof run>;
+      try { result = db.transaction(run)(); }
+      catch (error) { transactionDepth -= 1; pendingNotification = priorNotification; throw error; }
+      transactionDepth -= 1;
+      if (!transactionDepth && pendingNotification) { pendingNotification = false; notify(); }
+      return result;
+    },
     get(id) {
       const row = db.query("SELECT id, created_at, json FROM docs WHERE id = ?").get(id) as
         | { id: string; created_at: number; json: string }

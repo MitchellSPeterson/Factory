@@ -1,4 +1,6 @@
 import { startTerminals } from "./terminals";
+import { cancelWorkflowCommands, ensureBuildWorkflowWorktree, inspectionSandboxArgs, inspectionWritableRoots, runBuildWorkflowTick, recoverBuildWorkflows, sessionExecutionEnvironment, workflowExecutionProtection } from "./buildWorkflow";
+import { startSessionBridge } from "./sessionBridge";
 import { Agent } from "@cursor/sdk";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -46,7 +48,7 @@ function loadEnvLocal() {
     // no .env.local
   }
 }
-loadEnvLocal();
+if (!process.argv.includes("--execute-session")) loadEnvLocal();
 
 type SessionLaunch = {
   sessionId: Id<"sessions">;
@@ -57,6 +59,8 @@ type SessionLaunch = {
   permissionMode: "supervised" | "auto-accept-edits" | "auto" | "full-access";
   serviceTier: "standard" | "flex" | "priority";
   agentId?: string;
+  buildReadOnlyRoots?: string[];
+  buildEvidenceDirectory?: string;
   images: Array<{ url: string }>;
   project: {
     id: Id<"projects">;
@@ -397,41 +401,51 @@ async function executeSession(client: Mailbox, launch: SessionLaunch) {
   else await runSessionCodex(client, launch);
 }
 
+const sessionProcesses = new Map<string, ReturnType<typeof Bun.spawn>>();
+function killSessionProcess(proc: ReturnType<typeof Bun.spawn>) {
+  try { process.kill(-proc.pid, "SIGKILL"); } catch { try { proc.kill("SIGKILL"); } catch {} }
+}
 async function tick(client: Mailbox, identity: WorkerIdentity) {
   const queuedSessions = await client.query(api.sessions.listQueued, {});
   for (const sessionId of queuedSessions) {
+    if (sessionProcesses.has(sessionId)) continue;
     const launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: identity.accessKey });
     if (!launch) continue;
+    let bridge: ReturnType<typeof startSessionBridge> | undefined;
     try {
+      bridge = startSessionBridge(client, launch.sessionId);
       const values = await environmentFor(client, identity, launch.project.serverId ? launch.project.id : undefined);
-      const proc = Bun.spawn([process.execPath, path.join(root, "worker/index.ts"), "--execute-session"], {
-        stdin: "pipe", stdout: "ignore", stderr: "ignore",
-        env: { ...process.env, ...values.server, ...values.project },
+      const sandbox = launch.buildReadOnlyRoots !== undefined
+        ? inspectionSandboxArgs(launch.buildReadOnlyRoots, launch.buildEvidenceDirectory!, launch.buildReadOnlyRoots.includes(launch.project.localPath) ? await inspectionWritableRoots(launch.project.localPath) : [launch.project.localPath], workflowExecutionProtection(root)) : [];
+      const proc = Bun.spawn([...sandbox, process.execPath, "--no-env-file", path.join(root, "worker/index.ts"), "--execute-session"], {
+        stdin: "pipe", stdout: "ignore", stderr: "ignore", detached: true,
+        env: sessionExecutionEnvironment({ ...process.env, ...values.server, ...values.project }),
       });
-      proc.stdin.write(JSON.stringify({ launch, workerUrl: `http://127.0.0.1:${process.env.FACTORY_PAIR_PORT || 3402}`, token: identity.pairingToken }));
+      sessionProcesses.set(sessionId, proc);
+      proc.stdin.write(JSON.stringify({ launch, workerUrl: bridge.workerUrl, token: bridge.token }));
       proc.stdin.end();
-      let exitCode: number | undefined;
-      const exited = proc.exited.then((code) => {
-        exitCode = code;
-        return code;
-      });
-      while (exitCode === undefined) {
-        await Promise.race([exited, Bun.sleep(500)]);
-        if (exitCode !== undefined) break;
-        const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
-        if (status === null || status === "failed" || status === "stopped") {
-          proc.kill("SIGTERM");
-          break;
-        }
-      }
-      if (await exited !== 0) {
-        const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
-        if (status !== "failed" && status !== "stopped") {
-          throw new Error("Session failed. Check the worker environment, provider credentials, and Project configuration.");
-        }
-      }
-    } catch {
-      await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: "Session failed. Check worker environment settings and provider credentials." });
+      void (async () => {
+        try {
+          let exitCode: number | undefined;
+          const exited = proc.exited.then(code => { exitCode = code; return code; });
+          while (exitCode === undefined) {
+            await Promise.race([exited, Bun.sleep(500)]);
+            if (exitCode !== undefined) break;
+            const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
+            if (status === null || status === "failed" || status === "stopped") { killSessionProcess(proc); break; }
+          }
+          if (await exited !== 0) {
+            const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
+            if (status !== "failed" && status !== "stopped") await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: "Session failed. Check provider credentials, environment, and read-only execution permissions." });
+          }
+        } catch {
+          killSessionProcess(proc);
+          await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: "Session execution or monitoring failed." }).catch(() => {});
+        } finally { bridge?.close(); sessionProcesses.delete(sessionId); }
+      })();
+    } catch (error) {
+      bridge?.close();
+      await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: error instanceof Error ? error.message : "Session launch failed." });
     }
   }
 }
@@ -698,19 +712,23 @@ async function pollBuildStep(client: Mailbox, build: Doc<"builds">): Promise<voi
 }
 
 async function buildsTick(client: Mailbox, identity: WorkerIdentity) {
+  await cancelWorkflowCommands(client);
   const builds = await client.query(api.builds.listActive, { accessKey: identity.accessKey });
   for (const build of builds) {
     try {
       const project = await client.query(api.projects.get, { projectId: build.projectId });
       if (!project) throw new Error("Project not found.");
+      if (build.workflow?.version === 2) {
+        const worktree = await ensureBuildWorkflowWorktree(root, client, identity, build, project);
+        await runBuildWorkflowTick(root, client, identity, build, project, worktree);
+        continue;
+      }
       const worktree = build.worktree ?? (await ensureWorktree(client, identity, build, project));
       if (!build.started) await startBuildStep(client, identity, build, worktree);
       else await pollBuildStep(client, build);
     } catch (error) {
-      await client.mutation(api.builds.send, {
-        buildId: build._id,
-        event: { kind: "failed", error: error instanceof Error ? error.message : "Build step failed." },
-      });
+      if (build.workflow?.version === 2) await client.mutation(api.builds.updateWorkflow, { accessKey: identity.accessKey, buildId: build._id, action: { id: `${build.workflow.generation}:worktree-failure`, generation: build.workflow.generation, phase: build.workflow.phase, kind: "failed", blocker: "environment", error: error instanceof Error ? error.message : "Build worktree failed." } });
+      else await client.mutation(api.builds.send, { buildId: build._id, event: { kind: "failed", error: error instanceof Error ? error.message : "Build step failed." } });
     }
   }
 }
@@ -743,6 +761,7 @@ async function main() {
   const client = mailboxForRoot(root, `http://127.0.0.1:${process.env.FACTORY_PAIR_PORT || 3402}`);
   await client.mutation(api.servers.register, { accessKey: identity.accessKey, name: identity.name, publicKey: identity.publicKey, projectsRoot: identity.projectsRoot });
   await seed(client);
+  await recoverBuildWorkflows(client, identity);
   console.log("Factory worker ready.");
   const stopDeviceHub = await startDeviceHub().catch((error: unknown) => {
     console.error("Device Hub could not start:", error instanceof Error ? error.message : String(error));
@@ -847,7 +866,7 @@ async function main() {
     }
   }
   try { for (;;) { try { await providerTick(); await simHubTick(); await skillsTick(); await tick(client, identity); await buildsTick(client, identity); } catch { console.error("Worker synchronization failed; retrying."); } await Bun.sleep(1500); } }
-  finally { clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); stopPairing(); setKeepAwake(false); }
+  finally { for (const proc of sessionProcesses.values()) killSessionProcess(proc); clearInterval(heartbeat); stopDeviceHub(); stopProjectOperations(); stopTerminals(); stopPairing(); setKeepAwake(false); }
 }
 
 void main().catch((error) => {

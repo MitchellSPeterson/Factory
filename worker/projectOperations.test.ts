@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -244,13 +244,17 @@ test("checkout refuses a dirty tree and switch works after creating a branch", a
 
 test("checking out a remote-only branch creates a local tracking branch", async () => {
   const directory = await repo();
-  await git(directory, ["update-ref", "refs/remotes/origin/from-remote", "HEAD"]);
+  const upstream = await repo();
+  await git(upstream, ["switch", "-c", "from-remote"]);
+  await git(directory, ["remote", "add", "origin", upstream]);
+  await git(directory, ["fetch", "origin"]);
   await executeProjectOperation(directory, {
     kind: "checkout",
     branch: "origin/from-remote",
   });
   const status = await executeProjectOperation(directory, { kind: "status" });
   expect(status.kind === "status" && status.branch).toBe("from-remote");
+  expect(status.kind === "status" && status.upstream).toBe("origin/from-remote");
 });
 
 test("worktrees are created as siblings and cannot remove the current checkout", async () => {
@@ -272,6 +276,12 @@ test("worktrees are created as siblings and cannot remove the current checkout",
       kind: "removeWorktree",
       path: directory,
     }),
+  ).rejects.toThrow("this Project is using");
+  const alias = `${directory}-alias`;
+  directories.push(alias);
+  await symlink(directory, alias);
+  await expect(
+    executeProjectOperation(directory, { kind: "removeWorktree", path: alias }),
   ).rejects.toThrow("this Project is using");
   if (!extra) throw new Error("expected extra worktree");
   await executeProjectOperation(directory, {

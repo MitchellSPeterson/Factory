@@ -585,8 +585,9 @@ export async function executeProjectOperation(
       (await git(["worktree", "list", "--porcelain"])).text,
       directory,
     );
+    const requestedPath = await realpath(operation.path).catch(() => path.resolve(operation.path));
     const match = listed.find(
-      (item) => path.resolve(item.path) === path.resolve(operation.path),
+      (item) => path.resolve(item.path) === requestedPath,
     );
     if (!match) throw new Error("Unknown worktree.");
     if (match.current)

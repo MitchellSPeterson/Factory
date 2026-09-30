@@ -1,4 +1,5 @@
 import { View } from 'react-native';
+import { BuildSettings } from '@/build/BuildSettings';
 
 import { ProjectPicture } from '@/components/project-picture';
 import { api } from '@/lib/api';
@@ -51,6 +52,7 @@ export default function ProjectsPage() {
               />
             ) : null}
           </SettingsGroup>
+          <BuildSettings key={project._id} project={project} />
           <ProjectUsage usage={project.usage} />
         </>
       ) : (

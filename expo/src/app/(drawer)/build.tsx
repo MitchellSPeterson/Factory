@@ -1,4 +1,6 @@
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
+import { api } from "@/lib/api";
+import { useQuery } from "@/lib/factory";
 import { DrawerToggleButton } from "expo-router/drawer";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { ScrollView, View, useWindowDimensions } from "react-native";
@@ -32,6 +34,31 @@ export default function BuildPage() {
   const desktop = useDesktop();
   const buildId = params.build as Id<"builds"> | undefined;
   const inBuild = !!buildId && !wide;
+  const linkedBuild = useQuery(api.builds.get, buildId ? { buildId } : "skip");
+  const openedLink = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!buildId) {
+      openedLink.current = undefined;
+      return;
+    }
+    if (
+      openedLink.current === buildId ||
+      linkedBuild?._id !== buildId ||
+      !projects?.some((project) => project._id === linkedBuild.projectId)
+    )
+      return;
+    openedLink.current = buildId;
+    if (scope.kind !== "project" || scope.projectId !== linkedBuild.projectId)
+      setScope({ kind: "project", projectId: linkedBuild.projectId });
+  }, [
+    buildId,
+    linkedBuild?._id,
+    linkedBuild?.projectId,
+    projects,
+    scope,
+    setScope,
+  ]);
+
 
   function open(id: Id<"builds">) {
     router.setParams({ build: id });

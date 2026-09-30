@@ -1,5 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import { globalSkillDirs, listRepoSkills } from "../repoSkills";
+import { advanceWorkflow, claimWorkflowStage, createWorkflow, resolveBuildConfiguration, validateBuildConfiguration, HUMAN_WORKFLOW_ACTIONS, WORKFLOW_ROLES, type BuildConfiguration, type BuildConfigurationOverride, type WorkflowAction, type WorkflowState, type WorkflowStageClaim, type PrototypeMode } from "../../shared/buildWorkflow";
 import { githubRepoFromRemote } from "../../shared/addProject";
 import { AGENT_PROVIDERS } from "../../shared/agentModel";
 import { advance, branchFor, type BuildEvent, type BuildFields, type Checkpoint } from "../../shared/helix";
@@ -575,6 +578,8 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       permissionMode: session.permissionMode ?? DEFAULT_PERMISSION_MODE,
       serviceTier: session.serviceTier ?? DEFAULT_SERVICE_TIER,
       agentId: session.agentId,
+      buildReadOnlyRoots: session.buildReadOnlyRoots,
+      buildEvidenceDirectory: session.buildEvidenceDirectory,
       images: imageUrls.map((url) => ({ url })),
       project: {
         id: project._id,
@@ -762,6 +767,12 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       }
     }
     store.delete(String(args.projectId));
+    return null;
+  },
+  "projects.configureBuild": (args, { store }) => {
+    const project = requireProject(store, String(args.projectId ?? ""));
+    validateBuildConfiguration(args.config as BuildConfiguration);
+    store.patch(project._id, { buildConfig: structuredClone(args.config) });
     return null;
   },
   "projects.reportSkills": (args, { store }) => {
@@ -1576,12 +1587,30 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     return store.list("builds").filter((row) => row.projectId === projectId);
   },
   "builds.get": (args, { store }) => store.get(String(args.buildId ?? "")),
-  "builds.create": (args, { store }) => {
+  "builds.create": async (args, { store }) => {
     const item = requireRoadmapItem(store, String(args.roadmapItemId ?? ""));
     const project = requireProject(store, String(item.projectId));
     const checkCommand = String(args.checkCommand ?? "");
     const title = String(item.title ?? "");
+    const config = resolveBuildConfiguration(args.agent as BuildFields['agent'], args.reviewer as BuildFields['reviewer'], project.buildConfig as BuildConfiguration | undefined, args.config as BuildConfigurationOverride | undefined, checkCommand);
+    const mode = (args.prototypeMode ?? 'auto') as PrototypeMode;
+    if (!['auto', 'required', 'skip'].includes(mode)) throw new Error('Invalid Prototype mode.');
+    const workflow = createWorkflow(config, mode, (item.requirements ?? []) as WorkflowState['requirements']);
+    if (WORKFLOW_ROLES.some(role => config.roles[role].skills.length)) {
+      const catalog = await listRepoSkills(String(project.localPath), globalSkillDirs());
+      for (const role of WORKFLOW_ROLES) for (const slug of config.roles[role].skills) {
+        const skill = catalog.find(skill => skill.slug === slug);
+        if (!skill) { workflow.configurationIssues.push(`Selected Skill ${slug} for ${role} is missing.`); continue; }
+        try {
+          const skillPath = path.resolve(String(project.localPath), skill.relPath);
+          const body = readFileSync(skillPath, 'utf8');
+          workflow.skillSnapshots.push({ role, slug, body, version: createHash('sha256').update(body).digest('hex'), path: skillPath });
+        } catch { workflow.configurationIssues.push(`Selected Skill ${slug} for ${role} cannot be read.`); }
+      }
+    }
+    if (workflow.configurationIssues.length) { workflow.status = 'paused'; workflow.error = workflow.configurationIssues.join('\n'); workflow.blocker = 'environment'; }
     const buildId = store.insert("builds", {
+      workflow,
       projectId: project._id,
       roadmapItemId: item._id,
       title,
@@ -1595,7 +1624,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       step: { kind: "plan" },
       started: false,
       sessionIds: [],
-      status: "running",
+      status: workflow.status,
     });
     if (item.status === "idea" || item.status === "planned") {
       store.patch(item._id, { status: "in_progress" });
@@ -1604,11 +1633,52 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   },
   "builds.send": (args, { store }) => {
     const build = requireBuild(store, String(args.buildId ?? ""));
+    if (build.workflow) throw new Error("Use workflow actions for this Build.");
     const { _id: _keep, _creationTime: _time, ...fields } = build;
     const result = advance(fields as BuildFields, args.event as BuildEvent);
     store.patch(build._id, result);
     return null;
   },
+  "builds.action": (args, { store }) => {
+    const action = args.action as WorkflowAction;
+    if (!HUMAN_WORKFLOW_ACTIONS.has(action?.kind)) throw new Error('This action belongs to the Worker.');
+    if (action.kind === 'feedback') action.feedback = { ...action.feedback, source: 'factory', authorized: false };
+    return applyWorkflowAction(store, String(args.buildId ?? ''), action);
+  },
+  "builds.updateWorkflow": (args, { store }) => {
+    const build = requireBuild(store, String(args.buildId ?? ''));
+    const server = requireServer(store, String(args.accessKey ?? ''));
+    const project = requireProject(store, String(build.projectId));
+    if (project.serverId && project.serverId !== server._id) throw new Error('This Project belongs to another Worker.');
+    const action = args.action as WorkflowAction;
+    if (HUMAN_WORKFLOW_ACTIONS.has(action?.kind)) throw new Error('This action requires authenticated Factory input.');
+    return applyWorkflowAction(store, build._id, action);
+  },
+  "builds.claimWorkflowStage": (args, { store }) => store.transaction(() => {
+    const claim = args as unknown as WorkflowStageClaim;
+    const server = requireServer(store, claim.accessKey);
+    const build = requireBuild(store, claim.buildId);
+    const project = requireProject(store, String(build.projectId));
+    if (project.serverId && project.serverId !== server._id) throw new Error('This Project belongs to another Worker.');
+    const workflow = build.workflow as WorkflowState | undefined;
+    if (!workflow) throw new Error('This Build uses the legacy workflow.');
+    if (workflow.generation !== claim.generation || workflow.phase !== claim.phase || workflow.status !== 'running') return null;
+    const previous = workflow.stages[claim.role];
+    if (previous) return previous.sessionId;
+    const text = requireMessageText(claim.text);
+    if (!claim.cwd?.trim()) throw new Error('Stage cwd is required.');
+    const pick = workflow.config.roles[claim.role];
+    if (!pick) throw new Error('Invalid workflow role.');
+    // Validate reservation before inserting; the transaction still rolls back any later failure.
+    claimWorkflowStage(workflow, claim, 'pending');
+    const sessionId = store.insert('sessions', { projectId: project._id, roadmapItemId: build.roadmapItemId, title: claim.title ?? `${build.title} — ${claim.role}`, provider: pick.provider, model: pick.model, effort: pick.effort, permissionMode: 'full-access', serviceTier: DEFAULT_SERVICE_TIER, cwd: claim.cwd, status: 'queued', buildReadOnlyRoots: claim.readOnlyRoots, buildEvidenceDirectory: claim.evidenceDirectory });
+    store.insert('sessionMessages', { sessionId, role: 'user', text, createdAt: Date.now() });
+    const next = claimWorkflowStage(workflow, claim, sessionId);
+    store.patch(build._id, { workflow: next, sessionIds: next.sessionIds, started: true });
+    const item = requireRoadmapItem(store, String(build.roadmapItemId));
+    store.patch(item._id, { sessionIds: [...((item.sessionIds as string[] | undefined) ?? []), sessionId] });
+    return sessionId;
+  }),
   "builds.remove": (args, { store }) => {
     const build = requireBuild(store, String(args.buildId ?? ""));
     if (build.status === "running") throw new Error("Stop this Build before deleting it.");
@@ -1618,12 +1688,16 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   // Worker only: Builds whose status is running (a Step whose Build is done always moves status off "running").
   "builds.listActive": (args, { store }) => {
     requireServer(store, String(args.accessKey ?? ""));
-    return store.list("builds").filter((row) => row.status === "running");
+    return store.list("builds").filter((row) => {
+      const workflow = row.workflow as WorkflowState | undefined;
+      return row.status === 'running' || (workflow?.phase === 'prReview' && ['waiting', 'paused'].includes(String(row.status)));
+    });
   },
   "builds.mark": (args, { store }) => {
     requireServer(store, String(args.accessKey ?? ""));
     const build = requireBuild(store, String(args.buildId ?? ""));
     const changes: Record<string, unknown> = {};
+    if (build.workflow && (args.started !== undefined || args.sessionIds !== undefined || args.checkpointSessionId !== undefined)) throw new Error("Workflow Sessions must be claimed atomically.");
     if (args.started !== undefined) changes.started = args.started;
     if (args.sessionIds !== undefined) changes.sessionIds = args.sessionIds;
     if (args.worktree !== undefined) changes.worktree = args.worktree;
@@ -1703,6 +1777,26 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   },
   "seed.featureReady": () => true,
 };
+
+function applyWorkflowAction(store: Store, buildId: string, action: WorkflowAction): null {
+  return store.transaction(() => {
+    const build = requireBuild(store, buildId);
+    if (!build.workflow) throw new Error('This Build uses the legacy workflow.');
+    const previous = build.workflow as WorkflowState;
+    const next = advanceWorkflow(previous, action);
+    if (next === previous) return null;
+    store.patch(build._id, { workflow: next, status: next.status, error: next.error, notes: next.notes, started: Object.keys(next.stages).length > 0, sessionIds: next.sessionIds });
+    if (action.kind === 'setup') store.patch(String(build.projectId), { buildConfig: next.config });
+    if (next.status === 'done' && next.pr?.state === 'merged') store.patch(String(build.roadmapItemId), { status: 'done' });
+    if (['paused', 'stopped'].includes(next.status) && !['paused', 'stopped'].includes(previous.status)) {
+      for (const stage of Object.values(previous.stages)) {
+        const session = stage && store.get(stage.sessionId);
+        if (session && ['queued', 'running'].includes(String(session.status))) closeTurn(store, session, 'stopped');
+      }
+    }
+    return null;
+  });
+}
 
 export async function dispatch(
   kind: DispatchKind,
