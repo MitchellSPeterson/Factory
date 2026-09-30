@@ -147,10 +147,8 @@ function busy(status: unknown): boolean {
 }
 
 function sessionMessages(store: Store, sessionId: string): Doc[] {
-  return store
-    .list("sessionMessages")
-    .filter((row) => row.sessionId === sessionId)
-    .sort((a, b) => Number(a.createdAt) - Number(b.createdAt));
+  // Oldest first; rowid breaks same-millisecond ties so "last message" is really the last inserted.
+  return store.listBy("sessionMessages", "sessionId", sessionId, "asc");
 }
 
 function expirePendingPermissions(store: Store, sessionId: string) {
@@ -550,7 +548,11 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   "sessions.claim": (args, { store, origin }) => {
     const session = store.get(String(args.sessionId ?? ""));
     if (!session || session.status !== "queued") return null;
-    const project = requireProject(store, String(session.projectId));
+    const project = store.get(String(session.projectId));
+    if (!project) {
+      store.patch(session._id, { status: "failed", error: "Project was removed." });
+      return null;
+    }
     if (project.serverId) {
       if (typeof args.accessKey !== "string") return null;
       try {
@@ -756,6 +758,15 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (!project) throw new Error("Project not found");
     requireProjectServer(store, project, typeof args.accessKey === "string" ? args.accessKey : undefined);
     if (project.cloneStatus === "cloning") throw new Error("Wait for cloning to finish before removing this Project.");
+    for (const session of store.listBy("sessions", "projectId", project._id)) {
+      for (const message of sessionMessages(store, session._id)) store.delete(message._id);
+      store.delete(session._id);
+    }
+    for (const tab of store.listBy("terminals", "projectId", project._id)) {
+      for (const io of store.listBy("terminalIO", "terminalId", tab._id)) store.delete(io._id);
+      store.delete(tab._id);
+    }
+    for (const row of store.listBy("projectOperations", "projectId", project._id)) store.delete(row._id);
     for (const table of ["projectImports", "roadmapItems", "roadmapCategories", "roadmapReleases", "builds"]) {
       for (const row of store.list(table).filter((item) => item.projectId === args.projectId)) store.delete(row._id);
     }
@@ -848,8 +859,8 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     const command = asRecord(args.command) as { kind: string; udid?: string; name?: string };
     if (command.udid && (command.udid.length < 8 || command.udid.length > 80)) throw new Error("Unknown Device.");
     const open = store
-      .list("deviceCommands")
-      .filter((row) => row.serverId === server._id && (row.status === "queued" || row.status === "taken"));
+      .listBy("deviceCommands", "serverId", server._id)
+      .filter((row) => row.status === "queued" || row.status === "taken");
     const duplicate = open.find((row) => sameDeviceCommand(asRecord(row.command) as { kind: string; udid?: string; name?: string }, command));
     if (duplicate) return duplicate.commandId;
     if (open.length >= 20) throw new Error("This machine already has Device work queued.");
@@ -860,7 +871,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   "servers.claimDeviceCommands": (args, { store }) => {
     const server = requireServer(store, String(args.accessKey ?? ""));
     const now = Date.now();
-    const open = store.list("deviceCommands").filter((row) => row.serverId === server._id);
+    const open = store.listBy("deviceCommands", "serverId", server._id);
     const batch = [
       ...open.filter((row) => row.status === "queued"),
       ...open.filter((row) => row.status === "taken" && Number(row.leaseUntil) < now),
@@ -875,8 +886,8 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   "servers.finishDeviceCommand": (args, { store }) => {
     const server = requireServer(store, String(args.accessKey ?? ""));
     const row = store
-      .list("deviceCommands")
-      .find((item) => item.serverId === server._id && item.commandId === args.commandId);
+      .listBy("deviceCommands", "serverId", server._id)
+      .find((item) => item.commandId === args.commandId);
     if (row) store.delete(row._id);
     return null;
   },
@@ -1009,9 +1020,9 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     return null;
   },
   "terminals.list": (args, { store }) =>
-    store.list("terminals").filter((row) => row.projectId === args.projectId).slice(0, 20),
+    store.listBy("terminals", "projectId", String(args.projectId ?? "")).slice(0, 20),
   "terminals.output": (args, { store }) => {
-    const io = store.list("terminalIO").find((row) => row.terminalId === args.id);
+    const io = store.listBy("terminalIO", "terminalId", String(args.id ?? ""))[0];
     return io ? { output: io.output, outputEnd: io.outputEnd } : null;
   },
   "terminals.create": (args, { store }) => {
@@ -1023,7 +1034,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (project.cloneStatus && project.cloneStatus !== "ready") {
       throw new Error("Wait for this Project to finish cloning.");
     }
-    const tabs = store.list("terminals").filter((row) => row.projectId === args.projectId);
+    const tabs = store.listBy("terminals", "projectId", String(args.projectId ?? ""));
     if (tabs.length >= 20) {
       throw new Error("Close a terminal before opening another. Each Project can have 20 tabs.");
     }
@@ -1042,7 +1053,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     return id;
   },
   "terminals.close": (args, { store }) => {
-    const io = store.list("terminalIO").find((row) => row.terminalId === args.id);
+    const io = store.listBy("terminalIO", "terminalId", String(args.id ?? ""))[0];
     if (io) store.delete(io._id);
     if (store.get(String(args.id ?? ""))) store.delete(String(args.id));
     return null;
@@ -1052,7 +1063,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (!tab || tab.state !== "running" || Number(tab.leaseUntil) < Date.now()) {
       throw new Error("Terminal is disconnected. Input was not sent.");
     }
-    const io = store.list("terminalIO").find((row) => row.terminalId === args.id);
+    const io = store.listBy("terminalIO", "terminalId", String(args.id ?? ""))[0];
     if (!io) throw new Error("Terminal was closed.");
     const data = String(args.data ?? "");
     if (String(io.input).length + data.length > 16_384) {
@@ -1072,7 +1083,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   "terminals.claim": (args, { store }) => {
     const server = requireServer(store, String(args.accessKey ?? ""));
     const owner = String(args.owner ?? "");
-    const all = store.list("terminals").filter((row) => row.serverId === server._id);
+    const all = store.listBy("terminals", "serverId", server._id);
     const running = all.filter((row) => row.state === "running");
     for (const tab of running) {
       if (Number(tab.leaseUntil) < Date.now()) {
@@ -1082,7 +1093,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
         });
       }
     }
-    const queued = store.list("terminals").filter((row) => row.serverId === server._id && row.state === "queued");
+    const queued = store.listBy("terminals", "serverId", server._id).filter((row) => row.state === "queued");
     const result: Array<Doc & { localPath: string }> = [];
     for (const tab of queued) {
       const project = store.get(String(tab.projectId));
@@ -1093,7 +1104,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       store.patch(tab._id, { state: "running", owner, leaseUntil: Date.now() + 15_000 });
       result.push({ ...tab, localPath: String(project.localPath) });
     }
-    for (const tab of store.list("terminals").filter((row) => row.serverId === server._id && row.state === "running")) {
+    for (const tab of store.listBy("terminals", "serverId", server._id).filter((row) => row.state === "running")) {
       if (tab.owner !== owner || Number(tab.leaseUntil) < Date.now()) continue;
       const project = store.get(String(tab.projectId));
       if (project && (!project.serverId || project.serverId === server._id)) {
@@ -1114,7 +1125,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     ) {
       return null;
     }
-    const io = store.list("terminalIO").find((row) => row.terminalId === args.id);
+    const io = store.listBy("terminalIO", "terminalId", String(args.id ?? ""))[0];
     if (!io) return null;
     const inputAck = Number(args.inputAck);
     const outputEnd = Number(args.outputEnd);
@@ -1141,10 +1152,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     return { input, inputEnd: io.inputEnd, cols: tab.cols, rows: tab.rows };
   },
   "projectOperations.list": (args, { store }) =>
-    store
-      .list("projectOperations")
-      .filter((row) => row.projectId === args.projectId)
-      .slice(0, 50),
+    store.listBy("projectOperations", "projectId", String(args.projectId ?? "")).slice(0, 50),
   "projectOperations.enqueue": (args, { store }) => {
     const project = requireProject(store, String(args.projectId ?? ""));
     const server = project.serverId ? store.get(String(project.serverId)) : resolveServer(store);
@@ -1182,11 +1190,11 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     if (operation.kind === "removeWorktree" && (!operation.path.trim() || operation.path.length > 1024)) {
       throw new Error("Choose a worktree to remove.");
     }
-    const recent = store.list("projectOperations").filter((row) => row.projectId === args.projectId);
+    const recent = store.listBy("projectOperations", "projectId", String(args.projectId ?? ""));
     const active = recent.filter((row) => row.state === "queued" || row.state === "running");
-    if (operation.kind === "status") {
-      const existing = active.find((row) => asRecord(row.operation).kind === "status");
-      if (existing) return existing._id;
+    // Reuse a pending status only if nothing was queued after it; otherwise it would read the repo too early.
+    if (operation.kind === "status" && active[0] && asRecord(active[0].operation).kind === "status") {
+      return active[0]._id;
     }
     if (active.length >= 10) throw new Error("Wait for the pending commands to finish.");
     const blocksAgent =
@@ -1196,7 +1204,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       operation.kind === "merge" ||
       (operation.kind === "createBranch" && operation.checkout);
     if (blocksAgent) {
-      const sessions = store.list("sessions").filter((row) => row.projectId === args.projectId);
+      const sessions = store.listBy("sessions", "projectId", String(args.projectId ?? ""));
       if (sessions.some((session) => session.status === "running" || session.status === "queued")) {
         if (operation.kind === "commit") throw new Error("Stop the agent before committing its changes.");
         if (operation.kind === "pull") throw new Error("Stop the agent before pulling.");
@@ -1241,7 +1249,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   },
   "projectOperations.claim": (args, { store }) => {
     const server = requireServer(store, String(args.accessKey ?? ""));
-    const rows = store.list("projectOperations").filter((row) => row.serverId === server._id);
+    const rows = store.listBy("projectOperations", "serverId", server._id);
     const running = rows.filter((row) => row.state === "running");
     for (const row of running) {
       if (Date.now() - Number(row.startedAt ?? 0) > 180_000) {
@@ -1251,7 +1259,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
         });
       }
     }
-    const queued = store.list("projectOperations").filter((row) => row.serverId === server._id && row.state === "queued");
+    const queued = store.listBy("projectOperations", "serverId", server._id).filter((row) => row.state === "queued");
     for (const item of queued) {
       if (Date.now() - item._creationTime > 180_000) {
         store.patch(item._id, {
@@ -1260,10 +1268,12 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
         });
       }
     }
-    const liveRunning = store.list("projectOperations").filter((row) => row.serverId === server._id && row.state === "running");
+    const liveRunning = store.listBy("projectOperations", "serverId", server._id).filter((row) => row.state === "running");
+    // Oldest first: a commit's follow-up status must run after the commit, not before it.
     const row = store
-      .list("projectOperations")
-      .filter((item) => item.serverId === server._id && item.state === "queued")
+      .listBy("projectOperations", "serverId", server._id)
+      .filter((item) => item.state === "queued")
+      .reverse()
       .find(
         (item) =>
           Date.now() - item._creationTime <= 180_000 &&
@@ -1721,6 +1731,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
     }
     const pty = asRecord(server.pty);
     if (typeof pty.url !== "string") throw new Error("Terminal is not available on this worker.");
+    for (const old of store.list("ptyTickets")) if (Number(old.expiresAt) <= Date.now()) store.delete(old._id);
     const ticket = randomToken();
     const expiresAt = Date.now() + TICKET_TTL_MS;
     store.insert("ptyTickets", { token: ticket, projectId: project._id, serverId: server._id, expiresAt });
@@ -1728,8 +1739,10 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
   },
   "pty.validateTicket": (args, { store }) => {
     const server = requireServer(store, String(args.accessKey ?? ""));
-    const row = store.list("ptyTickets").find((item) => item.token === args.ticket);
+    const row = store.listBy("ptyTickets", "token", String(args.ticket ?? ""))[0];
     if (!row || row.serverId !== server._id) throw new Error("Invalid ticket.");
+    // pty.ts validates once per websocket upgrade, so a ticket is single-use.
+    store.delete(row._id);
     if (Number(row.expiresAt) <= Date.now()) throw new Error("Terminal ticket expired.");
     const project = requireProject(store, String(row.projectId));
     return { projectId: project._id, cwd: project.localPath };
@@ -1801,15 +1814,25 @@ function applyWorkflowAction(store: Store, buildId: string, action: WorkflowActi
   });
 }
 
+function readOnly(store: Store): Store {
+  const deny = () => {
+    throw new Error("Queries cannot modify data.");
+  };
+  return { ...store, insert: deny, patch: deny, delete: deny, transaction: deny };
+}
+
 export async function dispatch(
   kind: DispatchKind,
   pathName: string,
   args: Record<string, unknown>,
   ctx: DispatchCtx,
 ): Promise<unknown> {
-  const handler = handlers[pathName];
-  if (!handler) throw new Error(`Unknown ${kind} ${pathName}`);
-  return await handler(args, ctx);
+  if (!Object.hasOwn(handlers, pathName)) throw new Error(`Unknown ${kind} ${pathName}`);
+  const handler = handlers[pathName]!;
+  // Queries can't be told apart from mutations by path, so enforce it: a query gets a store that refuses writes.
+  const store = kind === "query" ? readOnly(ctx.store) : ctx.store;
+  // bun:sqlite transactions can't span awaits: an async handler's sync prefix commits, its continuation runs outside.
+  return await (kind === "query" ? handler(args, { ...ctx, store }) : store.transaction(() => handler(args, { ...ctx, store })));
 }
 
 export function saveUpload(uploads: string, bytes: Uint8Array): string {

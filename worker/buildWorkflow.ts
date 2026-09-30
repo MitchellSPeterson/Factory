@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, readFile, readlink, writeFile } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
+import { createReadStream, existsSync, realpathSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { validateBranchName, withRepoLock } from "./projectOperations";
 import path from "node:path";
 import { api } from "../shared/mailboxApi";
 import type { Doc, SessionView } from "../shared/dataModel";
@@ -21,7 +23,8 @@ export async function runBuildCommand(args: string[], cwd: string, timeoutMs = 1
   let output = "";
   const collect = async (stream: ReadableStream<Uint8Array>) => {
     const reader = stream.getReader();
-    for (;;) { const { done, value } = await reader.read(); if (done) break; output = (output + Buffer.from(value).toString()).slice(-2_000_000); }
+    const decoder = new TextDecoder();
+    for (;;) { const { done, value } = await reader.read(); if (done) break; output = (output + decoder.decode(value, { stream: true })).slice(-2_000_000); }
   };
   try { await Promise.all([collect(proc.stdout), collect(proc.stderr)]); const code = await proc.exited; if (signal?.aborted) throw new Error("Build paused."); return { code, output, timedOut }; }
   finally { clearTimeout(timer); signal?.removeEventListener("abort", kill); }
@@ -61,10 +64,11 @@ export async function candidateDigest(cwd: string, ancestors = new Set<string>()
       // Gitlinks name a repository revision, not a file. Clones leave an empty directory.
       hash.update(`gitlink\0${entry.revision}\0`);
       if (existsSync(path.join(full, ".git"))) hash.update(await candidateDigest(full, visited));
-    } else if ((await lstat(full)).isSymbolicLink()) {
-      hash.update(`symlink\0${await readlink(full)}\0`);
     } else {
-      hash.update(await readFile(full));
+      const info = await lstat(full).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return null; throw error; });
+      if (!info) hash.update("deleted\0");
+      else if (info.isSymbolicLink()) hash.update(`symlink\0${await readlink(full)}\0`);
+      else for await (const chunk of createReadStream(full)) hash.update(chunk);
     }
   }
   hash.update(await git(cwd, ["status", "--porcelain", "--untracked-files=all"]));
@@ -73,8 +77,17 @@ export async function candidateDigest(cwd: string, ancestors = new Set<string>()
 export async function prepareCandidateInspection(source: string, destination: string, revision: string, signal?: AbortSignal) {
   if (!existsSync(path.join(destination, ".git"))) {
     await mkdir(path.dirname(destination), { recursive: true });
-    await git(path.dirname(destination), ["clone", "--no-hardlinks", "--no-checkout", source, destination], signal);
-    await git(destination, ["checkout", "--detach", revision], signal);
+    try {
+      await git(path.dirname(destination), ["clone", "--no-hardlinks", "--no-checkout", source, destination], signal);
+      await git(destination, ["checkout", "--detach", revision], signal);
+    } catch (error) {
+      // A half-made clone would satisfy the .git check above forever; remove only this directory.
+      const target = path.resolve(destination);
+      const parent = path.resolve(path.dirname(destination));
+      const src = path.resolve(source);
+      if (target.startsWith(parent + path.sep) && target !== src && !src.startsWith(target + path.sep)) await rm(target, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
   }
   if (await git(destination, ["rev-parse", "HEAD"]) !== revision) throw new Error("Inspection checkout no longer names its Candidate.");
   const evidence = path.join(destination, ".factory-evidence");
@@ -267,6 +280,12 @@ function stopBuildPreview(buildId: string) {
   try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch {} }
   previews.delete(buildId);
 }
+export function stopAllPreviews() {
+  for (const buildId of [...previews.keys()]) stopBuildPreview(buildId);
+}
+// Detached preview groups outlive the Worker otherwise. Previews are in-memory only, so stale ones after a crash are not recoverable.
+process.once("exit", stopAllPreviews);
+for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => { stopAllPreviews(); process.kill(process.pid, signal); });
 export async function cancelWorkflowCommands(client: Mailbox) {
   for (const buildId of previews.keys()) { const latest = await client.query(api.builds.get, { buildId }); if (!latest?.workflow || latest.workflow.status !== 'running') stopBuildPreview(buildId); }
   for (const [buildId, controller] of inFlight) {
@@ -406,8 +425,9 @@ export async function ensureBuildWorkflowWorktree(root: string, client: Mailbox,
   if (existsSync(path.join(worktree, '.git'))) {
     if (await git(worktree, ['symbolic-ref', '--short', 'HEAD']) !== build.branch) throw new Error('Preserved Build worktree has an unexpected branch.');
   } else {
-    const branch = await runBuildCommand(['git', 'show-ref', '--verify', `refs/heads/${build.branch}`], project.localPath);
-    await git(project.localPath, ['worktree', 'add', ...(branch.code === 0 ? [] : ['-b', build.branch]), worktree, ...(branch.code === 0 ? [build.branch] : [])]);
+    const buildBranch = validateBranchName(build.branch);
+    const branch = await runBuildCommand(['git', 'show-ref', '--verify', `refs/heads/${buildBranch}`], project.localPath);
+    await withRepoLock(project.localPath, () => git(project.localPath, ['worktree', 'add', ...(branch.code === 0 ? [] : ['-b', buildBranch]), worktree, ...(branch.code === 0 ? [buildBranch] : [])]));
   }
   await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, worktree });
   return worktree;

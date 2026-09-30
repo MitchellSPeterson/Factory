@@ -183,7 +183,8 @@ final class App: NSObject, NSApplicationDelegate {
     if let data = try? Data(contentsOf: URL(string: "http://127.0.0.1:3402/status")!),
        let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
        let pairing = body["pairing"] as? String {
-      alert.informativeText = "On the phone, type:\n\(pairing)"
+      let code = body["pairCode"] as? String ?? "—"
+      alert.informativeText = "On the phone, type:\n\(pairing)\n\nPairing code: \(code)\n(changes after each use)"
     } else {
       alert.informativeText = "Start the Worker, then try again. Pairing answers on port 3402."
     }

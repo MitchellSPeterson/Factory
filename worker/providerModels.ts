@@ -6,6 +6,7 @@ import path from "node:path";
 import { AGENT_PROVIDERS, type AgentProvider } from "../shared/agentModel";
 import type { ProviderModels } from "../shared/dataModel";
 import { collectCommand, probeGrokCatalog } from "./grokAcp";
+import { definedEnv } from "./proc";
 import { locateClaudeAuth, locateCodexAuth } from "./providerUsage";
 
 type Env = Record<string, string | undefined>;
@@ -14,9 +15,6 @@ type Probe = { authenticated: boolean; models: Model[]; message?: string };
 
 const fail = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 200);
 
-function processEnv(env: Env) {
-  return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined));
-}
 
 export function claudeBin(env: Env = process.env) {
   const local = path.join(os.homedir(), ".local/bin/claude");
@@ -28,13 +26,15 @@ async function claudeToken(env: Env): Promise<string | undefined> {
 }
 
 async function claudeModels(env: Env): Promise<Probe> {
-  const status = await collectCommand(claudeBin(env), ["auth", "status"], processEnv(env), 8000);
-  if (!status) return { authenticated: false, models: [], message: "Claude Code CLI is not installed." };
+  const status = await collectCommand(claudeBin(env), ["auth", "status"], definedEnv(env), 8000);
+  if (status.timedOut) return { authenticated: false, models: [], message: "Claude Code CLI timed out." };
+  if (status.code === 127) return { authenticated: false, models: [], message: "Claude Code CLI is not installed." };
   if (!/"loggedIn":\s*true/.test(status.text)) return { authenticated: false, models: [], message: "Run `claude auth login` on this Mac." };
   const token = await claudeToken(env);
   if (token) {
     const oauth = !token.startsWith("sk-ant-api");
     const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+      signal: AbortSignal.timeout(10_000),
       headers: {
         "anthropic-version": "2023-06-01",
         ...(oauth ? { authorization: `Bearer ${token}`, "anthropic-beta": "oauth-2025-04-20" } : { "x-api-key": token }),
@@ -92,7 +92,7 @@ async function openaiModels(env: Env): Promise<Probe> {
   const base = env.OPENAI_BASE_URL?.trim();
   if (!base) return { authenticated: false, models: [], message: "Set OPENAI_BASE_URL in Worker environment." };
   const key = env.OPENAI_API_KEY?.trim();
-  const res = await fetch(`${base.replace(/\/+$/, "")}/models`, { headers: key ? { authorization: `Bearer ${key}` } : {} });
+  const res = await fetch(`${base.replace(/\/+$/, "")}/models`, { signal: AbortSignal.timeout(10_000), headers: key ? { authorization: `Bearer ${key}` } : {} });
   if (res.status === 401 || res.status === 403) return { authenticated: false, models: [], message: "OPENAI_API_KEY was rejected." };
   if (!res.ok) throw new Error(`Model list failed (${res.status}).`);
   const body = (await res.json()) as { data?: Array<{ id: string }> };

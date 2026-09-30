@@ -1,6 +1,7 @@
 import { api } from "../shared/mailboxApi";
 import type { Mailbox } from "./mailbox/client";
 import type { WorkerIdentity } from "./managed";
+import { sessionExecutionEnvironment } from "./buildWorkflow";
 
 const SCROLLBACK = 256 * 1024;
 const DEFAULT_PORT = 3401;
@@ -84,7 +85,13 @@ export function parseServerFrame(raw: string): ServerFrame | null {
 
 export function appendScrollback(buf: string, chunk: string): string {
   const next = buf + chunk;
-  return next.length > SCROLLBACK ? next.slice(-SCROLLBACK) : next;
+  if (next.length <= SCROLLBACK) return next;
+  let cut = next.slice(-SCROLLBACK);
+  // Don't start mid surrogate pair or mid escape sequence: resume at the next newline/ESC nearby.
+  const boundary = cut.slice(0, 256).search(/[\n\x1b]/);
+  if (boundary > 0) cut = cut.slice(boundary);
+  else if (boundary < 0 && /[\udc00-\udfff]/.test(cut[0]!)) cut = cut.slice(1);
+  return cut;
 }
 
 export type PtySocket = { send(data: string): void };
@@ -161,9 +168,9 @@ export function killProcessGroup(pid: number | undefined, kill: () => void) {
   }
 }
 
-function decodeChunk(chunk: unknown): string {
+function decodeChunk(decoder: TextDecoder, chunk: unknown): string {
   if (typeof chunk === "string") return chunk;
-  if (chunk instanceof Uint8Array) return new TextDecoder().decode(chunk);
+  if (chunk instanceof Uint8Array) return decoder.decode(chunk, { stream: true });
   return "";
 }
 
@@ -173,14 +180,15 @@ export function spawnShell(
   rows: number,
   onData: (chunk: string) => void,
 ): PtyProc {
+  const decoder = new TextDecoder();
   const proc = Bun.spawn([process.env.SHELL || "/bin/zsh", "-il"], {
     cwd,
-    env: { ...process.env, TERM: "xterm-256color" },
+    env: { ...sessionExecutionEnvironment(process.env), TERM: "xterm-256color" },
     terminal: {
       cols,
       rows,
       data(_term, chunk) {
-        onData(decodeChunk(chunk));
+        onData(decodeChunk(decoder, chunk));
       },
     },
   });
@@ -272,8 +280,15 @@ export function startPtyHub(client: Mailbox, identity: WorkerIdentity) {
           return;
         }
         if (frame.type === "attach") {
-          const session = ensureSession(ws.data.projectId, ws.data.cwd, frame.cols, frame.rows);
-          attachSocket(session, ws);
+          try {
+            const session = ensureSession(ws.data.projectId, ws.data.cwd, frame.cols, frame.rows);
+            attachSocket(session, ws);
+          } catch (error) {
+            sendFrame(ws, {
+              type: "error",
+              message: error instanceof Error ? error.message : "Terminal could not start.",
+            });
+          }
           return;
         }
         const session = sessions.get(ws.data.projectId);

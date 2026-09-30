@@ -10,14 +10,14 @@ function harness(events: ThreadEvent[], status = "finished") {
   let prompt = "";
   const text: string[] = [], ids: string[] = [];
   const options: CodexAgentOptions = {
-    runtime: "local", root: "/factory", workingDirectory: "/project", convexUrl: "https://example.convex.cloud", runId: "run-1", model: "gpt-5.6-terra", effort: "low", prompt: "Review the change", env: { CODEX_API_KEY: "test", OPENAI_BASE_URL: "http://unrelated", PATH: "/bin" },
+    runtime: "local", workingDirectory: "/project", model: "gpt-5.6-terra", effort: "low", prompt: "Review the change", env: { CODEX_API_KEY: "test", OPENAI_BASE_URL: "http://unrelated", PATH: "/bin" },
     onThreadId: async id => { ids.push(id); }, onText: value => text.push(value), getStatus: async () => status,
     createClient: value => { config = value; return { startThread(value) { thread = value; return { async runStreamed(value) { prompt = value; return { events: (async function* () { yield* events; })() }; } }; }, resumeThread(id, value) { resumed = id; thread = value; return { async runStreamed(value) { prompt = value; return { events: (async function* () { yield* events; })() }; } }; } }; },
   };
   return { options, text, ids, values: () => ({ config, thread, prompt, resumed }) };
 }
 const done: ThreadEvent = { type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0 } };
-test("Codex passes exact model/effort, Project, MCP identity, credentials, and streamed output", async () => {
+test("Codex passes exact model/effort, Project, credentials, and streamed output", async () => {
   const h = harness([
     { type: "thread.started", thread_id: "codex-1" },
     { type: "item.updated", item: { type: "agent_message", id: "a", text: "Hello" } },
@@ -28,29 +28,26 @@ test("Codex passes exact model/effort, Project, MCP identity, credentials, and s
   expect(h.text.join("")).toBe("Hello Factory\n");
   expect(h.values().thread).toMatchObject({ model: "gpt-5.6-terra", modelReasoningEffort: "low", workingDirectory: "/project", sandboxMode: "workspace-write", approvalPolicy: "never" });
   expect(h.values().prompt).toBe("Review the change");
-  expect(h.values().config).toMatchObject({ apiKey: "test", config: { model_provider: "openai", service_tier: "default", mcp_servers: { factory: { required: true, env: { FACTORY_RUN_ID: "run-1", FACTORY_MCP_TRANSPORT: "jsonl" } } } } });
+  expect(h.values().config).toMatchObject({ apiKey: "test", config: { model_provider: "openai", service_tier: "default" } });
   expect(h.values().config?.env?.OPENAI_BASE_URL).toBeUndefined();
 });
 test("Codex rejects cloud Runs before launching", async () => {
   const h = harness([]); h.options.runtime = "cloud";
-  await expect(runCodexAgent(h.options)).rejects.toThrow("local Run");
+  await expect(runCodexAgent(h.options)).rejects.toThrow("local Session");
   expect(h.values().thread).toBeUndefined();
 });
-test("Codex requires backend Stage completion and rejects failed or truncated streams", async () => {
-  await expect(runCodexAgent(harness([done], "running").options)).rejects.toThrow("finish_stage");
-  await expect(runCodexAgent(harness([], "running").options)).rejects.toThrow("finish_stage");
-  await expect(runCodexAgent(harness([{ type: "turn.failed", error: { message: "private provider detail" } }]).options)).rejects.toThrow("Codex Run failed");
+test("Codex rejects failed or truncated streams", async () => {
+  await expect(runCodexAgent(harness([], "running").options)).rejects.toThrow("did not complete");
+  await expect(runCodexAgent(harness([{ type: "turn.failed", error: { message: "private provider detail" } }]).options)).rejects.toThrow("Codex Session failed");
   await runCodexAgent(harness([done], "failed").options);
 });
-test("Session Codex resumes the thread and skips Factory MCP", async () => {
+test("Session Codex resumes the thread and ", async () => {
   const h = harness([
     { type: "thread.started", thread_id: "codex-1" },
     { type: "item.completed", item: { type: "agent_message", id: "a", text: "Hi" } },
     done,
   ]);
-  h.options.mode = "session";
   h.options.resumeThreadId = "codex-1";
-  h.options.runId = undefined;
   await runCodexAgent(h.options);
   expect(h.values().resumed).toBe("codex-1");
   expect(h.values().config?.config).toEqual({ model_provider: "openai", service_tier: "default" });
@@ -62,8 +59,6 @@ test("Session Codex maps full access and flex service tier", async () => {
     { type: "item.completed", item: { type: "agent_message", id: "a", text: "Hi" } },
     done,
   ]);
-  h.options.mode = "session";
-  h.options.runId = undefined;
   h.options.permissionMode = "full-access";
   h.options.serviceTier = "flex";
   await runCodexAgent(h.options);

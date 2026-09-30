@@ -104,9 +104,14 @@ export function RoadmapList({
   const [optimistic, setOptimistic] = useState<Item[] | null>(null);
   const rowRefs = useRef(new Map<string, View>());
   const sectionRefs = useRef(new Map<string, View>());
+  const moveSettled = useRef(false);
 
-  // Server data replaces the optimistic copy as soon as it arrives.
-  useEffect(() => setOptimistic(null), [data]);
+  // After a move lands, the next server snapshot replaces the optimistic copy (no flash back to the old order).
+  useEffect(() => {
+    if (!moveSettled.current) return;
+    moveSettled.current = false;
+    setOptimistic(null);
+  }, [data]);
 
   const items = optimistic ?? data?.items ?? [];
   const sections = useMemo(
@@ -159,8 +164,19 @@ export function RoadmapList({
     if (patch && "release" in patch) change.releaseId = data?.releases.find((r) => r.name === patch.release)?._id;
     setOptimistic(applyMove(items, itemId, target.beforeItemId, change));
     moveItem({ itemId, beforeItemId: target.beforeItemId, patch }).then(
-      () => setError(""),
+      () => {
+        setError("");
+        moveSettled.current = true;
+        // Fallback when the move didn't change the snapshot, so no refetch will arrive.
+        setTimeout(() => {
+          if (moveSettled.current) {
+            moveSettled.current = false;
+            setOptimistic(null);
+          }
+        }, 1500);
+      },
       (e) => {
+        moveSettled.current = false;
         setOptimistic(null);
         setError(e instanceof Error ? e.message : "Could not move that item.");
       },

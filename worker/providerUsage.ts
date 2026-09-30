@@ -819,7 +819,7 @@ export async function collectProviderUsage(opts: {
   local?: LocalAuth;
 }): Promise<ProviderUsageReport> {
   const now = opts.now ?? Date.now();
-  const http = opts.http ?? fetch;
+  const http = opts.http ?? ((url, init) => fetch(url, { signal: AbortSignal.timeout(10_000), ...init }));
   const meters = (
     await Promise.all([
       cursorMeter(opts.env, now, http),

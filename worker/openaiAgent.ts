@@ -3,6 +3,14 @@ import { addUsage, ZERO_USAGE, type TokenUsage } from "../shared/tokenUsage";
 import { fromOpenAIUsage } from "./usage";
 
 const MAX_STEPS = 40;
+const CONNECT_TIMEOUT_MS = 60_000;
+const IDLE_TIMEOUT_MS = 120_000;
+
+class HttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
 
 export type ChatMessage =
   | { role: "system" | "user" | "assistant"; content: string | null; tool_calls?: ToolCall[] }
@@ -104,19 +112,36 @@ export async function chatCompletion(input: {
     ...(input.stream === true ? { stream_options: { include_usage: true } } : {}),
   };
 
+  // One controller covers connect, body, and per-chunk idle time; the timer is re-armed on progress.
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = (ms: number, what: string) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(new Error(`OpenAI ${what} timed out after ${ms / 1000}s`)), ms);
+  };
+  try {
+    arm(CONNECT_TIMEOUT_MS, "connect");
+    return await complete();
+  } finally {
+    clearTimeout(timer);
+  }
+
+  async function complete(): Promise<CompletionResult> {
   const res = await fetchFn(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
+    signal: controller.signal,
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`OpenAI chat/completions ${res.status}: ${text.slice(0, 500)}`);
+    throw new HttpError(res.status, `OpenAI chat/completions ${res.status}: ${text.slice(0, 500)}`);
   }
+  arm(IDLE_TIMEOUT_MS, "response");
 
   const contentType = res.headers.get("content-type") ?? "";
   if (input.stream === true && res.body && contentType.includes("text/event-stream")) {
-    return await readStream(res, input.onText);
+    return await readStream(res, input.onText, () => arm(IDLE_TIMEOUT_MS, "stream idle"));
   }
 
   // Non-stream JSON (or servers that ignore stream=true)
@@ -134,11 +159,13 @@ export async function chatCompletion(input: {
     finishReason: choice.finish_reason ?? null,
     usage: fromOpenAIUsage(data.usage),
   };
+  }
 }
 
 async function readStream(
   res: Response,
-  onText?: (text: string) => void,
+  onText: ((text: string) => void) | undefined,
+  onChunk: () => void,
 ): Promise<CompletionResult> {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
@@ -151,6 +178,7 @@ async function readStream(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    onChunk();
     buf += decoder.decode(value, { stream: true });
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";
@@ -247,6 +275,8 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
       }
     }
     const preferStream = opts.stream !== false;
+    let emitted = false;
+    const onText = opts.onText && ((text: string) => { emitted = true; opts.onText!(text); });
     let result: Awaited<ReturnType<typeof chatCompletion>>;
     try {
       result = await chatCompletion({
@@ -258,10 +288,12 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
         tools: opts.tools,
         fetchFn,
         stream: preferStream,
-        onText: opts.onText,
+        onText,
       });
     } catch (err) {
-      if (!preferStream) throw err;
+      // Retrying after streamed text would duplicate it; auth/rate errors would just be billed twice.
+      const status = err instanceof HttpError ? err.status : 0;
+      if (!preferStream || emitted || status === 401 || status === 403 || status === 429) throw err;
       // ponytail: many local servers lack SSE / stream_options
       result = await chatCompletion({
         baseUrl: opts.baseUrl,
@@ -272,7 +304,7 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
         tools: opts.tools,
         fetchFn,
         stream: false,
-        onText: opts.onText,
+        onText,
       });
     }
 
@@ -283,10 +315,10 @@ export async function runOpenAIAgent(opts: OpenAIAgentOptions): Promise<"finishe
 
     const calls = assistant.tool_calls ?? [];
     if (calls.length === 0) {
-      if (result.finishReason === "stop") {
-        throw new Error("Model stopped without calling finish_stage");
-      }
-      continue;
+      // Re-sending an unchanged transcript would just loop; a truncated ("length") turn is a failure too.
+      throw new Error(result.finishReason === "stop" || result.finishReason === null
+        ? "Model stopped without calling finish_stage"
+        : `Model turn ended without calling finish_stage (finish_reason: ${result.finishReason})`);
     }
 
     for (const call of calls) {

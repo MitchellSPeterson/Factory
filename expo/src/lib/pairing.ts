@@ -90,11 +90,14 @@ export async function pairLocalWorker(): Promise<WorkerPairing> {
   return pairing;
 }
 
-export async function pairFromWorker(input: string): Promise<WorkerPairing> {
+export async function pairFromWorker(input: string, code: string): Promise<WorkerPairing> {
   const base = pairingBase(input);
-  const response = await fetch(`${base}/pair`, { signal: AbortSignal.timeout(8000) });
+  const response = await fetch(`${base}/pair?code=${encodeURIComponent(code.trim())}`, {
+    signal: AbortSignal.timeout(8000),
+  });
   const body: unknown = await response.json().catch(() => null);
   if (!body || typeof body !== "object") throw new Error("This address is not a Factory Worker.");
+  if (response.status === 401) throw new Error("That pairing code didn't match. Check the code on the Mac and try again.");
   const record = body as { workerUrl?: unknown; token?: unknown; tunnel?: unknown; tailscale?: unknown };
   const token = typeof record.token === "string" ? record.token : "";
   const preferred =

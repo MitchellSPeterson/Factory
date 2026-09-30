@@ -190,10 +190,7 @@ async function runSessionCodex(client: Mailbox, launch: SessionLaunch) {
   try {
     await runCodexAgent({
       runtime: "local",
-      root,
       workingDirectory: launch.project.localPath,
-      convexUrl: client.url,
-      mode: "session",
       resumeThreadId: launch.agentId,
       model: launch.model,
       effort: launch.effort,
@@ -325,6 +322,7 @@ async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
       stderr: "pipe",
       env: { ...process.env },
     });
+    const stderrText = new Response(proc.stderr).text(); // drain concurrently so a full pipe can't block the CLI
     const reader = proc.stdout.getReader();
     const decoder = new TextDecoder();
     const heads = new Map<string, string | undefined>();
@@ -350,7 +348,7 @@ async function runSessionClaude(client: Mailbox, launch: SessionLaunch) {
     await handle(buffer);
     const code = await proc.exited;
     if (code !== 0) {
-      const err = await new Response(proc.stderr).text();
+      const err = await stderrText;
       throw new Error(err.trim().slice(0, 280) || "Claude Code failed. Install the Claude CLI and sign in from Settings.");
     }
     await client.mutation(api.sessions.complete, { sessionId: launch.sessionId });
@@ -409,7 +407,13 @@ async function tick(client: Mailbox, identity: WorkerIdentity) {
   const queuedSessions = await client.query(api.sessions.listQueued, {});
   for (const sessionId of queuedSessions) {
     if (sessionProcesses.has(sessionId)) continue;
-    const launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: identity.accessKey });
+    let launch;
+    try {
+      launch = await client.mutation(api.sessions.claim, { sessionId, accessKey: identity.accessKey });
+    } catch (error) {
+      console.error(`Claim failed for session ${sessionId}:`, error);
+      continue;
+    }
     if (!launch) continue;
     let bridge: ReturnType<typeof startSessionBridge> | undefined;
     try {
@@ -432,7 +436,8 @@ async function tick(client: Mailbox, identity: WorkerIdentity) {
             await Promise.race([exited, Bun.sleep(500)]);
             if (exitCode !== undefined) break;
             const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
-            if (status === null || status === "failed" || status === "stopped") { killSessionProcess(proc); break; }
+            // Anything but "running" means this turn is over: stop, or stop-then-send (send refuses busy sessions).
+            if (status !== "running") { killSessionProcess(proc); break; }
           }
           if (await exited !== 0) {
             const status = await client.query(api.sessions.getStatus, { sessionId: launch.sessionId });
@@ -445,7 +450,7 @@ async function tick(client: Mailbox, identity: WorkerIdentity) {
       })();
     } catch (error) {
       bridge?.close();
-      await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: error instanceof Error ? error.message : "Session launch failed." });
+      await client.mutation(api.sessions.fail, { sessionId: launch.sessionId, error: error instanceof Error ? error.message : "Session launch failed." }).catch((failError) => console.error(`Could not fail session ${sessionId}:`, failError));
     }
   }
 }
@@ -469,16 +474,17 @@ function existingGuides(worktree: string): string {
 async function runCheckCommand(command: string, cwd: string): Promise<{ pass: boolean; output: string }> {
   if (command.trim() === "") return { pass: true, output: "" };
   try {
-    const proc = Bun.spawn(["sh", "-c", command], { cwd, stdout: "pipe", stderr: "pipe" });
+    const proc = Bun.spawn(["sh", "-c", command], { cwd, stdout: "pipe", stderr: "pipe", detached: true });
     const text = Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]).then(
       ([out, err]) => `${out}\n${err}`,
     );
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const timed = await Promise.race([
       proc.exited.then(async (code) => ({ code, text: await text })),
-      Bun.sleep(15 * 60_000).then(() => null),
-    ]);
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 15 * 60_000); }),
+    ]).finally(() => clearTimeout(timer));
     if (timed === null) {
-      proc.kill();
+      killSessionProcess(proc);
       return { pass: false, output: "Check command timed out after 15 minutes." };
     }
     return { pass: timed.code === 0, output: timed.text.slice(-4000) };
@@ -518,12 +524,14 @@ async function ensureWorktree(
     const branch = `${build.branch}${suffix}`;
     try {
       await executeProjectOperation(project.localPath, { kind: "createWorktree", name, branch, createBranch: true });
-      const worktree = path.resolve(path.dirname(project.localPath), `${path.basename(project.localPath)}-${name}`);
-      await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, worktree });
-      return worktree;
     } catch {
       // Branch or worktree path already exists (e.g. a retried build); try the next suffix.
+      continue;
     }
+    // Outside the retry: a mark failure must not create another orphan worktree; it propagates to buildsTick.
+    const worktree = path.resolve(path.dirname(project.localPath), `${path.basename(project.localPath)}-${name}`);
+    await client.mutation(api.builds.mark, { accessKey: identity.accessKey, buildId: build._id, worktree });
+    return worktree;
   }
   throw new Error("Could not create a worktree: too many naming collisions.");
 }

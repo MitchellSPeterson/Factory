@@ -1,5 +1,6 @@
-import { useMutation, useQuery } from "@/lib/factory";
-import { useEffect, useMemo, useState } from "react";
+import { useMutation } from "@/lib/factory";
+import { useGitStatus } from "./useGitStatus";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { SymbolView } from "expo-symbols";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,10 +12,11 @@ import { CodeBlock } from "panelui-native/components/code-block";
 import { EmptyState } from "panelui-native/components/empty-state";
 import { Input } from "panelui-native/components/input";
 import { Item } from "panelui-native/components/item";
+import { Menu } from "panelui-native/components/menu";
 import { Spinner } from "panelui-native/components/spinner";
 import { Tabs } from "panelui-native/components/tabs";
 import { Textarea } from "panelui-native/components/textarea";
-import { ChevronRightIcon, PlusIcon, RotateCwIcon, ShareNodesIcon, XIcon } from "panelui-native/icons";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, EllipsisIcon, PlusIcon, RotateCwIcon, ShareNodesIcon, TrashIcon, XIcon } from "panelui-native/icons";
 
 import type { Doc } from "@/lib/dataModel";
 import type { GitBranch, GitFile, OperationResult, ProjectOperation } from "../../../shared/projectOperations";
@@ -78,7 +80,7 @@ export function GitWorkspace({ project, compact }: { project: Project; compact?:
   const keyboard = useKeyboardHeight();
   const { width } = useWindowDimensions();
   const wide = !compact && width >= 1000;
-  const rows = useQuery(api.projectOperations.list, { projectId: project._id });
+  const { rows, refresh: refreshStatus } = useGitStatus(project._id);
   const enqueue = useMutation(api.projectOperations.enqueue);
   const [openedAt] = useState(() => Date.now());
   const [tab, setTab] = useState<GitTab>("changes");
@@ -98,12 +100,10 @@ export function GitWorkspace({ project, compact }: { project: Project; compact?:
   );
   const latestStatus = rows?.find((row) => row.operation.kind === "status");
   // Only results from this visit; an old push output is noise.
-  const notice = rows?.find(
-    (row) =>
-      row.operation.kind in DONE &&
-      row._creationTime >= openedAt - 5_000 &&
-      row._id !== dismissed,
+  const latestDone = rows?.find(
+    (row) => row.operation.kind in DONE && row._creationTime >= openedAt - 5_000,
   );
+  const notice = latestDone?._id === dismissed ? undefined : latestDone;
   const files = git?.files ?? [];
   const selected = files.filter((item) => !excluded.has(item.path));
   const busy = pending || !!active;
@@ -114,12 +114,12 @@ export function GitWorkspace({ project, compact }: { project: Project; compact?:
     gap: Platform.OS === "ios" ? 16 : 8,
   });
 
-  async function run(operation: Operation, failed: string) {
+  async function run(operation: Operation, failed: string, force = false) {
     setError("");
     try {
-      await enqueue({ projectId: project._id, operation });
-      if (operation.kind !== "status" && operation.kind !== "diff")
-        await enqueue({ projectId: project._id, operation: { kind: "status" } });
+      if (operation.kind === "status") await refreshStatus(force);
+      else await enqueue({ projectId: project._id, operation });
+      if (operation.kind !== "status" && operation.kind !== "diff") await refreshStatus(true);
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : failed);
@@ -139,12 +139,13 @@ export function GitWorkspace({ project, compact }: { project: Project; compact?:
   useEffect(() => {
     void run({ kind: "status" }, "Could not read this repository.");
   }, [project._id]);
+  // Success is confirmed by the page itself updating; the banner only needs a moment.
+  const doneId = notice?.state === "done" && !notice.error ? notice._id : undefined;
   useEffect(() => {
-    const timer = setInterval(() => {
-      if (!active) void run({ kind: "status" }, "Could not read this repository.");
-    }, 15_000);
-    return () => clearInterval(timer);
-  }, [project._id, active?._id]);
+    if (!doneId) return;
+    const timer = setTimeout(() => setDismissed(doneId), 3_000);
+    return () => clearTimeout(timer);
+  }, [doneId]);
   useEffect(() => {
     if (file && git && !git.files.some((item) => item.path === file))
       setFile(null);
@@ -177,12 +178,7 @@ export function GitWorkspace({ project, compact }: { project: Project; compact?:
   ) : latestStatus?.error ? (
     <Banner tone="danger" text={latestStatus.error} />
   ) : notice?.state === "done" ? (
-    <Banner
-      tone="success"
-      text={DONE[notice.operation.kind]!}
-      detail={notice.result?.kind === "text" ? notice.result.text : undefined}
-      onClose={() => setDismissed(notice._id)}
-    />
+    <Banner tone="success" text={DONE[notice.operation.kind]!} />
   ) : null;
 
   const changes = (
@@ -324,7 +320,7 @@ export function GitWorkspace({ project, compact }: { project: Project; compact?:
             size="icon"
             disabled={busy}
             accessibilityLabel="Refresh"
-            onPress={() => void run({ kind: "status" }, "Could not read this repository.")}
+            onPress={() => void run({ kind: "status" }, "Could not read this repository.", true)}
           >
             <RotateCwIcon size={18} />
           </Button>
@@ -529,37 +525,43 @@ function BranchesTab({
           <Item.Group className="overflow-hidden rounded-2xl border border-border bg-card">
             {locals.map((item, index) => {
               const elsewhere = !item.current && !!item.worktreePath;
+              const row = (
+                <View className="min-h-14 flex-row items-center gap-3 px-3.5 py-2.5">
+                  <View className="flex-1 min-w-0 gap-0.5">
+                    <Text numberOfLines={1} ellipsizeMode="middle" className="text-[15px] font-semibold text-foreground">
+                      {item.name}
+                    </Text>
+                    <Text numberOfLines={1} className="text-xs text-muted-foreground">
+                      {elsewhere ? "Open in another worktree" : formatAheadBehind(item)}
+                    </Text>
+                  </View>
+                  {item.current ? (
+                    <CheckIcon size={18} className="text-primary" />
+                  ) : (
+                    <EllipsisIcon size={18} className="text-muted-foreground" />
+                  )}
+                </View>
+              );
               return (
                 <View key={item.name}>
                   {index > 0 ? <Item.Separator /> : null}
-                  <View className="min-h-14 flex-row items-center gap-3 px-3.5 py-2.5">
-                    <View className="flex-1 min-w-0 gap-0.5">
-                      <View className="min-w-0 flex-row items-center gap-1.5">
-                        <Text selectable numberOfLines={1} className="shrink text-[15px] font-semibold text-foreground">
-                          {item.name}
-                        </Text>
-                        {item.current ? <Badge variant="outline">Current</Badge> : null}
-                      </View>
-                      <Text numberOfLines={1} className="text-xs text-muted-foreground">
-                        {elsewhere ? "Open in another worktree" : formatAheadBehind(item)}
-                      </Text>
-                    </View>
-                    {item.current ? null : (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onPress={() => void act({ kind: "merge", branch: item.name }, "Could not merge.")}
-                      >
-                        Merge into {git?.branch}
-                      </Button>
-                    )}
-                    {item.current || elsewhere ? null : (
-                      <Button size="sm" variant="secondary" disabled={busy} onPress={() => checkout(item.name)}>
-                        Switch
-                      </Button>
-                    )}
-                  </View>
+                  {item.current ? (
+                    <View accessibilityLabel={`${item.name}, current branch`}>{row}</View>
+                  ) : (
+                    <RowMenu label={`Actions for ${item.name}`} row={row}>
+                        {elsewhere ? null : (
+                          <Menu.Item disabled={busy} onSelect={() => checkout(item.name)}>
+                            Switch to this branch
+                          </Menu.Item>
+                        )}
+                        <Menu.Item
+                          disabled={busy || !git?.branch}
+                          onSelect={() => void act({ kind: "merge", branch: item.name }, "Could not merge.")}
+                        >
+                          {`Merge into ${git?.branch ?? "current branch"}`}
+                        </Menu.Item>
+                    </RowMenu>
+                  )}
                 </View>
               );
             })}
@@ -573,17 +575,24 @@ function BranchesTab({
             {remotes.map((item, index) => (
               <View key={item.name}>
                 {index > 0 ? <Item.Separator /> : null}
-                <View className="min-h-14 flex-row items-center gap-3 px-3.5 py-2.5">
-                  <View className="flex-1 min-w-0 gap-0.5">
-                    <Text selectable numberOfLines={1} className="text-[15px] font-semibold text-foreground">
-                      {item.name}
-                    </Text>
-                    <Text className="text-xs text-muted-foreground">Checking out makes a local copy</Text>
+                <RowMenu
+                  label={`Actions for ${item.name}`}
+                  row={
+                  <View className="min-h-14 flex-row items-center gap-3 px-3.5 py-2.5">
+                    <View className="flex-1 min-w-0 gap-0.5">
+                      <Text numberOfLines={1} ellipsizeMode="middle" className="text-[15px] font-semibold text-foreground">
+                        {item.name}
+                      </Text>
+                      <Text numberOfLines={1} className="text-xs text-muted-foreground">Not on this Mac yet</Text>
+                    </View>
+                    <EllipsisIcon size={18} className="text-muted-foreground" />
                   </View>
-                  <Button size="sm" variant="secondary" disabled={busy} onPress={() => checkout(item.name)}>
-                    Check out
-                  </Button>
-                </View>
+                  }
+                >
+                  <Menu.Item disabled={busy} onSelect={() => checkout(item.name)}>
+                    Check out a local copy
+                  </Menu.Item>
+                </RowMenu>
               </View>
             ))}
           </Item.Group>
@@ -689,32 +698,45 @@ function WorktreesTab({
       ) : null}
       {worktrees.length ? (
         <Item.Group className="overflow-hidden rounded-2xl border border-border bg-card">
-          {worktrees.map((item, index) => (
-            <View key={item.path}>
-              {index > 0 ? <Item.Separator /> : null}
+          {worktrees.map((item, index) => {
+            const row = (
               <View className="min-h-14 flex-row items-center gap-3 px-3.5 py-2.5">
                 <View className="flex-1 min-w-0 gap-0.5">
                   <View className="min-w-0 flex-row items-center gap-1.5">
-                    <Text selectable numberOfLines={1} className="shrink text-[15px] font-semibold text-foreground">
+                    <Text numberOfLines={1} ellipsizeMode="middle" className="shrink text-[15px] font-semibold text-foreground">
                       {item.branch ?? "Detached HEAD"}
                     </Text>
                     {item.current ? <Badge variant="outline">This Project</Badge> : null}
                     {item.locked ? <Badge variant="secondary">Locked</Badge> : null}
                     {item.prunable ? <Badge variant="destructive">Missing</Badge> : null}
                   </View>
-                  <Text selectable numberOfLines={1} className="font-mono text-xs text-muted-foreground">
+                  <Text numberOfLines={1} ellipsizeMode="middle" className="font-mono text-xs text-muted-foreground">
                     {item.path}
                   </Text>
                 </View>
-                {item.current || removing === item.path ? null : (
-                  <Button size="sm" variant="secondary" disabled={busy} onPress={() => setRemoving(item.path)}>
-                    Remove
-                  </Button>
-                )}
+                {item.current ? null : <EllipsisIcon size={18} className="text-muted-foreground" />}
               </View>
+            );
+            return (
+            <View key={item.path}>
+              {index > 0 ? <Item.Separator /> : null}
+              {item.current ? (
+                row
+              ) : (
+                <RowMenu label={`Actions for ${item.branch ?? item.path}`} row={row}>
+                  <Menu.Item
+                    variant="destructive"
+                    icon={<TrashIcon size={16} />}
+                    disabled={busy}
+                    onSelect={() => setRemoving(item.path)}
+                  >
+                    Remove worktree…
+                  </Menu.Item>
+                </RowMenu>
+              )}
               {removing === item.path ? (
                 <View className="mx-2.5 mb-2.5 flex-row flex-wrap items-center gap-2 rounded-lg bg-accent p-2.5">
-                  <Text className="flex-1 text-[13px] text-foreground">
+                  <Text className="min-w-[180px] flex-1 text-[13px] text-foreground">
                     Delete this folder? Uncommitted work in it will stop the removal.
                   </Text>
                   <Button variant="ghost" size="sm" onPress={() => setRemoving(null)}>Cancel</Button>
@@ -732,10 +754,25 @@ function WorktreesTab({
                 </View>
               ) : null}
             </View>
-          ))}
+            );
+          })}
         </Item.Group>
       ) : null}
     </ScrollView>
+  );
+}
+
+/** A list row that opens its actions in a menu, so rows don't each carry a strip of buttons. */
+function RowMenu({ label, row, children }: { label: string; row: ReactNode; children: ReactNode }) {
+  return (
+    <Menu>
+      <Menu.Trigger>
+        <Pressable accessibilityRole="button" accessibilityLabel={label} className="active:bg-accent">
+          {row}
+        </Pressable>
+      </Menu.Trigger>
+      <Menu.Content align="end">{children}</Menu.Content>
+    </Menu>
   );
 }
 
@@ -821,8 +858,8 @@ function DiffPane({
     <View className="min-h-0 flex-1">
       <View className="min-h-14 flex-row items-center gap-2 border-b border-border px-3 py-2">
         {onBack ? (
-          <Button variant="ghost" size="sm" onPress={onBack}>
-            Back to changes
+          <Button variant="ghost" size="icon" accessibilityLabel="Back to changes" onPress={onBack}>
+            <ChevronLeftIcon size={20} />
           </Button>
         ) : null}
         <View className="flex-1 min-w-0 gap-0.5">
@@ -866,12 +903,10 @@ function DiffPane({
 function Banner({
   tone,
   text,
-  detail,
   onClose,
 }: {
   tone: "danger" | "success" | "busy";
   text: string;
-  detail?: string;
   onClose?: () => void;
 }) {
   const color = tone === "danger" ? "text-destructive" : tone === "success" ? "text-success" : "text-foreground";
@@ -897,11 +932,6 @@ function Banner({
         <Text selectable className={`text-sm font-medium ${tone === "danger" ? color : "text-foreground"}`}>
           {text}
         </Text>
-        {detail ? (
-          <Text selectable numberOfLines={3} className="font-mono text-xs text-muted-foreground">
-            {detail}
-          </Text>
-        ) : null}
       </View>
       {onClose ? (
         <Button variant="ghost" size="icon" accessibilityLabel="Dismiss" onPress={onClose}>

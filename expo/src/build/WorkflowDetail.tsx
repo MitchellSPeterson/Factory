@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Image, Linking, Pressable, ScrollView, View } from "react-native";
+import { Linking, Pressable, ScrollView, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Button } from "panelui-native/components/button";
 import { Dialog } from "panelui-native/components/dialog";
@@ -8,21 +8,28 @@ import { Spinner } from "panelui-native/components/spinner";
 import { Textarea } from "panelui-native/components/textarea";
 import { Text } from "panelui-native/primitives/text";
 import { api } from "@/lib/api";
-import type { Doc, Id } from "@/lib/dataModel";
+import type { Doc } from "@/lib/dataModel";
 import { useMutation } from "@/lib/factory";
 import { Notice } from "@/chats/ui";
-import { Popover } from "@/roadmap/Popover";
-import { ArtifactPreview } from "./ArtifactPreview";
-import { useBuildArtifact, type PreviewAnchor } from "./artifacts";
 import { ROLE_LABEL } from "./BuildSettings";
 import {
   resourceBlocker,
   type WorkflowAction,
-  type WorkflowArtifact,
   type WorkflowPhase,
-  type WorkflowReport,
-  type WorkflowState,
 } from "../../../shared/buildWorkflow";
+import { CandidateHistoryPanel } from "./workflow/CandidateHistoryPanel";
+import { CandidatePanel } from "./workflow/CandidatePanel";
+import { EvidenceView } from "./workflow/EvidenceView";
+import {
+  FeedbackHistoryPanel,
+  IncomingFeedbackPanel,
+} from "./workflow/FeedbackPanels";
+import { FindingsPanel } from "./workflow/FindingsPanel";
+import { PlanPanel } from "./workflow/PlanPanel";
+import { PrototypeReview } from "./workflow/PrototypeReview";
+import { ReportView } from "./workflow/ReportView";
+import { RequirementsPanel } from "./workflow/RequirementsPanel";
+import { Panel, identity, type UserAction } from "./workflow/shared";
 
 export const WORKFLOW_PHASE_LABEL: Record<WorkflowPhase, string> = {
   setup: "Discovering Project setup",
@@ -37,30 +44,8 @@ export const WORKFLOW_PHASE_LABEL: Record<WorkflowPhase, string> = {
   prReview: "PR review",
   done: "Merged",
 };
-type UserAction = WorkflowAction extends infer Action
-  ? Action extends WorkflowAction
-    ? Omit<Action, "id" | "generation" | "phase">
-    : never
-  : never;
-function identity() {
-  return `factory-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
 function minutes(value: number) {
   return `${Math.round(value / 60000)} min`;
-}
-function Panel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View className="mt-5 gap-3">
-      <Text className="text-sm font-semibold text-foreground">{title}</Text>
-      {children}
-    </View>
-  );
 }
 
 export function WorkflowDetail({
@@ -330,85 +315,11 @@ export function WorkflowDetail({
         </Panel>
       )}
       {workflow.requirements.length > 0 && (
-        <Panel title="Requirements">
-          {workflow.requirements.map((requirement) => {
-            const evidence = workflow.reports.verifier?.requirements.find(
-              (item) => item.requirementId === requirement.id,
-            );
-            return (
-              <View key={requirement.id} className="gap-1">
-                <Text className="text-sm leading-5 text-foreground">
-                  {evidence ? (evidence.pass ? "✓ " : "× ") : "○ "}
-                  {requirement.text}
-                </Text>
-                {evidence && (
-                  <Text
-                    className={`text-xs leading-5 ${evidence.pass ? "text-muted-foreground" : "text-destructive"}`}
-                  >
-                    {evidence.evidence}
-                  </Text>
-                )}
-              </View>
-            );
-          })}
-        </Panel>
+        <RequirementsPanel workflow={workflow} />
       )}
-      {workflow.plan.length > 0 && (
-        <Panel title="Implementation plan">
-          {workflow.plan.map((checkpoint, index) => (
-            <View
-              key={index}
-              className="gap-1 rounded-xl border border-border p-3"
-            >
-              <Text className="text-sm font-medium text-foreground">
-                {index + 1}. {checkpoint.title}
-              </Text>
-              <Text className="text-xs leading-5 text-muted-foreground">
-                {checkpoint.description}
-              </Text>
-            </View>
-          ))}
-          <Text className="text-xs text-muted-foreground">
-            Checkpoints organize one complete Candidate. Planning proceeds
-            automatically.
-          </Text>
-        </Panel>
-      )}
+      {workflow.plan.length > 0 && <PlanPanel workflow={workflow} />}
       {currentRevision && (
-        <Panel title="Candidate">
-          <Text selectable className="text-xs font-mono text-muted-foreground">
-            {currentRevision}
-          </Text>
-          <View className="flex-row flex-wrap gap-2">
-            {(["verifier", "reviewer"] as const).map((role) => {
-              const report = workflow.reports[role];
-              const valid = report?.revision === currentRevision;
-              return (
-                <View
-                  key={role}
-                  className="flex-1 rounded-xl border border-border p-3"
-                >
-                  <Text className="text-sm font-medium text-foreground">
-                    {ROLE_LABEL[role]}
-                  </Text>
-                  <Text
-                    className={`mt-1 text-xs ${valid && report?.pass ? "text-success" : "text-muted-foreground"}`}
-                  >
-                    {!report
-                      ? "Awaiting report"
-                      : !valid
-                        ? "Evidence belongs to an earlier revision"
-                        : report.environmentBlocker
-                          ? "Environment blocked"
-                          : report.pass
-                            ? "Passed"
-                            : "Blocking findings"}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        </Panel>
+        <CandidatePanel workflow={workflow} currentRevision={currentRevision} />
       )}
       {Object.values(workflow.reports).map(
         (report) =>
@@ -421,41 +332,7 @@ export function WorkflowDetail({
             />
           ),
       )}
-      {workflow.findings.length > 0 && (
-        <Panel title="Findings">
-          {workflow.findings.map((finding) => (
-            <View
-              key={finding.id}
-              className="gap-1 rounded-xl border border-border p-3"
-            >
-              <Text
-                className={`text-xs font-semibold ${finding.severity === "blocking" && !finding.resolved ? "text-destructive" : "text-muted-foreground"}`}
-              >
-                {finding.resolved
-                  ? "Resolved"
-                  : finding.severity === "blocking"
-                    ? "Blocking"
-                    : "Suggestion"}
-                {finding.file
-                  ? ` · ${finding.file}${finding.line ? `:${finding.line}` : ""}`
-                  : ""}
-              </Text>
-              <Text className="text-sm leading-5 text-foreground">
-                {finding.text}
-              </Text>
-              <Text
-                selectable
-                className="text-xs leading-5 text-muted-foreground"
-              >
-                {finding.evidence}
-              </Text>
-              <Text className="text-xs leading-5 text-muted-foreground">
-                {finding.impact}
-              </Text>
-            </View>
-          ))}
-        </Panel>
-      )}
+      {workflow.findings.length > 0 && <FindingsPanel workflow={workflow} />}
       {workflow.artifacts.some((artifact) => artifact.kind !== "prototype") && (
         <EvidenceView
           buildId={build._id}
@@ -534,75 +411,13 @@ export function WorkflowDetail({
         </Panel>
       )}
       {workflow.pendingFeedback.length > 0 && (
-        <Panel title="Incoming feedback">
-          <Text className="text-xs leading-5 text-muted-foreground">
-            Collected for the next Batch. Active Candidate review stays on the
-            same revision.
-          </Text>
-          {workflow.pendingFeedback.map((feedback) => (
-            <View
-              key={feedback.id}
-              className="gap-1 rounded-xl border border-border p-3"
-            >
-              <Text className="text-xs text-muted-foreground">
-                {feedback.source === "github" ? "GitHub" : "Factory"} ·{" "}
-                {feedback.authorized ? "Authorized review" : "Feedback"}
-              </Text>
-              <Text className="text-sm leading-5 text-foreground">
-                {feedback.text}
-              </Text>
-            </View>
-          ))}
-        </Panel>
+        <IncomingFeedbackPanel workflow={workflow} />
       )}
       {workflow.feedbackHistory.length > 0 && (
-        <Panel title="Feedback history">
-          {workflow.feedbackHistory.map((feedback) => (
-            <View key={feedback.id} className="gap-1">
-              <Text className="text-xs text-muted-foreground">
-                {feedback.source === "github" ? "GitHub" : "Factory"}
-                {feedback.changesDesign ? " · Design change" : ""}
-              </Text>
-              <Text className="text-sm leading-5 text-foreground">
-                {feedback.text}
-              </Text>
-            </View>
-          ))}
-        </Panel>
+        <FeedbackHistoryPanel workflow={workflow} />
       )}
       {workflow.candidates.length > 0 && (
-        <Panel title="Candidate history">
-          {workflow.candidates.map((candidate) => (
-            <View
-              key={`${candidate.batch}-${candidate.attempt}`}
-              className="gap-1 rounded-xl border border-border p-3"
-            >
-              <Text className="text-xs text-muted-foreground">
-                Batch {candidate.batch} · Attempt {candidate.attempt}
-              </Text>
-              <Text selectable className="text-xs font-mono text-foreground">
-                {candidate.revision}
-              </Text>
-              {candidate.reports.map((report) => (
-                <View key={report.role} className="flex-row flex-wrap gap-2">
-                  <Text className="text-xs text-muted-foreground">
-                    {ROLE_LABEL[report.role]} ·{" "}
-                    {report.environmentBlocker
-                      ? "Environment blocked"
-                      : report.pass
-                        ? "Passed"
-                        : "Failed"}
-                  </Text>
-                  {report.sessionId && (
-                    <Pressable onPress={() => openSession(report.sessionId!)}>
-                      <Text className="text-xs text-primary">Open Session</Text>
-                    </Pressable>
-                  )}
-                </View>
-              ))}
-            </View>
-          ))}
-        </Panel>
+        <CandidateHistoryPanel workflow={workflow} openSession={openSession} />
       )}
       {workflow.notes.length > 0 && (
         <Panel title="Notes">
@@ -766,467 +581,5 @@ export function WorkflowDetail({
         </Dialog.Content>
       </Dialog>
     </ScrollView>
-  );
-}
-
-function PrototypeReview({
-  buildId,
-  workflow,
-  busy,
-  fire,
-}: {
-  buildId: string;
-  workflow: WorkflowState;
-  busy: boolean;
-  fire: (action: UserAction) => Promise<boolean>;
-}) {
-  const [viewedRevision, setViewedRevision] = useState<string | undefined>();
-  const latest = workflow.prototypeRevisions.at(-1)!;
-  const revision =
-    workflow.prototypeRevisions.find((item) => item.id === viewedRevision) ??
-    latest;
-  const artifact = useBuildArtifact(buildId, revision.artifactId);
-  const [pinning, setPinning] = useState(false);
-  const [anchor, setAnchor] = useState<PreviewAnchor | undefined>();
-  const [text, setText] = useState("");
-  const [instruction, setInstruction] = useState("");
-  const [showResolved, setShowResolved] = useState(false);
-  const [selectedComment, setSelectedComment] = useState<string>();
-  const comments = workflow.comments.filter(
-    (comment) => comment.revision === revision.id,
-  );
-  const allowed =
-    workflow.phase === "prototypeReview" &&
-    workflow.status === "waiting" &&
-    revision.id === latest.id;
-  return (
-    <Panel title="Prototype review">
-      <View className="flex-row flex-wrap items-center justify-between gap-2">
-        <Popover
-          align="left"
-          items={workflow.prototypeRevisions.map((item, index) => ({
-            label: `Revision ${index + 1}${item.id === workflow.approvedPrototypeRevision ? " · Approved" : ""}`,
-            selected: item.id === revision.id,
-            onPress: () => {
-              setViewedRevision(item.id);
-              setAnchor(undefined);
-              setText("");
-              setInstruction("");
-              setSelectedComment(undefined);
-              setPinning(false);
-            },
-          }))}
-        >
-          {(open) => (
-            <Button variant="ghost" onPress={open}>
-              Revision {workflow.prototypeRevisions.indexOf(revision) + 1} ▾
-              {revision.id === workflow.approvedPrototypeRevision
-                ? " · Approved"
-                : ""}
-            </Button>
-          )}
-        </Popover>
-        <Button
-          variant="ghost"
-          disabled={!artifact.content}
-          onPress={() => {
-            setPinning(!pinning);
-            setAnchor(undefined);
-          }}
-        >
-          {pinning ? "Interact with Prototype" : "Pin a comment"}
-        </Button>
-      </View>
-      {artifact.error ? (
-        <View className="gap-2">
-          <Notice text={artifact.error} error />
-          <Button
-            className="self-start"
-            variant="ghost"
-            onPress={artifact.reload}
-          >
-            Retry artifact
-          </Button>
-        </View>
-      ) : artifact.content ? (
-        <ArtifactPreview
-          key={revision.id}
-          html={artifact.content}
-          title={`Prototype revision ${workflow.prototypeRevisions.indexOf(revision) + 1}`}
-          pinning={pinning}
-          onPin={(point) => {
-            setViewedRevision(revision.id);
-            setAnchor(point);
-            setPinning(false);
-          }}
-          pins={comments
-            .filter(
-              (comment) => comment.pin && (!comment.resolved || showResolved),
-            )
-            .map((comment) => ({
-              id: comment.id,
-              label: comment.text,
-              resolved: comment.resolved,
-              anchor: {
-                ...comment.pin!,
-                viewportWidth: comment.pin!.viewportWidth ?? 0,
-                viewportHeight: comment.pin!.viewportHeight ?? 0,
-              },
-            }))}
-          onSelectPin={(id) => {
-            setSelectedComment(id);
-            setShowResolved(true);
-          }}
-        />
-      ) : (
-        <View className="h-[200px] items-center justify-center">
-          <Spinner label="Loading Prototype" />
-        </View>
-      )}
-      <Text className="text-xs leading-5 text-muted-foreground">
-        {pinning
-          ? "Tap a location to attach a comment. Switch back to interact with the Prototype."
-          : "Interact with this preserved Prototype. Comments are collected until you request a revision."}
-      </Text>
-      {selectedComment &&
-        comments.some((comment) => comment.id === selectedComment) && (
-          <View className="gap-1 rounded-xl border border-primary bg-primary/5 p-3">
-            <Text className="text-xs font-semibold text-primary">
-              Selected pinned comment
-            </Text>
-            <Text className="text-sm leading-5 text-foreground">
-              {comments.find((comment) => comment.id === selectedComment)!.text}
-            </Text>
-            <Button
-              variant="ghost"
-              className="self-start"
-              onPress={() => setSelectedComment(undefined)}
-            >
-              Dismiss selection
-            </Button>
-          </View>
-        )}
-      {!!revision.instruction && (
-        <Text className="text-xs leading-5 text-muted-foreground">
-          Revision instructions: {revision.instruction}
-        </Text>
-      )}
-      <View className="gap-2 rounded-xl border border-border p-3">
-        <Text className="text-sm font-semibold text-foreground">
-          Anything you want to change?
-        </Text>
-        <Textarea
-          accessibilityLabel={`Comment on Prototype revision ${workflow.prototypeRevisions.indexOf(revision) + 1}`}
-          value={text}
-          onChangeText={(value) => {
-            setViewedRevision(revision.id);
-            setText(value);
-          }}
-          placeholder={
-            anchor
-              ? "Comment on this location…"
-              : "General comment on this revision…"
-          }
-        />
-        {anchor && (
-          <View className="flex-row items-center gap-2">
-            <Text className="flex-1 text-xs text-muted-foreground">
-              Pinned at {Math.round(anchor.x * 100)}%,{" "}
-              {Math.round(anchor.y * 100)}% · {Math.round(anchor.viewportWidth)}{" "}
-              × {Math.round(anchor.viewportHeight)}
-            </Text>
-            <Button variant="ghost" onPress={() => setAnchor(undefined)}>
-              Remove pin
-            </Button>
-          </View>
-        )}
-        <Button
-          className="self-start"
-          variant="ghost"
-          disabled={busy || !text.trim() || workflow.status === "stopped"}
-          onPress={async () => {
-            const submittedRevision = revision.id;
-            if (
-              await fire({
-                kind: "comment",
-                comment: {
-                  id: identity(),
-                  revision: submittedRevision,
-                  text: text.trim(),
-                  resolved: false,
-                  pin: anchor,
-                  createdAt: Date.now(),
-                },
-              })
-            ) {
-              setText("");
-              setAnchor(undefined);
-            }
-          }}
-        >
-          Add comment
-        </Button>
-      </View>
-      {comments.length > 0 && (
-        <View className="gap-2">
-          <View className="flex-row flex-wrap items-center justify-between gap-2">
-            <Text className="text-xs text-muted-foreground">
-              {comments.filter((comment) => !comment.resolved).length}{" "}
-              unresolved ·{" "}
-              {comments.filter((comment) => comment.resolved).length} resolved
-            </Text>
-            <Button
-              variant="ghost"
-              onPress={() => setShowResolved(!showResolved)}
-            >
-              {showResolved ? "Hide resolved" : "Show resolved"}
-            </Button>
-          </View>
-          {comments
-            .filter((comment) => !comment.resolved || showResolved)
-            .map((comment) => (
-              <View
-                key={comment.id}
-                className={`gap-1 rounded-xl border p-3 ${selectedComment === comment.id ? "border-primary bg-primary/5" : "border-border"}`}
-              >
-                <Text className="text-xs text-muted-foreground">
-                  {comment.pin
-                    ? `Pinned · ${Math.round(comment.pin.x * 100)}%, ${Math.round(comment.pin.y * 100)}%`
-                    : "General comment"}
-                  {comment.resolved ? " · Resolved" : ""}
-                </Text>
-                <Text className="text-sm leading-5 text-foreground">
-                  {comment.text}
-                </Text>
-                <Button
-                  className="self-start"
-                  variant="ghost"
-                  disabled={
-                    busy ||
-                    workflow.status === "stopped" ||
-                    workflow.status === "done"
-                  }
-                  onPress={() =>
-                    void fire({
-                      kind: "resolveComment",
-                      commentId: comment.id,
-                      resolved: !comment.resolved,
-                    })
-                  }
-                >
-                  {comment.resolved ? "Reopen" : "Resolve"}
-                </Button>
-              </View>
-            ))}
-        </View>
-      )}
-      {allowed ? (
-        <View className="gap-2 rounded-xl border border-border p-3">
-          <Textarea
-            value={instruction}
-            onChangeText={setInstruction}
-            placeholder="Additional revision instructions (optional)…"
-          />
-          <View className="flex-row flex-wrap gap-2">
-            <Button
-              variant="ghost"
-              disabled={
-                busy ||
-                !!text.trim() ||
-                (!instruction.trim() &&
-                  !comments.some((comment) => !comment.resolved))
-              }
-              onPress={async () => {
-                if (
-                  await fire({
-                    kind: "requestRevision",
-                    revision: revision.id,
-                    text:
-                      instruction.trim() ||
-                      "Address the unresolved comments on this revision.",
-                  })
-                ) {
-                  setInstruction("");
-                  setViewedRevision(undefined);
-                }
-              }}
-            >
-              Request revision
-            </Button>
-            <Button
-              disabled={busy || !!text.trim() || workflow.status !== "waiting"}
-              onPress={() =>
-                void fire({ kind: "approvePrototype", revision: revision.id })
-              }
-            >
-              Approve revision{" "}
-              {workflow.prototypeRevisions.indexOf(revision) + 1}
-            </Button>
-          </View>
-          {!!text.trim() && (
-            <Text className="text-xs text-muted-foreground">
-              Add your draft comment before requesting a revision or approving.
-            </Text>
-          )}
-          <Text className="text-xs leading-5 text-muted-foreground">
-            Request revision starts one agent update. Approval applies to this
-            exact revision and starts automatic planning.
-          </Text>
-        </View>
-      ) : (
-        <Text className="text-xs text-muted-foreground">
-          {revision.id !== latest.id
-            ? "You are viewing a preserved revision. Select the latest revision to approve or request changes."
-            : revision.id === workflow.approvedPrototypeRevision
-              ? "This revision is approved and guides implementation and UI verification."
-              : "The next review will be available after the agent finishes."}
-        </Text>
-      )}
-    </Panel>
-  );
-}
-
-function ReportView({
-  report,
-  currentRevision,
-  onOpenSession,
-}: {
-  report: WorkflowReport;
-  currentRevision?: string;
-  onOpenSession: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <Panel title={`${ROLE_LABEL[report.role]} report`}>
-      <View className="gap-2 rounded-xl border border-border p-3">
-        <Text className="text-xs font-mono text-muted-foreground">
-          Candidate {report.revision}
-          {report.revision !== currentRevision ? " · Earlier evidence" : ""}
-        </Text>
-        {!!report.environmentBlocker && (
-          <Notice text={report.environmentBlocker} error />
-        )}
-        {report.productChanged && (
-          <Notice
-            text="Product code changed during review. This report cannot approve the Candidate."
-            error
-          />
-        )}
-        {report.sessionId && (
-          <Pressable
-            onPress={() => onOpenSession(report.sessionId!)}
-            accessibilityRole="button"
-          >
-            <Text className="text-xs text-primary">Open preserved Session</Text>
-          </Pressable>
-        )}
-        <Button
-          variant="ghost"
-          className="self-start"
-          onPress={() => setExpanded(!expanded)}
-        >
-          {expanded
-            ? "Hide executed checks"
-            : `${report.checks.length} executed checks`}
-        </Button>
-        {expanded &&
-          report.checks.map((check, index) => (
-            <View key={index} className="gap-1 rounded-lg bg-background p-3">
-              <Text selectable className="text-xs font-mono text-foreground">
-                {check.command}
-              </Text>
-              <Text
-                className={`text-xs ${check.exitCode === 0 ? "text-success" : "text-destructive"}`}
-              >
-                Exit {check.exitCode} ·{" "}
-                {new Date(check.executedAt).toLocaleString()}
-              </Text>
-              <Text
-                selectable
-                className="text-xs font-mono leading-5 text-muted-foreground"
-              >
-                {check.output || "No output"}
-              </Text>
-            </View>
-          ))}
-      </View>
-    </Panel>
-  );
-}
-
-function EvidenceView({
-  buildId,
-  artifacts,
-  currentRevision,
-}: {
-  buildId: string;
-  artifacts: WorkflowArtifact[];
-  currentRevision?: string;
-}) {
-  const [selected, setSelected] = useState<string | undefined>();
-  const chosen =
-    artifacts.find((item) => item.id === selected) ??
-    artifacts.find((item) => item.kind === "visualExplanation") ??
-    artifacts[0]!;
-  const loaded = useBuildArtifact(buildId, chosen.id, chosen.mime);
-  return (
-    <Panel title="Evidence">
-      <Popover
-        align="left"
-        items={artifacts.map((item) => ({
-          label: `${item.title} · Batch ${item.batch}`,
-          selected: item.id === chosen.id,
-          onPress: () => setSelected(item.id),
-        }))}
-      >
-        {(open) => (
-          <Button variant="ghost" className="self-start" onPress={open}>
-            {chosen.title} ▾
-          </Button>
-        )}
-      </Popover>
-      <Text className="text-xs text-muted-foreground">
-        Batch {chosen.batch} · Candidate {chosen.revision}
-        {chosen.requirementId ? ` · Requirement ${chosen.requirementId}` : ""}
-        {chosen.prototypeRevision
-          ? ` · Prototype ${chosen.prototypeRevision}`
-          : ""}
-        {currentRevision && chosen.revision !== currentRevision
-          ? " · Earlier evidence"
-          : ""}
-      </Text>
-      {loaded.error ? (
-        <View className="gap-2">
-          <Notice text={loaded.error} error />
-          <Button
-            className="self-start"
-            variant="ghost"
-            onPress={loaded.reload}
-          >
-            Retry artifact
-          </Button>
-        </View>
-      ) : loaded.content === undefined ? (
-        <Spinner label="Loading evidence" />
-      ) : loaded.mime?.startsWith("image/") ? (
-        <Image
-          source={{ uri: loaded.content }}
-          accessibilityLabel={chosen.title}
-          resizeMode="contain"
-          style={{ width: "100%", height: 420 }}
-        />
-      ) : loaded.mime?.includes("html") ? (
-        <ArtifactPreview html={loaded.content} title={chosen.title} />
-      ) : (
-        <ScrollView className="max-h-[400px] rounded-xl border border-border p-3">
-          <Text
-            selectable
-            className="text-xs font-mono leading-5 text-muted-foreground"
-          >
-            {loaded.content || "No output"}
-          </Text>
-        </ScrollView>
-      )}
-    </Panel>
   );
 }

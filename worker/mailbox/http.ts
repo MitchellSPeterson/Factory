@@ -1,4 +1,5 @@
 import { readFileSync, realpathSync, statSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { dispatch, saveUpload } from "./functions";
 import type { Store } from "./store";
@@ -23,7 +24,10 @@ function tokenOf(request: Request, url: URL) {
 }
 
 function authorized(request: Request, url: URL, expected: string) {
-  return expected !== "" && tokenOf(request, url) === expected;
+  if (expected === "") return false;
+  const given = Buffer.from(tokenOf(request, url));
+  const want = Buffer.from(expected);
+  return given.length === want.length && timingSafeEqual(given, want);
 }
 
 export async function handleMailboxRequest(
@@ -106,6 +110,9 @@ export async function handleMailboxRequest(
   }
   if (url.pathname === "/upload" && request.method === "POST") {
     if (!authorized(request, url, input.token)) return json({ error: "Pairing token required." }, 401);
+    if (Number(request.headers.get("content-length")) > 10 * 1024 * 1024) {
+      return json({ error: "Choose an image smaller than 10 MB." }, 413);
+    }
     const bytes = new Uint8Array(await request.arrayBuffer());
     if (bytes.byteLength > 10 * 1024 * 1024) return json({ error: "Choose an image smaller than 10 MB." }, 400);
     return json({ storageId: saveUpload(input.uploads, bytes) });

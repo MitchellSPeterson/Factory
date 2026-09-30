@@ -140,6 +140,7 @@ export function startTerminals(
     } finally {
       shell.close();
       shells.delete(id);
+      started.delete(id);
     }
   }
   async function poll() {

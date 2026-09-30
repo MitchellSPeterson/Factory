@@ -11,6 +11,7 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
   const [workerUrl, setWorkerUrl] = useState("");
   const [token, setToken] = useState("");
   const [host, setHost] = useState("");
+  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -34,7 +35,7 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
     setBusy(true);
     setError("");
     try {
-      onReady(await pairFromWorker(host));
+      onReady(await pairFromWorker(host, code));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not reach the Mac.");
     } finally {
@@ -80,6 +81,15 @@ export function PairingScreen({ onReady }: { onReady: (pairing: WorkerPairing) =
         placeholder="192.168.1.20"
         value={host}
         onChangeText={setHost}
+      />
+      <Input
+        accessibilityLabel="Pairing code"
+        autoComplete="one-time-code"
+        keyboardType="number-pad"
+        maxLength={6}
+        placeholder="6-digit code from Mac Settings"
+        value={code}
+        onChangeText={setCode}
       />
       <Button variant="secondary" loading={busy} onPress={() => void pair()}>
         Ask the Mac for its URL

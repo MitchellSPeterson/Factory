@@ -10,6 +10,8 @@ export type Doc = {
 export type Store = {
   get: (id: string) => Doc | null;
   list: (table: string) => Doc[];
+  /** Rows of `table` whose JSON `field` equals `value`, via expression index. Newest first unless `order` is "asc". */
+  listBy: (table: string, field: IndexedField, value: string | number, order?: "asc" | "desc") => Doc[];
   insert: (table: string, data: Record<string, unknown>) => string;
   patch: (id: string, next: Record<string, unknown>) => void;
   delete: (id: string) => void;
@@ -17,6 +19,15 @@ export type Store = {
   close: () => void;
   transaction: <T>(run: () => T) => T;
 };
+
+export const INDEXED_FIELDS = ["sessionId", "terminalId", "projectId", "serverId", "token"] as const;
+export type IndexedField = (typeof INDEXED_FIELDS)[number];
+
+const BY_SQL = Object.fromEntries(
+  INDEXED_FIELDS.map((f) => [f, `json_extract(json, '$.${f}')`]),
+) as Record<IndexedField, string>;
+
+const NOTIFY_MS = 50;
 
 export function openStore(file: string): Store {
   const db = new Database(file, { create: true });
@@ -28,12 +39,20 @@ export function openStore(file: string): Store {
     json TEXT NOT NULL
   )`);
   db.exec("CREATE INDEX IF NOT EXISTS docs_table ON docs(table_name)");
+  // SQLite only uses an expression index when the expression text matches exactly; BY_SQL is the single source.
+  for (const f of INDEXED_FIELDS) db.exec(`CREATE INDEX IF NOT EXISTS docs_by_${f} ON docs(table_name, ${BY_SQL[f]})`);
   const listeners = new Set<() => void>();
   let transactionDepth = 0;
   let pendingNotification = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   function notify() {
     if (transactionDepth) { pendingNotification = true; return; }
-    for (const fn of listeners) fn();
+    // Coalesce bursts into one trailing tick per NOTIFY_MS.
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      for (const fn of listeners) fn();
+    }, NOTIFY_MS);
   }
   function parse(row: { id: string; created_at: number; json: string }): Doc {
     return { ...(JSON.parse(row.json) as Record<string, unknown>), _id: row.id, _creationTime: row.created_at };
@@ -57,8 +76,17 @@ export function openStore(file: string): Store {
     },
     list(table) {
       const rows = db
-        .query("SELECT id, created_at, json FROM docs WHERE table_name = ? ORDER BY created_at DESC")
+        .query("SELECT id, created_at, json FROM docs WHERE table_name = ? ORDER BY created_at DESC, rowid DESC")
         .all(table) as { id: string; created_at: number; json: string }[];
+      return rows.map(parse);
+    },
+    listBy(table, field, value, order = "desc") {
+      const expr = BY_SQL[field];
+      if (!expr) throw new Error("Field is not indexed.");
+      const dir = order === "asc" ? "ASC" : "DESC";
+      const rows = db
+        .query(`SELECT id, created_at, json FROM docs WHERE table_name = ? AND ${expr} = ? ORDER BY created_at ${dir}, rowid ${dir}`)
+        .all(table, value) as { id: string; created_at: number; json: string }[];
       return rows.map(parse);
     },
     insert(table, data) {
@@ -96,6 +124,8 @@ export function openStore(file: string): Store {
       };
     },
     close() {
+      clearTimeout(timer);
+      timer = undefined;
       db.close();
     },
   };

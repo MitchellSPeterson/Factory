@@ -8,6 +8,32 @@ export type AgentTool = {
   execute: (input: Record<string, unknown>) => Promise<string>;
 };
 
+const SHELL_TIMEOUT_MS = 10 * 60_000;
+const MAX_OUTPUT_CHARS = 100_000;
+
+/** Drain a stream, keeping only the last MAX_OUTPUT_CHARS (with a truncation note). */
+async function tailText(stream: ReadableStream<Uint8Array>): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = "";
+  let truncated = false;
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+    if (text.length > MAX_OUTPUT_CHARS * 2) {
+      text = text.slice(-MAX_OUTPUT_CHARS);
+      truncated = true;
+    }
+  }
+  text += decoder.decode();
+  if (text.length > MAX_OUTPUT_CHARS) {
+    text = text.slice(-MAX_OUTPUT_CHARS);
+    truncated = true;
+  }
+  return truncated ? `[output truncated, showing last ${MAX_OUTPUT_CHARS} chars]\n${text}` : text;
+}
+
 /** Resolve path under cwd; reject escapes. */
 export function resolveInCwd(cwd: string, rel: string): string {
   const root = path.resolve(cwd);
@@ -82,17 +108,25 @@ export function codingTools(cwd: string): Record<string, AgentTool> {
       },
       async execute(input) {
         const command = String(input.command ?? "");
+        // detached => own process group, so the timeout can kill the whole tree.
         const proc = Bun.spawn(["bash", "-lc", command], {
           cwd: path.resolve(cwd),
           stdout: "pipe",
           stderr: "pipe",
+          detached: true,
         });
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          try { process.kill(-proc.pid, "SIGKILL"); } catch { proc.kill("SIGKILL"); }
+        }, SHELL_TIMEOUT_MS);
         const [stdout, stderr, exitCode] = await Promise.all([
-          new Response(proc.stdout).text(),
-          new Response(proc.stderr).text(),
+          tailText(proc.stdout),
+          tailText(proc.stderr),
           proc.exited,
-        ]);
+        ]).finally(() => clearTimeout(timer));
         const parts = [
+          timedOut ? `timed out after ${SHELL_TIMEOUT_MS / 60_000} min and was killed` : null,
           exitCode !== 0 ? `exit ${exitCode}` : null,
           stdout.trim() !== "" ? stdout : null,
           stderr.trim() !== "" ? `stderr:\n${stderr}` : null,

@@ -31,3 +31,16 @@ test("ACP writes are newline-delimited JSON-RPC", () => {
     '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n',
   );
 });
+
+test("ACP pending requests reject when the stdout reader fails", async () => {
+  const { createAcpClient } = await import("./acpClient");
+  const stdout = new ReadableStream<Uint8Array>({ pull: (c) => c.error(new Error("boom")) });
+  const client = createAcpClient({
+    stdin: { write: () => {}, end: () => {} },
+    stdout,
+    stderr: new ReadableStream({ start: (c) => c.close() }),
+    exited: new Promise<number>(() => {}),
+    kill: () => {},
+  }, { onRequest: async () => null, onNotification: () => {} });
+  await expect(client.request("x")).rejects.toThrow("boom");
+});

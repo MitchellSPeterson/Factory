@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Platform, View } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
@@ -36,6 +36,8 @@ async function rpc(client: FactoryClient, kind: "query" | "mutation" | "action",
 // connections per host; a stream per query used them all and stalled mutations.
 const streams = new Map<string, { source: EventSource; listeners: Set<() => void> }>();
 
+const polls = new Map<string, { timer: ReturnType<typeof setInterval>; listeners: Set<() => void> }>();
+
 function subscribe(client: FactoryClient, onTick: () => void) {
   if (typeof EventSource !== "undefined") {
     const url = `${client.url}/events?token=${encodeURIComponent(client.token)}`;
@@ -59,8 +61,26 @@ function subscribe(client: FactoryClient, onTick: () => void) {
       }
     };
   }
-  const timer = setInterval(onTick, 500);
-  return () => clearInterval(timer);
+  // No EventSource (React Native): one shared poll per Worker instead of one per query.
+  const url = `poll:${client.url}`;
+  let poll = polls.get(url);
+  if (!poll) {
+    const listeners = new Set<() => void>();
+    const timer = setInterval(() => {
+      for (const listener of listeners) listener();
+    }, 1000);
+    poll = { timer, listeners };
+    polls.set(url, poll);
+  }
+  const shared = poll;
+  shared.listeners.add(onTick);
+  return () => {
+    shared.listeners.delete(onTick);
+    if (shared.listeners.size === 0) {
+      clearInterval(shared.timer);
+      polls.delete(url);
+    }
+  };
 }
 
 function LookingForWorker({ detail }: { detail: string }) {
@@ -122,19 +142,38 @@ export function useQuery<R, A extends object = object>(path: ApiFn<A, R>, args?:
   const client = useContext(FactoryContext);
   const [data, setData] = useState<R | undefined>(undefined);
   const key = args === "skip" ? "skip" : JSON.stringify(args ?? {});
+  const last = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!client || args === "skip") {
-      setData(undefined);
-      return;
-    }
+    last.current = undefined;
+    setData(undefined);
+    if (!client || args === "skip") return;
     let cancelled = false;
+    let running = false;
+    let dirty = false;
+    let seq = 0;
     const load = () => {
-      void rpc(client, "query", path, args ?? {})
+      // A tick during an in-flight request queues one re-run instead of stacking requests.
+      if (running) {
+        dirty = true;
+        return;
+      }
+      running = true;
+      const mine = ++seq;
+      rpc(client, "query", path, args ?? {})
         .then((value) => {
-          if (!cancelled) setData(value as R);
+          if (cancelled || mine !== seq) return;
+          const next = JSON.stringify(value) ?? "";
+          if (next === last.current) return;
+          last.current = next;
+          setData(value as R);
         })
-        .catch(() => {
-          if (!cancelled) setData(undefined);
+        .catch(() => {}) // keep the last good value
+        .finally(() => {
+          running = false;
+          if (dirty && !cancelled) {
+            dirty = false;
+            load();
+          }
         });
     };
     load();

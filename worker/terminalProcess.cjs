@@ -16,7 +16,13 @@ terminal.onExit(({ exitCode }) => {
   );
 });
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
-  const value = JSON.parse(line);
+  let value;
+  try {
+    value = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (!value || typeof value !== "object") return;
   if (value.type === "input" && typeof value.data === "string")
     terminal.write(value.data);
   if (

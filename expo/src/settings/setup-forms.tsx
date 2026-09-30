@@ -12,16 +12,17 @@ import { sealSecret, serverVariableNames } from "@/lib/workerSettings";
 import { SettingsGroup, SettingsIcons, SettingsMessage, SettingsRow } from "@/settings/ui";
 
 export function PairPhone() {
-  const [status, setStatus] = useState<{ pairing: string; tailscale: string; tunnel: string; token: string }>({
+  const [status, setStatus] = useState<{ pairing: string; tailscale: string; tunnel: string; token: string; pairCode: string }>({
     pairing: "",
     tailscale: "",
     tunnel: "",
     token: "",
+    pairCode: "",
   });
   const [tunnel, setTunnel] = useState("");
   const [message, setMessage] = useState("");
   useEffect(() => {
-    void Promise.all([
+    const load = () => Promise.all([
       fetch(`${pairingBase("127.0.0.1")}/status`).then((response) => response.json()),
       fetch(`${pairingBase("127.0.0.1")}/pair`).then((response) => response.json()),
     ])
@@ -33,16 +34,23 @@ export function PairPhone() {
           tailscale: typeof statusRecord.tailscale === "string" ? statusRecord.tailscale : "",
           tunnel: typeof statusRecord.tunnel === "string" ? statusRecord.tunnel : "",
           token: typeof pairRecord.token === "string" ? pairRecord.token : "",
+          pairCode: typeof statusRecord.pairCode === "string" ? statusRecord.pairCode : "",
         });
-        if (typeof statusRecord.tunnel === "string") setTunnel(statusRecord.tunnel);
+        return statusRecord;
       })
-      .catch(() => {});
+      .catch(() => null);
+    void load().then((record) => {
+      if (record && typeof record.tunnel === "string") setTunnel(record.tunnel);
+    });
+    // The pairing code rotates after each use and every 10 minutes.
+    const timer = setInterval(() => void load(), 15_000);
+    return () => clearInterval(timer);
   }, []);
   return (
     <>
     <SettingsGroup
       title="Addresses"
-      footer="On the same Wi-Fi, pair with the LAN address. On a tailnet, use the Tailscale address. Both need the pairing token.">
+      footer="On the same Wi-Fi, pair with the LAN address. On a tailnet, use the Tailscale address. Enter the pairing code on the phone; it changes after each use.">
       <SettingsRow
         icon={SettingsIcons.wifi}
         label="LAN"
@@ -54,6 +62,11 @@ export function PairPhone() {
         label="Tailscale"
         value={status.tailscale || "Join this Mac to a tailnet to see an address."}
         valueMode="middle"
+      />
+      <SettingsRow
+        icon={SettingsIcons.key}
+        label="Pairing code"
+        value={status.pairCode || "Start the Worker to see the pairing code."}
       />
       <SettingsRow
         icon={SettingsIcons.key}

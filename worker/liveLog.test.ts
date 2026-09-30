@@ -25,4 +25,18 @@ describe("createLiveLog", () => {
     expect(writes).toEqual(["abc"]);
     await log.close();
   });
+
+  test("a failed write does not drop later writes or reject close", async () => {
+    const writes: string[] = [];
+    let calls = 0;
+    const log = createLiveLog(async (text) => {
+      if (calls++ === 0) throw new Error("boom");
+      writes.push(text);
+    });
+    log.push("a");
+    await Bun.sleep(80);
+    log.push("b");
+    await log.close();
+    expect(writes).toEqual(["b"]);
+  });
 });

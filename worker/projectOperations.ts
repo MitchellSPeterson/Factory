@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { open, readdir, realpath, stat } from "node:fs/promises";
+import { StringDecoder } from "node:string_decoder";
+import { sessionExecutionEnvironment } from "./buildWorkflow";
 import { api } from "../shared/mailboxApi";
 import type { FileEntry, OperationResult, ProjectOperation } from "../shared/projectOperations";
 import type { Mailbox } from "./mailbox/client";
@@ -278,14 +280,41 @@ export function parseLog(raw: string): GitCommit[] {
   }
   return commits;
 }
+const repoLocks = new Map<string, Promise<unknown>>();
+// ponytail: in-process only; another Worker process or a terminal running git can still race on index.lock.
+/** Serialize git work per repository (by realpath) so two Projects on one path cannot collide. */
+export async function withRepoLock<T>(repo: string, fn: () => Promise<T>): Promise<T> {
+  const key = await realpath(repo).catch(() => path.resolve(repo));
+  const next = (repoLocks.get(key) ?? Promise.resolve()).then(fn, fn);
+  const tail = next.catch(() => {});
+  repoLocks.set(key, tail);
+  try {
+    return await next;
+  } finally {
+    if (repoLocks.get(key) === tail) repoLocks.delete(key);
+  }
+}
+
 export async function executeProjectOperation(
   cwd: string,
   operation: Operation,
   onOutput: (text: string) => void = () => {},
   signal?: AbortSignal,
 ): Promise<Result> {
+  // Terminal commands and plain file reads never touch the index; everything else may.
+  if (operation.kind === "terminal" || operation.kind === "listFiles" || operation.kind === "readFile")
+    return await runProjectOperation(cwd, operation, onOutput, signal);
+  return await withRepoLock(cwd, () => runProjectOperation(cwd, operation, onOutput, signal));
+}
+
+async function runProjectOperation(
+  cwd: string,
+  operation: Operation,
+  onOutput: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<Result> {
   const directory = await realpath(cwd);
-  async function run(args: string[], allowed = [0], terminal = false) {
+  async function run(args: string[], allowed = [0], terminal = false, truncate = false) {
     if (signal?.aborted) throw new Error("Command cancelled.");
     return await new Promise<{ text: string; code: number }>(
       (resolve, reject) => {
@@ -293,7 +322,7 @@ export async function executeProjectOperation(
           cwd: directory,
           detached: process.platform !== "win32",
           env: {
-            ...process.env,
+            ...sessionExecutionEnvironment(process.env),
             GIT_TERMINAL_PROMPT: "0",
             GIT_LITERAL_PATHSPECS: "1",
             NO_COLOR: "1",
@@ -318,8 +347,8 @@ export async function executeProjectOperation(
           kill();
         }, 120_000);
         signal?.addEventListener("abort", kill, { once: true });
-        const append = (chunk: Buffer) => {
-          output += chunk.toString();
+        const append = (text: string) => {
+          output += text;
           if (output.length > 100_000) {
             output = output.slice(-100_000);
             overflow = true;
@@ -327,8 +356,12 @@ export async function executeProjectOperation(
           if (terminal)
             onOutput((overflow ? "[Earlier output truncated]\n" : "") + output);
         };
-        proc.stdout.on("data", append);
-        proc.stderr.on("data", append);
+        // Per-stream decoders keep multibyte characters intact across chunk boundaries.
+        for (const stream of [proc.stdout, proc.stderr]) {
+          const decoder = new StringDecoder("utf8");
+          stream.on("data", (chunk: Buffer) => append(decoder.write(chunk)));
+          stream.on("end", () => append(decoder.end()));
+        }
         const clean = () => {
           clearTimeout(timer);
           signal?.removeEventListener("abort", kill);
@@ -342,7 +375,7 @@ export async function executeProjectOperation(
           if (signal?.aborted) return reject(new Error("Command cancelled."));
           if (timedOut)
             return reject(new Error("Command stopped after two minutes."));
-          if (overflow && !terminal)
+          if (overflow && !terminal && !truncate)
             return reject(
               new Error(
                 "Result exceeds the preview limit. Use the terminal to inspect this repository.",
@@ -358,8 +391,9 @@ export async function executeProjectOperation(
       },
     );
   }
-  const git = (args: string[], allowed?: number[]) =>
-    run(["git", "--no-pager", ...args], allowed);
+  // truncate: only for read-only display output (diff); parsed output must fail instead of being cut.
+  const git = (args: string[], allowed?: number[], truncate = false) =>
+    run(["git", "--no-pager", ...args], allowed, false, truncate);
   if (operation.kind === "listFiles") return await listFiles(directory, operation.path);
   if (operation.kind === "readFile") return await readProjectFile(directory, operation.path);
   if (operation.kind === "terminal") {
@@ -457,6 +491,7 @@ export async function executeProjectOperation(
           file,
         ],
         [0, 1],
+        true,
       );
       return { kind: "text", text: diff.text, exitCode: 0 };
     }
@@ -467,14 +502,14 @@ export async function executeProjectOperation(
       "--cached",
       "--",
       file,
-    ]);
+    ], [0], true);
     const working = await git([
       "diff",
       "--no-ext-diff",
       "--no-textconv",
       "--",
       file,
-    ]);
+    ], [0], true);
     return {
       kind: "text",
       text:
@@ -503,8 +538,15 @@ export async function executeProjectOperation(
     const files = operation.paths.map(validateGitPath);
     if (!files.length || !operation.message.trim())
       throw new Error("Select files and enter a commit message.");
-    if (operation.newBranch)
-      await git(["checkout", "-b", validateBranchName(operation.newBranch)]);
+    let created: { name: string; back: string; head: string } | undefined;
+    if (operation.newBranch) {
+      const name = validateBranchName(operation.newBranch);
+      const back = (await git(["symbolic-ref", "--short", "-q", "HEAD"], [0, 1])).text.trim();
+      const head = (await git(["rev-parse", "HEAD"], [0, 1, 128])).text.trim();
+      await git(["checkout", "-b", name]);
+      if (head) created = { name, back: back || head, head };
+    }
+    try {
     const status = parseGitStatus(
       (await git(["status", "--porcelain=v1", "-z"])).text,
     );
@@ -523,6 +565,19 @@ export async function executeProjectOperation(
       ...new Set([...files, ...originals]),
     ]);
     return { kind: "text", text: commit.text, exitCode: 0 };
+    } catch (error) {
+      if (created) {
+        // Undo the branch we just made; staged changes survive the switch. Report the original error.
+        try {
+          const tip = (await git(["rev-parse", created.name], [0, 128])).text.trim();
+          await git(["checkout", ...(created.back === created.head ? ["--detach"] : []), created.back]);
+          if (tip === created.head) await git(["branch", "-D", "--", created.name]);
+        } catch {
+          /* best effort */
+        }
+      }
+      throw error;
+    }
   }
   if (operation.kind === "checkout") {
     const branch = await requireRef(validateBranchName(operation.branch));
@@ -567,6 +622,8 @@ export async function executeProjectOperation(
     const merged = await git(["merge", "--no-edit", "--", branch], [0, 1]);
     if (merged.code !== 0) {
       // Conflicts leave the repo mid-merge; back out so the phone never strands it there.
+      const unmerged = (await git(["diff", "--name-only", "--diff-filter=U"], [0, 1, 128])).text.trim();
+      if (!unmerged) throw new Error(merged.text.trim() || "Merge failed.");
       await git(["merge", "--abort"], [0, 128]);
       throw new Error(`Merging ${branch} conflicts. Nothing was changed. Resolve it in the terminal.`);
     }

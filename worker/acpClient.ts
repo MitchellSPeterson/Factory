@@ -57,8 +57,10 @@ export type AcpProcess = {
   stdout: ReadableStream<Uint8Array>;
   stderr: ReadableStream<Uint8Array>;
   exited: Promise<number>;
-  kill: () => void;
+  kill: (signal?: "SIGKILL") => void;
 };
+
+const KILL_GRACE_MS = 3_000;
 
 export function createAcpClient(proc: AcpProcess, handlers: AcpClientHandlers) {
   let nextId = 1;
@@ -102,45 +104,73 @@ export function createAcpClient(proc: AcpProcess, handlers: AcpClientHandlers) {
     void handlers.onRequest(incoming.method, incoming.params, incoming.id).then(
       (result) => {
         if (closed) return;
-        write({ id: incoming.id, result: result ?? null });
+        try {
+          write({ id: incoming.id, result: result ?? null });
+        } catch {
+          // pipe closed mid-reply; done/failAll handles the rest
+        }
       },
       (error: unknown) => {
         if (closed) return;
         const message = error instanceof Error ? error.message : "ACP request failed.";
-        write({ id: incoming.id, error: { code: -32603, message } });
+        try {
+          write({ id: incoming.id, error: { code: -32603, message } });
+        } catch {
+          // pipe closed mid-reply
+        }
       },
     );
   };
 
-  const readStdout = (async () => {
-    const reader = proc.stdout.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const incoming = parseAcpLine(line);
-        if (incoming) handle(incoming);
-      }
+  const dispatch = (line: string) => {
+    const incoming = parseAcpLine(line);
+    if (!incoming) return;
+    try {
+      handle(incoming);
+    } catch (error) {
+      console.error("ACP message handler failed:", error);
     }
-    const last = parseAcpLine(buffer);
-    if (last) handle(last);
+  };
+
+  const readStdout = (async () => {
+    try {
+      const reader = proc.stdout.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) dispatch(line);
+      }
+      dispatch(buffer);
+    } catch (error) {
+      failAll(error instanceof Error ? error : new Error("ACP stdout read failed."));
+    }
   })();
 
   const readStderr = (async () => {
-    stderrText = await new Response(proc.stderr).text();
+    try {
+      stderrText = await new Response(proc.stderr).text();
+    } catch {
+      // stderr is best-effort
+    }
   })();
 
-  const done = Promise.all([readStdout, readStderr, proc.exited]).then(([, , code]) => {
-    if (!closed) {
-      failAll(new Error(code === 0 ? "ACP agent closed the connection." : `ACP agent exited with code ${code}.`));
-    }
-    return code;
-  });
+  const done = Promise.all([readStdout, readStderr, proc.exited]).then(
+    ([, , code]) => {
+      if (!closed) {
+        failAll(new Error(code === 0 ? "ACP agent closed the connection." : `ACP agent exited with code ${code}.`));
+      }
+      return code;
+    },
+    (error: unknown) => {
+      failAll(error instanceof Error ? error : new Error("ACP process failed."));
+      return -1;
+    },
+  );
 
   return {
     request(method: string, params?: unknown): Promise<unknown> {
@@ -172,7 +202,16 @@ export function createAcpClient(proc: AcpProcess, handlers: AcpClientHandlers) {
       }
       proc.kill();
       failAll(new Error("ACP connection closed."));
+      // A process that ignores SIGTERM must not hang close() forever.
+      const killTimer = setTimeout(() => {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // already gone
+        }
+      }, KILL_GRACE_MS);
       await done.catch(() => undefined);
+      clearTimeout(killTimer);
     },
     done,
   };

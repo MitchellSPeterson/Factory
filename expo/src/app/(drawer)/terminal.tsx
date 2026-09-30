@@ -207,29 +207,40 @@ function TerminalSession({
   const send = useMutation(api.terminals.input);
   const resize = useMutation(api.terminals.resize);
   const [error, setError] = useState("");
-  const [now, setNow] = useState(Date.now);
+  const [expired, setExpired] = useState(() => tab.leaseUntil <= Date.now());
   const keyboard = useKeyboardHeight();
   const insets = useSafeAreaInsets();
   const pending = useRef("");
   const sending = useRef(false);
+  const retryAt = useRef(0);
   const mounted = useRef(true);
-  const enabled = tab.state === "running" && tab.leaseUntil > now;
+  const enabled = tab.state === "running" && !expired;
+  // Re-render once when the lease lapses instead of ticking every second.
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    const ms = tab.leaseUntil - Date.now();
+    setExpired(ms <= 0);
+    if (ms <= 0) return;
+    const timer = setTimeout(() => setExpired(true), ms);
+    return () => clearTimeout(timer);
+  }, [tab.leaseUntil]);
   useEffect(() => {
     mounted.current = true;
     async function flush() {
-      if (!pending.current || sending.current) return;
+      if (!pending.current || sending.current || Date.now() < retryAt.current) return;
       sending.current = true;
       const data = pending.current.slice(0, 4096);
       pending.current = pending.current.slice(data.length);
       try {
-        await send({ id: tab._id, data });
+        try {
+          await send({ id: tab._id, data });
+        } catch {
+          await send({ id: tab._id, data }); // retry once
+        }
         if (mounted.current) setError("");
       } catch (e) {
-        pending.current = "";
+        // Keep the keystrokes queued (ahead of anything typed since) and back off before retrying.
+        pending.current = data + pending.current;
+        retryAt.current = Date.now() + 2000;
         if (mounted.current)
           setError(e instanceof Error ? e.message : "Input could not be sent.");
       } finally {

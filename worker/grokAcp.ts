@@ -3,6 +3,7 @@ import type { AGENT_EFFORTS } from "../shared/agentModel";
 import type { PermissionMode } from "../shared/validators";
 import { createAcpClient, type AcpProcess } from "./acpClient";
 import { grokResumeId } from "./grokAgent";
+import { definedEnv, promptOrImageFallback } from "./proc";
 import type { TokenUsage } from "./usage";
 
 export type GrokCatalogModel = { slug: string; name: string; isDefault?: boolean };
@@ -48,6 +49,9 @@ export type GrokAcpSessionOptions = {
   }) => Promise<{ outcome: "selected"; optionId: string } | { outcome: "cancelled" }>;
   getStatus: () => Promise<string | null>;
 };
+
+const SETUP_TIMEOUT_MS = 60_000;
+const CANCEL_GRACE_MS = 5_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -117,17 +121,19 @@ export function mimeForImagePath(path: string): string {
 }
 
 export function grokPromptContent(prompt: string, imagePaths: string[] = []): unknown[] {
-  const text = prompt.trim() === "" && imagePaths.length > 0 ? "See the attached image." : prompt;
-  const blocks: unknown[] = [];
-  if (text.trim() !== "") blocks.push({ type: "text", text });
+  const images: unknown[] = [];
   for (const path of imagePaths) {
-    blocks.push({
-      type: "image",
-      mimeType: mimeForImagePath(path),
-      data: readFileSync(path).toString("base64"),
-    });
+    let data: string;
+    try {
+      data = readFileSync(path).toString("base64");
+    } catch {
+      console.warn(`Skipping unreadable image attachment: ${path}`);
+      continue;
+    }
+    images.push({ type: "image", mimeType: mimeForImagePath(path), data });
   }
-  return blocks;
+  const text = promptOrImageFallback(prompt, images.length > 0);
+  return [...(text.trim() !== "" ? [{ type: "text", text }] : []), ...images];
 }
 
 function toolStatus(value: unknown): GrokSessionItem["status"] {
@@ -324,36 +330,52 @@ function permissionParams(params: unknown): {
   return { itemId, title, detail, options };
 }
 
-export async function collectCommand(command: string, args: string[], env: Record<string, string>, timeoutMs: number): Promise<{ code: number; text: string } | null> {
+export async function collectCommand(command: string, args: string[], env: Record<string, string>, timeoutMs: number): Promise<{ code: number; text: string; timedOut?: boolean }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const proc = Bun.spawn([command, ...args], { env, stdout: "pipe", stderr: "pipe" });
     const text = Promise.all([
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
     ]).then(([out, err]) => `${out}\n${err}`);
-    const timed = await Promise.race([
-      proc.exited.then(async (code) => ({ code, text: await text })),
-      Bun.sleep(timeoutMs).then(() => null),
-    ]);
-    if (timed === null) {
-      proc.kill();
-      return null;
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs);
+    });
+    const result = await Promise.race([proc.exited.then(async (code) => ({ code, text: await text })), timeout]);
+    if (result === null) {
+      proc.kill("SIGKILL");
+      return { code: -1, text: "", timedOut: true };
     }
-    return timed;
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     return { code: 127, text: message };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-export async function probeGrokCatalog(env: Record<string, string | undefined> = process.env): Promise<GrokCatalog> {
+const CATALOG_TTL_MS = 5 * 60_000;
+let catalogCache: { key: string; at: number; catalog: Promise<GrokCatalog> } | null = null;
+
+/** Spawns `grok --version` and `grok models`; cached ~5 min per GROK_PATH (in-flight probes are shared). */
+export function probeGrokCatalog(env: Record<string, string | undefined> = process.env): Promise<GrokCatalog> {
+  const key = env.GROK_PATH || "grok";
+  if (catalogCache && catalogCache.key === key && Date.now() - catalogCache.at < CATALOG_TTL_MS) return catalogCache.catalog;
+  const catalog = probeGrokCatalogUncached(env);
+  const entry = { key, at: Date.now(), catalog };
+  catalogCache = entry;
+  // Don't pin "not installed"/failures: the user may install or fix the CLI right after.
+  void catalog.then((c) => { if (!c.installed || c.message) { if (catalogCache === entry) catalogCache = null; } }, () => { if (catalogCache === entry) catalogCache = null; });
+  return catalog;
+}
+
+async function probeGrokCatalogUncached(env: Record<string, string | undefined>): Promise<GrokCatalog> {
   const checkedAt = Date.now();
   const executable = env.GROK_PATH || "grok";
-  const processEnv = Object.fromEntries(
-    Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
+  const processEnv = definedEnv(env);
   const versionResult = await collectCommand(executable, ["--version"], processEnv, 4000);
-  if (!versionResult) {
+  if (versionResult.timedOut) {
     return { checkedAt, installed: true, message: "Grok CLI timed out while running `grok --version`.", models: [] };
   }
   if (versionResult.code !== 0 && /not found|ENOENT|command not found/i.test(versionResult.text)) {
@@ -370,7 +392,7 @@ export async function probeGrokCatalog(env: Record<string, string | undefined> =
   }
   const version = parseGenericCliVersion(versionResult.text);
   const modelsResult = await collectCommand(executable, ["models"], processEnv, 8000);
-  if (!modelsResult || modelsResult.code !== 0) {
+  if (modelsResult.timedOut || modelsResult.code !== 0) {
     return {
       checkedAt,
       installed: true,
@@ -427,22 +449,25 @@ function spawnGrokAcp(opts: {
     stdout: proc.stdout,
     stderr: proc.stderr,
     exited: proc.exited,
-    kill: () => {
-      proc.kill();
+    kill: (signal) => {
+      proc.kill(signal);
     },
   };
 }
 
 export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
-  const env = Object.fromEntries(
-    Object.entries(opts.env ?? process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
+  const env = definedEnv(opts.env ?? process.env);
   const proc = spawnGrokAcp({
     workingDirectory: opts.workingDirectory,
     permissionMode: opts.permissionMode,
     env,
   });
   let replay = false;
+  // Serial queue: keeps item/usage writes ordered and their failures logged instead of unhandled.
+  let queue: Promise<unknown> = Promise.resolve();
+  const enqueue = (fn: () => unknown) => {
+    queue = queue.then(fn).catch((error) => console.error("Grok session event handler failed:", error));
+  };
   const client = createAcpClient(proc, {
     onNotification: (method, params) => {
       if (method !== "session/update" || replay) return;
@@ -453,10 +478,10 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
         return;
       }
       if (folded.kind === "usage") {
-        void opts.onUsage?.(folded.usage);
+        enqueue(() => opts.onUsage?.(folded.usage));
         return;
       }
-      void opts.onItem(folded);
+      enqueue(() => opts.onItem(folded));
     },
     onRequest: async (method, params, id) => {
       if (method !== "session/request_permission") {
@@ -478,23 +503,46 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
 
   let watching = true;
   let currentSessionId = grokResumeId(opts.resumeSessionId) ?? "";
+  let stopRequested = false;
+  let killedAfterCancel = false;
   const watchStop = (async () => {
+    let cancelSentAt = 0;
     while (watching) {
       await Bun.sleep(400);
       if (!watching) return;
-      const status = await opts.getStatus();
-      if (status === "stopped" || status === "failed" || status === null) {
+      if (!stopRequested) {
         try {
-          if (currentSessionId !== "") client.notify("session/cancel", { sessionId: currentSessionId });
+          const status = await opts.getStatus();
+          stopRequested = status === "stopped" || status === "failed" || status === null;
+        } catch {
+          continue; // transient status failure: keep polling
+        }
+      }
+      if (!stopRequested) continue;
+      if (cancelSentAt === 0 && currentSessionId !== "") {
+        cancelSentAt = Date.now();
+        try {
+          client.notify("session/cancel", { sessionId: currentSessionId });
         } catch {
           // closing
         }
+      } else if (cancelSentAt !== 0 && Date.now() - cancelSentAt > CANCEL_GRACE_MS) {
+        killedAfterCancel = true;
+        proc.kill();
         return;
       }
     }
   })();
+  // Setup calls get a timeout; session/prompt legitimately runs long and does not.
+  const setup = (method: string, params: unknown) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Grok Build did not respond to ${method} within ${SETUP_TIMEOUT_MS / 1000}s.`)), SETUP_TIMEOUT_MS);
+    });
+    return Promise.race([client.request(method, params), timeout]).finally(() => clearTimeout(timer));
+  };
   try {
-    const initialized = await client.request("initialize", {
+    const initialized = await setup("initialize", {
       protocolVersion: 1,
       clientInfo: { name: "factory", title: "Factory", version: "0.0.1" },
       clientCapabilities: {
@@ -506,11 +554,11 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
     const capabilities = agentCapabilities(initialized.agentCapabilities);
     const methodId = authMethodId(initialized.authMethods, env);
     if (methodId) {
-      await client.request("authenticate", { methodId });
+      await setup("authenticate", { methodId });
     }
     const resumeId = grokResumeId(opts.resumeSessionId);
     if (resumeId && hasResume(capabilities)) {
-      await client.request("session/resume", {
+      await setup("session/resume", {
         sessionId: resumeId,
         cwd: opts.workingDirectory,
         mcpServers: [],
@@ -518,7 +566,7 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
       currentSessionId = resumeId;
     } else if (resumeId && capabilities.loadSession === true) {
       replay = true;
-      await client.request("session/load", {
+      await setup("session/load", {
         sessionId: resumeId,
         cwd: opts.workingDirectory,
         mcpServers: [],
@@ -526,7 +574,7 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
       replay = false;
       currentSessionId = resumeId;
     } else {
-      const created = await client.request("session/new", {
+      const created = await setup("session/new", {
         cwd: opts.workingDirectory,
         mcpServers: [],
       });
@@ -547,16 +595,17 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
         // Older Grok CLIs may not implement session/set_model.
       }
     }
+    if (stopRequested) return;
     const prompt = grokPromptContent(opts.prompt, opts.imagePaths);
     const result = await client.request("session/prompt", {
       sessionId: currentSessionId,
       prompt,
     });
     const usage = isRecord(result) ? usageFromUnknown(result.usage) : null;
-    if (usage) await opts.onUsage?.(usage);
-    const status = await opts.getStatus();
-    if (status === "failed" || status === "stopped") return;
+    if (usage) enqueue(() => opts.onUsage?.(usage));
+    await queue;
   } catch (error) {
+    if (killedAfterCancel) return;
     const detail = client.stderr().trim();
     const message = error instanceof Error ? error.message : "Grok Build Session failed.";
     if (/auth|login|unauthenticated/i.test(`${message}\n${detail}`)) {
@@ -566,6 +615,7 @@ export async function runGrokAcpSession(opts: GrokAcpSessionOptions) {
   } finally {
     watching = false;
     await client.close();
+    await queue;
     await watchStop.catch(() => undefined);
   }
 }

@@ -3,8 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { api } from "../shared/mailboxApi";
-import { compactSessionPrompt, isCompactCommand, titleFrom } from "./mailbox/functions";
-import { mailboxForFile, type Mailbox } from "./mailbox/client";
+import { compactSessionPrompt, dispatch, isCompactCommand, titleFrom } from "./mailbox/functions";
+import { localMailbox, mailboxForFile, type Mailbox } from "./mailbox/client";
+import { openStore } from "./mailbox/store";
 
 const temps: string[] = [];
 afterEach(() => {
@@ -348,4 +349,69 @@ test("provider toggles persist on the server view", async () => {
   await client.mutation(api.servers.setProviderEnabled, { accessKey: key, provider: "claude", enabled: true });
   expect((await client.query(api.servers.paired, { accessKey: key })).providersDisabled).toEqual([]);
   await expect(client.mutation(api.servers.setProviderEnabled, { accessKey: key, provider: "nope", enabled: false })).rejects.toThrow();
+});
+
+test("session messages come back oldest-first even within the same millisecond", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "factory-mailbox-"));
+  temps.push(dir);
+  const store = openStore(path.join(dir, "mailbox.sqlite"));
+  const realNow = Date.now;
+  Date.now = () => 1_000;
+  try {
+    for (const text of ["a", "b", "c"]) store.insert("sessionMessages", { sessionId: "s1", text });
+    store.insert("sessionMessages", { sessionId: "s2", text: "other" });
+  } finally {
+    Date.now = realNow;
+    store.close();
+  }
+  const reopened = openStore(path.join(dir, "mailbox.sqlite"));
+  expect(reopened.listBy("sessionMessages", "sessionId", "s1", "asc").map((m) => m.text)).toEqual(["a", "b", "c"]);
+  reopened.close();
+});
+
+test("projects.remove cascades; claim fails a Session whose Project is gone; queries cannot write", async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "factory-mailbox-"));
+  temps.push(dir);
+  const store = openStore(path.join(dir, "mailbox.sqlite"));
+  const client = localMailbox(store, path.join(dir, "uploads"));
+  const projectId = await client.mutation(api.projects.create, {
+    name: "P", kind: "web", localPath: "/tmp/p", githubRepo: "o/r", defaultRuntime: "local",
+  });
+  const sessionId = await client.mutation(api.sessions.create, {
+    projectId, provider: "grok", model: "grok-4.6", effort: "medium", text: "hi",
+  });
+  const tab = store.insert("terminals", { projectId, serverId: "x", state: "queued" });
+  store.insert("terminalIO", { terminalId: tab });
+  store.insert("projectOperations", { projectId, state: "done" });
+  await client.mutation(api.projects.remove, { projectId });
+  for (const table of ["sessions", "sessionMessages", "terminals", "terminalIO", "projectOperations"]) {
+    expect(store.list(table)).toHaveLength(0);
+  }
+  const orphan = store.insert("sessions", { projectId, status: "queued" });
+  expect(await client.mutation(api.sessions.claim, { sessionId: orphan, accessKey: key })).toBeNull();
+  expect(store.get(orphan)?.status).toBe("failed");
+  expect(sessionId).toBeTruthy();
+  const live = store.insert("sessions", { projectId, status: "running" });
+  await expect(client.query(api.sessions.stop, { sessionId: live })).rejects.toThrow("Queries cannot modify data");
+  await expect(dispatch("query", "constructor", {}, { store, origin: "", uploads: "" })).rejects.toThrow("Unknown");
+  store.close();
+});
+
+test("pty tickets are single-use and expired ones are pruned on issue", async () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "factory-mailbox-"));
+  temps.push(dir);
+  const store = openStore(path.join(dir, "mailbox.sqlite"));
+  const client = localMailbox(store, path.join(dir, "uploads"));
+  await register(client);
+  const server = store.list("servers")[0]!;
+  store.patch(server._id, { pty: { url: "ws://x", os: "darwin" }, lastSeen: Date.now() });
+  const projectId = await client.mutation(api.projects.create, {
+    name: "P", kind: "web", localPath: "/tmp/p", githubRepo: "o/r", defaultRuntime: "local",
+  });
+  store.insert("ptyTickets", { token: "old", projectId, serverId: server._id, expiresAt: 1 });
+  const { ticket } = await client.mutation(api.pty.issueTicket, { projectId });
+  expect(store.list("ptyTickets").map((t) => t.token)).toEqual([ticket]);
+  await client.mutation(api.pty.validateTicket, { accessKey: key, ticket });
+  await expect(client.mutation(api.pty.validateTicket, { accessKey: key, ticket })).rejects.toThrow("Invalid ticket");
+  store.close();
 });

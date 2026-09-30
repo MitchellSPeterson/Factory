@@ -18,7 +18,8 @@ import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, Ellipsis
 import { useTheme } from "@/hooks/use-theme";
 import { api } from "@/lib/api";
 import type { Doc, Id } from "@/lib/dataModel";
-import { useMutation, useQuery } from "@/lib/factory";
+import { useMutation } from "@/lib/factory";
+import { useGitStatus } from "./useGitStatus";
 import type { GitFile, OperationResult, ProjectOperation } from "../../../shared/projectOperations";
 import {
   autoCommitMessage,
@@ -79,7 +80,7 @@ export function GitSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const rows = useQuery(api.projectOperations.list, visible ? { projectId: project._id } : "skip");
+  const { rows, refresh: refreshStatus } = useGitStatus(project._id, visible);
   const enqueue = useMutation(api.projectOperations.enqueue);
   const [page, setPage] = useState<Page>("home");
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -95,9 +96,9 @@ export function GitSheet({
   const last = rows?.find((row) => row._id === lastId);
   const busy = pending || (!!active && active.operation.kind !== "status" && active.operation.kind !== "diff");
 
-  async function refresh() {
+  async function refresh(force = false) {
     try {
-      await enqueue({ projectId: project._id, operation: { kind: "status" } });
+      await refreshStatus(force);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read this repository.");
     }
@@ -123,12 +124,10 @@ export function GitSheet({
       return;
     }
     void refresh();
-    const timer = setInterval(() => void refresh(), 15_000);
-    return () => clearInterval(timer);
   }, [visible, project._id]);
   // Re-read the repository once an action finishes, so every page reflects it.
   useEffect(() => {
-    if (last?.state === "done" || last?.state === "failed") void refresh();
+    if (last?.state === "done" || last?.state === "failed") void refresh(true);
   }, [last?.state]);
   useEffect(() => {
     setExcluded((prev) => new Set([...prev].filter((path) => files.some((item) => item.path === path))));
@@ -210,7 +209,7 @@ export function GitSheet({
                 </Pressable>
               </Menu.Trigger>
               <Menu.Content align="end">
-                <Menu.Item icon={<RotateCwIcon size={16} />} onSelect={() => void refresh()}>
+                <Menu.Item icon={<RotateCwIcon size={16} />} onSelect={() => void refresh(true)}>
                   Refresh
                 </Menu.Item>
                 <Menu.Item icon={<RotateCwIcon size={16} />} disabled={busy} onSelect={() => void act({ kind: "fetch" })}>
@@ -481,7 +480,7 @@ function ReviewPage({
   const loadDiff = (path: string) => void enqueue({ projectId, operation: { kind: "diff", path } }).catch(() => {});
   useEffect(() => {
     if (files[0]) loadDiff(files[0].path);
-  }, []);
+  }, [files[0]?.path]);
   return (
     <BottomSheet.Body contentContainerClassName="pb-8">
       {files.map((item) => {
