@@ -11,6 +11,8 @@ export type ProjectOperation =
     }
   | { kind: "checkout"; branch: string }
   | { kind: "createBranch"; name: string; checkout: boolean }
+  /** Merges `branch` into the current branch. Aborts cleanly on conflicts. */
+  | { kind: "merge"; branch: string }
   | { kind: "createWorktree"; name: string; branch: string; createBranch: boolean; base?: string }
   | { kind: "removeWorktree"; path: string }
   | { kind: "fetch" }

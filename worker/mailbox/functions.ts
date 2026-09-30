@@ -1182,12 +1182,14 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       operation.kind === "commit" ||
       operation.kind === "checkout" ||
       operation.kind === "pull" ||
+      operation.kind === "merge" ||
       (operation.kind === "createBranch" && operation.checkout);
     if (blocksAgent) {
       const sessions = store.list("sessions").filter((row) => row.projectId === args.projectId);
       if (sessions.some((session) => session.status === "running" || session.status === "queued")) {
         if (operation.kind === "commit") throw new Error("Stop the agent before committing its changes.");
         if (operation.kind === "pull") throw new Error("Stop the agent before pulling.");
+        if (operation.kind === "merge") throw new Error("Stop the agent before merging.");
         throw new Error("Stop the agent before switching branches.");
       }
     }
@@ -1197,6 +1199,7 @@ const handlers: Record<string, (args: Record<string, unknown>, ctx: DispatchCtx)
       terminal: 20,
       commit: 10,
       checkout: 8,
+      merge: 5,
       createBranch: 8,
       createWorktree: 8,
       removeWorktree: 8,

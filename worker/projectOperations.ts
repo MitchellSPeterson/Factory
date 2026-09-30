@@ -561,6 +561,17 @@ export async function executeProjectOperation(
     await git(["branch", "--", name]);
     return { kind: "text", text: `Created ${name}.`, exitCode: 0 };
   }
+  if (operation.kind === "merge") {
+    const branch = await requireRef(validateBranchName(operation.branch));
+    await requireClean("merging");
+    const merged = await git(["merge", "--no-edit", "--", branch], [0, 1]);
+    if (merged.code !== 0) {
+      // Conflicts leave the repo mid-merge; back out so the phone never strands it there.
+      await git(["merge", "--abort"], [0, 128]);
+      throw new Error(`Merging ${branch} conflicts. Nothing was changed. Resolve it in the terminal.`);
+    }
+    return { kind: "text", text: merged.text.trim() || `Merged ${branch}.`, exitCode: 0 };
+  }
   if (operation.kind === "createWorktree") {
     const name = validateWorktreeName(operation.name);
     const branch = await requireRef(validateBranchName(operation.branch));

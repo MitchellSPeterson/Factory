@@ -45,6 +45,7 @@ type Row = Doc<"projectOperations">;
 const RUNNING: Partial<Record<Operation["kind"], string>> = {
   commit: "Committing…",
   checkout: "Switching branch…",
+  merge: "Merging…",
   createBranch: "Creating branch…",
   createWorktree: "Adding worktree…",
   removeWorktree: "Removing worktree…",
@@ -55,6 +56,7 @@ const RUNNING: Partial<Record<Operation["kind"], string>> = {
 const DONE: Partial<Record<Operation["kind"], string>> = {
   commit: "Committed",
   checkout: "Switched branch",
+  merge: "Merged",
   createBranch: "Branch created",
   createWorktree: "Worktree added",
   removeWorktree: "Worktree removed",
@@ -542,6 +544,16 @@ function BranchesTab({
                         {elsewhere ? "Open in another worktree" : formatAheadBehind(item)}
                       </Text>
                     </View>
+                    {item.current ? null : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onPress={() => void act({ kind: "merge", branch: item.name }, "Could not merge.")}
+                      >
+                        Merge into {git?.branch}
+                      </Button>
+                    )}
                     {item.current || elsewhere ? null : (
                       <Button size="sm" variant="secondary" disabled={busy} onPress={() => checkout(item.name)}>
                         Switch
