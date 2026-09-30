@@ -5,7 +5,7 @@ export const WORKFLOW_ROLES = ['prototype', 'planner', 'builder', 'verifier', 'r
 export type WorkflowRole = typeof WORKFLOW_ROLES[number];
 export type WorkflowPhase = 'setup' | 'refine' | 'prototype' | 'prototypeReview' | 'plan' | 'build' | 'verify' | 'review' | 'publish' | 'prReview' | 'done';
 export type PrototypeMode = 'auto' | 'required' | 'skip';
-export type RoleConfiguration = AgentPick & { skills: string[] };
+export type RoleConfiguration = AgentPick & { skills: string[]; prompt?: string };
 export type BuildConfiguration = {
   roles: Record<WorkflowRole, RoleConfiguration>;
   setupCommand: string;
@@ -108,7 +108,7 @@ export function validateBuildConfiguration(config: BuildConfiguration): void {
   if (config.checkCommands.some(command => typeof command !== 'string' || !command.trim()) || config.verificationTargets.some(target => typeof target !== 'string' || !target.trim())) throw new Error('Invalid Build commands or targets.');
   for (const role of WORKFLOW_ROLES) {
     const pick = config.roles?.[role];
-    if (!pick || !['codex', 'cursor', 'grok', 'claude', 'openai'].includes(pick.provider) || !pick.model?.trim() || !['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(pick.effort) || !Array.isArray(pick.skills) || pick.skills.some(skill => typeof skill !== 'string' || !skill.trim()) || !Number.isFinite(config.roleTimeoutMs?.[role]) || config.roleTimeoutMs[role] <= 0) throw new Error(`Invalid ${role} settings.`);
+    if (!pick || !['codex', 'cursor', 'grok', 'claude', 'openai'].includes(pick.provider) || !pick.model?.trim() || !['low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(pick.effort) || !Array.isArray(pick.skills) || (pick.prompt !== undefined && (typeof pick.prompt !== 'string' || pick.prompt.length > 8000)) || pick.skills.some(skill => typeof skill !== 'string' || !skill.trim()) || !Number.isFinite(config.roleTimeoutMs?.[role]) || config.roleTimeoutMs[role] <= 0) throw new Error(`Invalid ${role} settings.`);
   }
   for (const value of [config.runtimeCeilingMs, config.tokenCeiling, config.costCeilingCents]) if (value !== undefined && (!Number.isFinite(value) || value <= 0)) throw new Error('Build ceilings must be positive.');
 }
