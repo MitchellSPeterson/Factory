@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { dispatch, saveUpload } from "./functions";
 import type { Store } from "./store";
@@ -33,6 +33,59 @@ export async function handleMailboxRequest(
 ): Promise<Response | null> {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
   const origin = `${url.protocol}//${url.host}`;
+  if (url.pathname.startsWith("/mailbox/build-artifacts/") && request.method === "GET") {
+    // Fetch into the authenticated app, then render HTML in an isolated frame.
+    // Never navigate a browser to executable content on the mailbox origin.
+    if (!authorized(request, url, input.token)) return json({ error: "Pairing token required." }, 401);
+    const parts = url.pathname.slice("/mailbox/build-artifacts/".length).split("/");
+    if (parts.length !== 2) return json({ error: "Not found." }, 404);
+    let buildId: string;
+    let artifactId: string;
+    try {
+      [buildId, artifactId] = parts.map(decodeURIComponent) as [string, string];
+    } catch {
+      return json({ error: "Not found." }, 404);
+    }
+    if (!/^[A-Za-z0-9_-]+$/.test(buildId) || !/^[A-Za-z0-9_-]+$/.test(artifactId)) {
+      return json({ error: "Not found." }, 404);
+    }
+    const build = input.store.get(buildId);
+    const workflow = build?.workflow as { artifacts?: unknown[] } | undefined;
+    const artifact = workflow?.artifacts?.find((value) =>
+      value && typeof value === "object" && (value as { id?: unknown }).id === artifactId,
+    ) as { path?: unknown; mime?: unknown; title?: unknown } | undefined;
+    if (!artifact || typeof artifact.path !== "string") return json({ error: "Not found." }, 404);
+    try {
+      const dir = realpathSync(path.join(input.uploads, "build-artifacts", buildId));
+      const file = realpathSync(artifact.path);
+      if (!file.startsWith(dir + path.sep) || !statSync(file).isFile()) return json({ error: "Not found." }, 404);
+      if (statSync(file).size > 25 * 1024 * 1024) return json({ error: "Artifact exceeds the preview limit." }, 413);
+      const bytes = readFileSync(file);
+      const mime = typeof artifact.mime === "string" ? artifact.mime : "application/octet-stream";
+      const title = typeof artifact.title === "string" ? artifact.title : "Build artifact";
+      if (url.searchParams.get("format") === "raw") {
+        const passiveImage = /^image\/(png|jpeg|webp|gif)$/.test(mime);
+        return new Response(bytes, {
+          headers: {
+            ...cors,
+            "content-type": passiveImage ? mime : "application/octet-stream",
+            "content-disposition": passiveImage ? "inline" : "attachment",
+            "content-security-policy": "sandbox; default-src 'none'",
+            "x-content-type-options": "nosniff",
+            "cache-control": "no-store",
+          },
+        });
+      }
+      const passiveImage = /^image\/(png|jpeg|webp|gif)$/.test(mime);
+      if (!passiveImage && !/^(text\/|application\/json)/.test(mime)) return json({ error: "Use the binary artifact endpoint." }, 400);
+      const response = json({ content: passiveImage ? "" : bytes.toString("utf8"), mime, title });
+      response.headers.set("cache-control", "no-store");
+      response.headers.set("x-content-type-options", "nosniff");
+      return response;
+    } catch {
+      return json({ error: "Artifact is unavailable." }, 404);
+    }
+  }
   if (url.pathname === "/events") {
     if (!authorized(request, url, input.token)) return json({ error: "Pairing token required." }, 401);
     const encoder = new TextEncoder();

@@ -16,6 +16,7 @@ import type {
   TerminalClaim,
   TerminalExchange,
 } from "./dataModel";
+import type { BuildConfiguration, BuildConfigurationOverride, PrototypeMode, WorkflowAction, WorkflowStageClaim } from "./buildWorkflow";
 import type { AgentPick, BuildEvent } from "./helix";
 import type { ProjectOperation } from "./projectOperations";
 import type { RoadmapItemPatch, RoadmapKind } from "./roadmap";
@@ -102,6 +103,7 @@ export const api = {
     update: ref<object, null>("projects.update"),
     remove: ref<object, null>("projects.remove"),
     reportSkills: ref<object, null>("projects.reportSkills"),
+    configureBuild: ref<{ projectId: string; config: BuildConfiguration }, null>("projects.configureBuild"),
   },
   servers: {
     register: ref<object, string>("servers.register"),
@@ -204,11 +206,14 @@ export const api = {
     get: ref<{ buildId: string }, Doc<"builds"> | null>("builds.get"),
     // Starts planning. The Roadmap Item moves to In progress.
     create: ref<
-      { roadmapItemId: string; checkCommand: string; agent: AgentPick; reviewer: AgentPick },
+      { roadmapItemId: string; checkCommand: string; agent: AgentPick; reviewer: AgentPick; prototypeMode?: PrototypeMode; config?: BuildConfigurationOverride },
       Id<"builds">
     >("builds.create"),
     // Runs helix advance(). The page sends planApproved/approved/feedback/resume/stop; the Worker sends the rest.
     send: ref<{ buildId: string; event: BuildEvent }, null>("builds.send"),
+    action: ref<{ buildId: string; action: WorkflowAction }, null>("builds.action"),
+    updateWorkflow: ref<{ buildId: string; accessKey: string; action: WorkflowAction }, null>("builds.updateWorkflow"),
+    claimWorkflowStage: ref<WorkflowStageClaim, string | null>("builds.claimWorkflowStage"),
     // Deletes a Build that isn't running. Its worktree, branch, and Sessions stay.
     remove: ref<{ buildId: string }, null>("builds.remove"),
     // Worker only: Builds whose status is running and whose Step is not done.

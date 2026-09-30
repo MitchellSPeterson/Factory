@@ -1,6 +1,7 @@
 // Build: the Helix Loop (https://shopify.engineering/helix) run over one Roadmap Item. See CONTEXT.md.
 // advance() is the whole state machine. The Worker performs each Step's side effect and feeds back an Event.
 // You stop the loop twice: to approve the plan, and to try the finished Build.
+import type { WorkflowState } from "./buildWorkflow";
 import type { Id } from "./dataModel";
 import type { AgentEffort, SessionProvider } from "./validators";
 import { roadmapPrompt, type RoadmapItemFields } from "./roadmap";
@@ -47,6 +48,7 @@ export type Step =
 export type BuildStatus = "running" | "waiting" | "paused" | "done" | "stopped";
 
 export type BuildFields = {
+  workflow?: WorkflowState;
   projectId: Id<"projects">;
   roadmapItemId: Id<"roadmapItems">;
   title: string;

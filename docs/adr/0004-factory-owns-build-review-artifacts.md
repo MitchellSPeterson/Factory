@@ -1,0 +1,3 @@
+# Factory owns Build review artifacts
+
+Factory retains Prototype revisions, their feedback and approvals, screenshots, check results, review reports, and the interactive visual explanation. Users review Prototypes from both web and phone, and the PR provides access to the retained evidence. We chose Factory-owned artifacts rather than making an external recap publisher the required review surface so the Build, its approvals, and its feedback remain accessible together. External publishing can be added optionally; private evidence needs access checks and stable retention rather than assuming a link to this Mac works for every PR reader.

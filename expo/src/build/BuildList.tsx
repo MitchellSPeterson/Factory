@@ -9,6 +9,7 @@ import type { Doc, Id } from "@/lib/dataModel";
 import { Action } from "@/chats/ui";
 import { EmptyState } from "@/components/empty-state";
 import { BUILD_STATUS_LABEL } from "@/build/meta";
+import { WORKFLOW_PHASE_LABEL } from "@/build/WorkflowDetail";
 import type { BuildStatus } from "../../../shared/helix";
 
 function statusDot(status: BuildStatus) {
@@ -58,7 +59,7 @@ export function BuildList({
 function BuildRow({ build, selected, onOpen }: { build: Doc<"builds">; selected: boolean; onOpen: () => void }) {
   const done = build.checkpoints.filter((c) => c.status === "done").length;
   const total = build.checkpoints.length;
-  const meta = `${BUILD_STATUS_LABEL[build.status]}${total > 0 ? ` · ${done}/${total} Checkpoints` : ""}`;
+  const meta = build.workflow?.version === 2 ? `${build.workflow.status === "paused" ? "Paused · " : build.workflow.status === "stopped" ? "Stopped · " : ""}${WORKFLOW_PHASE_LABEL[build.workflow.phase]} · ${build.workflow.batch.attempts}/3 attempts` : `${BUILD_STATUS_LABEL[build.status]}${total > 0 ? ` · ${done}/${total} Checkpoints` : ""}`;
   return (
     <Item
       onPress={onOpen}

@@ -171,11 +171,14 @@ export function ModelMenu({
   visible,
   current,
   disabled,
+  optionIds,
   onChange,
 }: {
   visible: boolean;
   current: ChatSettings;
   disabled?: boolean;
+  /** Restrict the Options list (e.g. Build roles only take Reasoning). */
+  optionIds?: PickerOptionId[];
   onChange: (next: ChatSettings) => void;
 }) {
   const { height } = useWindowDimensions();
@@ -261,7 +264,7 @@ export function ModelMenu({
       </MenuCard>
     );
   }
-  const optionRows = pickerOptionRows(current);
+  const optionRows = pickerOptionRows(current).filter((row) => !optionIds || optionIds.includes(row.id));
   return (
     <MenuCard maxHeight={maxHeight}>
       <View className="border-b border-border px-3 py-1.5">

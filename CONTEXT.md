@@ -65,15 +65,31 @@ A named target version for a Project, such as `v1.3`. A Roadmap Item can aim at 
 _Avoid_: Milestone, version, sprint
 
 **Build**:
-The Helix Loop run over one Roadmap Item. A Planner splits the item into Checkpoints, each with a test plan and, if it changes what you see, an HTML prototype. Each Checkpoint gets failing tests first, then an implementation, must pass every Gate, and ends in a commit on the Build's own branch and worktree. You stop it twice: to approve the plan, and to try the finished Build.
+A controlled effort to turn one Roadmap Item into a reviewed change ready for PR approval. New components and substantial UI redesigns have a prototype for you to approve before automatic planning and implementation.
 _Avoid_: Pipeline, run, job, loop
 
 **Checkpoint**:
-One small, ordered slice of a Build that you can review in minutes. You approve the list before any code is written. Feedback on the finished Build becomes new Checkpoints.
+One small, ordered slice of a Build that you can review in minutes.
 _Avoid_: Step, subtask, milestone
 
+**Candidate**:
+One complete implementation of a Build's plan submitted for verification and code review.
+_Avoid_: Checkpoint, retry
+
+**Batch**:
+An explicitly authorized set of up to three attempts to produce a passing Candidate for one Build.
+_Avoid_: Run, Job
+
+**Prototype**:
+A reviewable design for UI changes in a Build. You review successive agent revisions and give feedback until you approve it, before the implementation is planned.
+_Avoid_: Mockup, preview
+
+**Prototype revision**:
+A preserved version of a Prototype to which comments and approval apply.
+_Avoid_: Draft, iteration
+
 **Gate**:
-A hard stop a Checkpoint must pass before it is committed: Behavior (the Project's check command), UI (a visual and a behavior reviewer compare the running app to the prototype; skipped when the Checkpoint changes no UI), and Review (two adversarial reviewer Sessions, every finding fixed). A failed Gate sends the findings to a fresh fixer Session, then every Gate runs again.
+A required evaluation of behavior, UI quality when applicable, or code quality that work must pass before it is accepted. A failed Gate returns findings for correction.
 _Avoid_: Check, stage, review step
 
 **Notes**:

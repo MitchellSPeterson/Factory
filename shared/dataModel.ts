@@ -13,6 +13,7 @@ import type {
   SessionStatus,
 } from "./validators";
 
+import type { BuildConfiguration } from "./buildWorkflow";
 import type { BuildFields } from "./helix";
 import type { RoadmapItemFields } from "./roadmap";
 
@@ -82,6 +83,7 @@ export type Tables = {
     cloneError?: string;
     usage?: TokenUsage;
     skills?: RepoSkill[];
+    buildConfig?: BuildConfiguration;
   };
   sessions: {
     projectId: Id<"projects">;
@@ -95,6 +97,8 @@ export type Tables = {
     error?: string;
     roadmapItemId?: Id<"roadmapItems">;
     cwd?: string; // a Build's worktree
+    buildReadOnlyRoots?: string[];
+    buildEvidenceDirectory?: string;
   };
   sessionMessages: {
     sessionId: Id<"sessions">;
@@ -217,6 +221,8 @@ export type SessionLaunch = {
   permissionMode: PermissionMode;
   serviceTier: ServiceTier;
   agentId?: string;
+  buildReadOnlyRoots?: string[];
+  buildEvidenceDirectory?: string;
   images: Array<{ url: string }>;
   project: {
     id: Id<"projects">;
